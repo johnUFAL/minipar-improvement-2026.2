@@ -1,51 +1,12 @@
 import sys
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(BASE_DIR, 'src'))
-
-from lexer import Lexer
-from parser import Parser
-from semantic import SemanticAnalyzer
-from tac import TACGenerator
-from codegen import CppCodeGenerator
-
-def compile_file(source_path: str, output_name: str) -> bool:
-    """Processa as 3 Fases do Compilador em um arquivo alvo."""
-    print(f"\n=== Compilando: {source_path} ===")
-    try:
-        with open(source_path, encoding="utf-8") as f:
-            source_code = f.read()
-    except FileNotFoundError:
-        print(f"[ERRO] Arquivo nao encontrado: {source_path}", file=sys.stderr)
-        return False
-
-    print("[Fase 1] Analise Lexica e Sintatica...")
-    lexer  = Lexer(source_code)
-    tokens = lexer.tokenize()
-
-    parser  = Parser(tokens)
-    program = parser.parse()
-
-    print("[Fase 2] Analise Semantica e Tabela de Simbolos...")
-    semantic = SemanticAnalyzer()
-    if not semantic.analyze(program):
-        print("[ERRO] Falha na Analise Semantica. Compilacao abortada.", file=sys.stderr)
-        return False
-
-    print("[Fase 3] Geracao de Codigo Intermediario (TAC - 3 enderecos)...")
-    tac = TACGenerator()
-    tac_path = tac.generate(program, output_name)
-    print(f"[TAC] Arquivo gerado: {tac_path}")
-
-    print("[Fase 4] Transpilacao e Chamada do GCC (-O3)...")
-    codegen = CppCodeGenerator()
-    return codegen.generate(program, output_name)
+from components.controle.c_controle import compile_file
 
 
 def start_interactive():
     """Inicia a tela de seleção inicial do sistema."""
-    from test_orchestrator import (
+    from interfaces.test_orchestrator import (
         check_active_session_for_new_terminal,
         join_session,
         get_terminal_id,
@@ -80,8 +41,8 @@ def start_interactive():
     if escolha == '1':
         print("\nIniciando modo Terminal...\n")
         try:
-            import menu
-            menu.exibir_menu()
+            from interfaces.cli import exibir_menu
+            exibir_menu()
         except ImportError as e:
             print(f"[ERRO] Falha ao carregar o menu: {e}")
             
@@ -89,7 +50,7 @@ def start_interactive():
         print("\nIniciando Web Interface IDE...")
         print("Servidor inicializado! Acesse no navegador: http://127.0.0.1:5000\n")
         try:
-            from app import app
+            from interfaces.web.api import app
             # Executa o Flask. Deixamos debug=False para o terminal ficar mais limpo
             app.run(host="127.0.0.1", port=5000, debug=False)
         except ImportError as e:
@@ -114,7 +75,7 @@ def main() -> int:
         output_name = sys.argv[2]
     else:
         base_file = os.path.basename(source_path)
-        output_name = base_file.replace('.minipar', '')
+        output_name = os.path.splitext(base_file)[0]
 
     print("=== Compilador MiniPar ===")
     success = compile_file(source_path, output_name)

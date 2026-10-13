@@ -1,122 +1,89 @@
 # Compilador MiniPar
-Trabalho de Compiladores - UFAL 
 
+Compilador MiniPar em Python, com geração de TAC e transpilação para C++20. A IDE web permite editar, compilar e executar os programas. O runtime C++ é compilado e linkado junto com cada programa gerado.
 
-Arquitetura orientada a objetos baseada na versão C++ original, agora expandida para incluir **Geração de Código Intermediário (TAC)** de 3 endereços e uma nova **IDE Web**, capaz de gerar, compilar e executar o código C++ produzido pelo compilador.
 Desenvolvido por:
 
-Emanuele Vitória de Jesus Lima - [Manu-Vii](https://github.com/Manu-Vii)
+- Emanuele Vitória de Jesus Lima — [Manu-Vii](https://github.com/Manu-Vii)
+- José Lucas de Oliveira Quintela — [lucasqtl](https://github.com/lucasqtl)
+- Luiz Miguel de Melo Bomfim — [luizwhirl](https://github.com/luizwhirl)
 
-José Lucas de Oliveira Quintela - [lucasqtl](https://github.com/lucasqtl)
-
-Luiz Miguel de Melo Bomfim - [luizwhirl](https://github.com/luizwhirl)
-
----
-
-## Estrutura do Projeto
+## Estrutura
 
 ```text
-minipar_python/
-├── src/
-│   ├── ast_nodes.py      # Nós da AST (dataclasses)
-│   ├── lexer.py          # Analisador Léxico
-│   ├── parser.py         # Analisador Sintático
-│   ├── semantic.py       # Analisador Semântico
-│   ├── tac.py            # Gerador de Código Intermediário (TAC)
-│   ├── codegen.py        # Gerador de Código C++
-│   └── cpp_template.py   # Template base em C++
-├── static/               # Arquivos estáticos da IDE Web (CSS, JS)
-├── templates/            # Arquivos HTML da IDE Web
-├── tests/                # Exemplos e testes .minipar
-├── output/               # Arquivos gerados (.cpp, .tac e executáveis)
-├── temp_code/            # Códigos temporários executados pela IDE
-├── app.py                # Servidor Flask da Interface Web
-├── main.py               # Ponto de entrada principal (CLI e Interativo)
-├── menu.py               # Menu interativo para terminal
-├── requirements.txt      # Dependências Python
-└── README.md
+components/
+  interfaces.py
+  lexico/          c_lexico.py, token.py
+  sintatico/       c_sintatico.py, ast.py, visitor.py
+  semantico/       c_semantico.py
+  tabela_simbolos/ c_tabela_simbolos.py
+  tac/             c_gerador_tac.py
+  codegen/         c_gerador_cpp.py, driver_gcc.py
+  controle/        c_controle.py
+erros/             diagnosticos.py
+runtime/           minipar_rt.hpp, canal.cpp, paralelo.cpp
+interfaces/        cli.py, web/api.py, web/frontend/
+programas_teste/   programas MiniPar (.mp)
+benchmarks/        scripts Python de baseline, quando disponíveis
+docs/              gramatica.md, uml/, relatorio/, backlog.md
+tests/             unitarios/, integracao/, programas/
 ```
-
----
 
 ## Requisitos
 
 - Python 3.8 ou superior
-- `g++` disponível no PATH (para compilar o código C++ gerado)
-- Flask (para executar a IDE Web)
+- `g++` com suporte a C++20
+- Flask para a IDE Web
 
-Instalação das dependências:
+No Windows, instale uma distribuição GCC/MinGW-w64 e adicione a pasta `bin`
+ao `PATH`. Se o compilador tiver outro nome ou caminho, configure `CXX` antes
+de iniciar o compilador MiniPar.
+
+Instale as dependências com:
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
+## Uso
 
-## Como Usar
-
-O compilador oferece múltiplas formas de interação.
-
-### 1. Menu Interativo (Terminal ou IDE Web)
-
-Execute o programa sem argumentos:
+Abra o menu interativo (terminal ou IDE web):
 
 ```bash
 python main.py
 ```
 
-Opções disponíveis:
-
-- **[1] Modo Terminal**: navegação pelos testes através de um menu textual.
-- **[2] Modo Web Interface**: inicia o servidor Flask.
-
-Após iniciar a interface web, acesse:
-
-```text
-http://127.0.0.1:5000
-```
-
-A IDE permite:
-
-- Editar código MiniPar
-- Compilar o programa
-- Visualizar o código TAC gerado
-- Visualizar o código C++ gerado
-- Executar o programa e ver a saída
-
-### 2. Execução Direta (CLI)
-
-Para compilar um arquivo específico:
+Compile diretamente um programa:
 
 ```bash
-python main.py tests/teste3_neuronio.minipar
+python main.py programas_teste/t03_neuronio.mp
 ```
 
-O nome do arquivo de saída é opcional. Por padrão, será utilizado o mesmo nome do arquivo `.minipar`.
+O compilador grava os arquivos `.tac`, `.cpp` e o executável em `output/`. No menu, a opção web inicia a IDE em `http://127.0.0.1:5000`.
 
-Os arquivos gerados (`.cpp`, `.tac` e executáveis) serão armazenados na pasta `output/`.
+Para executar os testes unitários:
 
----
+```bash
+python -m unittest discover -s tests/unitarios
+```
 
-## Fases do Compilador
+## Fases
 
-| Fase | Arquivos | Descrição |
-|------|----------|------------|
-| 1 | `lexer.py` / `parser.py` | Tokenização do código-fonte e construção da AST |
-| 2 | `semantic.py` | Verificação de declarações, redeclarações e escopo |
-| 3 | `tac.py` | Geração de Código Intermediário (TAC) |
-| 4 | `codegen.py` | Geração de código C++ e compilação automática via `g++ -O3` |
+1. Análise léxica e sintática: `components/lexico/` e `components/sintatico/`.
+2. Análise semântica e tabela de símbolos: `components/semantico/` e `components/tabela_simbolos/`.
+3. Geração de TAC: `components/tac/`.
+4. Geração C++ e compilação/linkedição via `g++`: `components/codegen/` e `runtime/`.
 
----
+O fluxo principal executa o binário C++ gerado; o TAC também pode ser executado
+diretamente para expressões, desvios, atribuições simples e `print`. O executor TAC
+não cobre ainda chamadas de função, canais, atribuições indexadas ou todos os
+recursos da linguagem.
 
 ## Sintaxe MiniPar
-
-Exemplo:
 
 ```minipar
 seq {
     var x = 42;
-
     print("Valor:", x);
 
     par {
@@ -126,15 +93,11 @@ seq {
 }
 ```
 
-### Comandos Disponíveis
-
 | Sintaxe | Descrição |
-|----------|------------|
+|---|---|
 | `seq { ... }` | Bloco sequencial |
-| `par { ... }` | Bloco paralelo (cada instrução gera uma thread C++) |
+| `par { ... }` | Bloco paralelo |
 | `var nome = expr;` | Declaração de variável |
 | `nome = expr;` | Atribuição |
 | `print(expr, ...);` | Impressão na saída padrão |
 | `# comentário` | Comentário de linha |
-
----
