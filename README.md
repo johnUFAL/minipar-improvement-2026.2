@@ -4,9 +4,17 @@ Compilador MiniPar em Python, com geração de TAC e transpilação para C++20. 
 
 Desenvolvido por:
 
-- Emanuele Vitória de Jesus Lima — [Manu-Vii](https://github.com/Manu-Vii)
-- José Lucas de Oliveira Quintela — [lucasqtl](https://github.com/lucasqtl)
-- Luiz Miguel de Melo Bomfim — [luizwhirl](https://github.com/luizwhirl)
+- 2026.1
+    - Emanuele Vitória de Jesus Lima - [Manu-Vii](https://github.com/Manu-Vii)
+    - José Lucas de Oliveira Quintela - [lucasqtl](https://github.com/lucasqtl)
+    - Luiz Miguel de Melo Bomfim - [luizwhirl](https://github.com/luizwhirl)
+
+- 2026.2
+    - João Victor Duarte do Nascimento - [johnUFAL](https://github.com/johnUFAL)
+    - Rian Antonio da Silva Gaião - [ryanthecomic](https://github.com/ryanthecomic)
+    - José Guilherme de Almeida Novais - [GuilhermeANovais](github.com/GuilhermeANovais)
+    - Daniel de Araujo Albuquerque - [Daniel-de-Araujo91](https://github.com/Daniel-de-Araujo91)
+    - Guilherme Alessander da Silva Fernandes - [Alessander-Magno](https://github.com/Alessander-Magno)
 
 ## Estrutura
 
@@ -101,3 +109,59 @@ seq {
 | `nome = expr;` | Atribuição |
 | `print(expr, ...);` | Impressão na saída padrão |
 | `# comentário` | Comentário de linha |
+
+
+
+## Wireframe para a nova interface no link abaixo 
+
+[wireframe no figma](https://www.figma.com/design/NXKjTBkAbP0foCPBm0ge0M/MiniPar-2026.2?node-id=0-1&t=UdRarWve6l7ARpmw-1)
+
+
+## Workflow de Desenvolvimento
+
+Todo o trabalho segue o fluxo **branch → commit → PR → review → merge**.
+A `main` contém sempre a versão estável e funcional; nada é commitado direto nela.
+
+### 1. Criar uma branch a partir da `main` atualizada
+
+    git checkout main
+    git pull origin main
+    git checkout -b feat/nome-curto-da-mudanca
+
+**Convenção de nomes:**
+
+| Prefixo   | Uso                                        | Exemplo                        |
+|-----------|--------------------------------------------|--------------------------------|
+| `feat/`   | Nova funcionalidade                        | `feat/fractal-sierpinski`      |
+| `fix/`    | Correção de bug                            | `fix/fila-resultados-bloqueada`|
+| `docs/`   | Apenas documentação                        | `docs/readme-workflow`         |
+| `refactor/` | Reestruturação sem mudar comportamento   | `refactor/separar-trabalhadores`|
+
+### 2. Commits pequenos e descritivos
+
+    git add .
+    git commit -m "feat: adiciona núcleo 6 com desenho do tapete de Sierpinski"
+
+Formato: `tipo: descrição curta no imperativo`.
+
+### 3. Enviar a branch e abrir o Pull Request
+
+    git push -u origin feat/nome-curto-da-mudanca
+
+No GitHub, abra um PR para a `main` descrevendo **o que** mudou, **por que**
+mudou e **como testar** (ex.: `python Teste10-....py`).
+
+### 4. Review e merge
+
+- Ao menos 1 pessoa revisa o PR antes do merge.
+- Resolva os comentários com novos commits na mesma branch.
+- Use **Squash and merge** para manter o histórico da `main` linear.
+- Após o merge, apague a branch (local e remota):
+
+      git branch -d feat/nome-curto-da-mudanca
+      git push origin --delete feat/nome-curto-da-mudanca
+
+### 5. Sincronizar
+
+    git checkout main
+    git pull origin main
