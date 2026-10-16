@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import List
+
 from .token import KEYWORDS, Token, TokenType
+
 
 class Lexer:
     def __init__(self, source_code: str) -> None:
@@ -33,8 +34,8 @@ class Lexer:
     def _make_token(self, token_type: TokenType, lexeme: str, line: int, col: int) -> Token:
         return Token(token_type, lexeme, line, col)
 
-    def tokenize(self) -> List[Token]:
-        tokens: List[Token] = []
+    def tokenize(self) -> list[Token]:
+        tokens: list[Token] = []
         while self._pos < len(self._source):
             self._skip_whitespace_and_comments()
             if self._pos >= len(self._source): break

@@ -1,22 +1,23 @@
-import os
-import sys
-import subprocess
 import glob
+import os
+import subprocess
+import sys
+
+from components.controle.c_controle import compile_file
 
 from .program_analyzer import get_program_spec
 from .test_orchestrator import (
-    prepare_test_execution,
-    finalize_test_execution,
-    check_active_session_for_new_terminal,
-    join_session,
-    get_terminal_id,
-    set_session_phase,
+    _load_session,
     append_session_log,
+    check_active_session_for_new_terminal,
+    finalize_test_execution,
+    get_terminal_id,
+    join_session,
+    prepare_test_execution,
     record_execution_output,
     run_joiner_progress_monitor,
-    _load_session,
+    set_session_phase,
 )
-from components.controle.c_controle import compile_file
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -37,16 +38,16 @@ def executar_binario(output_name: str, interactive: bool = False) -> str:
 
     try:
         if interactive:
-            # stdin conectado ao terminal — necessário para input() no código MiniPar
-            result = subprocess.run([abs_exe_path], text=True)
+            result = subprocess.run([abs_exe_path], text=True, check=False)
             if result.returncode != 0:
                 print(f"[ERRO] Programa encerrou com codigo {result.returncode}.")
             return ""
-        # Programas sem input(): captura saída para exibir nos terminais participantes
+
         result = subprocess.run(
             [abs_exe_path],
             text=True,
             capture_output=True,
+            check=False,
         )
         output = result.stdout
         if result.stderr:
@@ -55,7 +56,7 @@ def executar_binario(output_name: str, interactive: bool = False) -> str:
             print(output)
             record_execution_output(output)
         return output
-    except Exception as e:
+    except (subprocess.SubprocessError, OSError) as e:
         print(f"[ERRO] Falha ao executar {exe_path}: {e}")
         return ""
     finally:

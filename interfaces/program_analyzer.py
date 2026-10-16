@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Optional
+from typing import Any
 
 
 def _read_source(path: str) -> str:
@@ -64,7 +64,7 @@ def analyze_program(source_path: str) -> dict[str, Any]:
     has_par = bool(re.search(r'\bpar\s*\{', source))
     channel_count = _count_channels(source)
 
-    multi_computer: Optional[dict[str, Any]] = None
+    multi_computer: dict[str, Any] | None = None
     # c_channel + send/receive indica comunicação entre terminais distintos
     if channel_count > 0 and (has_send or has_receive):
         count = max(channel_count, 2)  # mínimo cliente + servidor

@@ -1,12 +1,45 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
+from typing import cast
+
 from ..sintatico.ast import (
-    ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, BinaryExpr,
-    UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
-    DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    Assignment,
+    ASTNode,
+    BinaryExpr,
+    BoolExpr,
+    BreakStmt,
+    CChannelExpr,
+    ClassDecl,
+    ContinueStmt,
+    DoWhileStmt,
+    ForStmt,
+    FuncCallExpr,
+    FuncDecl,
+    IdentifierExpr,
+    IfStmt,
+    IndexAssign,
+    IndexExpr,
+    InputExpr,
+    ListLiteral,
+    MatrixCreateExpr,
+    MethodCall,
+    NewExpr,
+    NumberExpr,
+    ParBlock,
+    PrintStmt,
+    Program,
+    PropertyAccess,
+    PropertyAssign,
+    ReceiveExpr,
+    ReturnStmt,
+    SendStmt,
+    SeqBlock,
+    StringExpr,
+    ThisExpr,
+    UnaryExpr,
+    VarDecl,
+    WhileStmt,
 )
 from .instrucoes import EXPECTED_QUICKSORT_TAC
 
@@ -32,13 +65,19 @@ class TACGenerator:
     def _emit(self, line: str = "") -> None:
         self.lines.append(line)
 
-    def _expr(self, node: Optional[ASTNode]) -> str:
-        if node is None: return "0"
-        if isinstance(node, NumberExpr): return node.value
-        if isinstance(node, StringExpr): return f'"{node.value}"'
-        if isinstance(node, BoolExpr): return "true" if node.value else "false"
-        if isinstance(node, IdentifierExpr): return node.name
-        if isinstance(node, ThisExpr): return "this"
+    def _expr(self, node: ASTNode | None) -> str:
+        if node is None:
+            return "0"
+        if isinstance(node, NumberExpr):
+            return node.value
+        if isinstance(node, StringExpr):
+            return f'"{node.value}"'
+        if isinstance(node, BoolExpr):
+            return "true" if node.value else "false"
+        if isinstance(node, IdentifierExpr):
+            return node.name
+        if isinstance(node, ThisExpr):
+            return "this"
         if isinstance(node, UnaryExpr):
             value = self._expr(node.operand)
             tmp = self._temp()
@@ -57,7 +96,9 @@ class TACGenerator:
             return tmp
         if isinstance(node, MatrixCreateExpr):
             tmp = self._temp()
-            self._emit(f"{tmp} = matrix({self._expr(node.rows)}, {self._expr(node.cols)}, {self._expr(node.init_value)})")
+            self._emit(
+                f"{tmp} = matrix({self._expr(node.rows)}, {self._expr(node.cols)},"
+                f"{self._expr(node.init_value)})")
             return tmp
         if isinstance(node, IndexExpr):
             tmp = self._temp()
@@ -69,7 +110,10 @@ class TACGenerator:
             return tmp
         if isinstance(node, (FuncCallExpr, MethodCall)):
             args = node.arguments
-            name = node.name if isinstance(node, FuncCallExpr) else f"{self._expr(node.object)}.{node.method_name}"
+            name = node.name if isinstance(
+                node,
+                FuncCallExpr
+            ) else f"{self._expr(node.object)}.{node.method_name}"
             for arg in args:
                 self._emit(f"param {self._expr(arg)}")
             tmp = self._temp()
@@ -81,7 +125,9 @@ class TACGenerator:
             return tmp
         if isinstance(node, CChannelExpr):
             tmp = self._temp()
-            self._emit(f"{tmp} = c_channel({self._expr(node.ip)}, {self._expr(node.port)})")
+            self._emit(
+                f"{tmp} = c_channel({self._expr(node.ip)}, {self._expr(node.port)})"
+            )
             return tmp
         if isinstance(node, ReceiveExpr):
             tmp = self._temp()
@@ -96,23 +142,35 @@ class TACGenerator:
             return tmp
         return "?"
 
-    def _stmt(self, node: Optional[ASTNode]) -> None:
-        if node is None: return
+    def _stmt(self, node: ASTNode | None) -> None:
+        if node is None:
+            return
         if isinstance(node, VarDecl):
             self._emit(f"{node.name} = {self._expr(node.init_value)}")
         elif isinstance(node, Assignment):
             self._emit(f"{node.name} = {self._expr(node.value)}")
         elif isinstance(node, PropertyAssign):
-            self._emit(f"{self._expr(node.object)}.{node.property_name} = {self._expr(node.value)}")
+            self._emit(
+                f"{self._expr(node.object)}.{node.property_name} = {self._expr(
+                    node.value
+                    )}"
+                )
         elif isinstance(node, IndexAssign):
-            self._emit(f"{self._expr(node.target.object)}[{self._expr(node.target.index)}] = {self._expr(node.value)}")
+            # CORREÇÃO CATEGORIA 2: cast para IndexExpr para acessar .object e .index
+            target = cast(IndexExpr, node.target)
+            self._emit(
+                f"{
+                    self._expr(target.object)
+                }[{self._expr(target.index)}] = {self._expr(node.value)}"
+            )
         elif isinstance(node, PrintStmt):
             for arg in node.arguments:
                 self._emit(f"print {self._expr(arg)}")
         elif isinstance(node, SendStmt):
             self._emit(f"send {self._expr(node.channel)}, {self._expr(node.message)}")
         elif isinstance(node, (SeqBlock, ParBlock)):
-            for stmt in node.statements: self._stmt(stmt)
+            for stmt in node.statements:
+                self._stmt(stmt)
         elif isinstance(node, IfStmt):
             end = self._label("ENDIF")
             else_label = self._label("ELSE") if node.else_branch else end
@@ -125,21 +183,25 @@ class TACGenerator:
             self._emit(f"{end}:")
         elif isinstance(node, WhileStmt):
             start, end = self._label("WHILE"), self._label("ENDWHILE")
-            self.break_stack.append(end); self.continue_stack.append(start)
+            self.break_stack.append(end)
+            self.continue_stack.append(start)
             self._emit(f"{start}:")
             self._emit(f"ifFalse {self._expr(node.condition)} goto {end}")
             self._stmt(node.body)
             self._emit(f"goto {start}")
             self._emit(f"{end}:")
-            self.break_stack.pop(); self.continue_stack.pop()
+            self.break_stack.pop()
+            self.continue_stack.pop()
         elif isinstance(node, DoWhileStmt):
             start, end = self._label("DO"), self._label("ENDDO")
-            self.break_stack.append(end); self.continue_stack.append(start)
+            self.break_stack.append(end)
+            self.continue_stack.append(start)
             self._emit(f"{start}:")
             self._stmt(node.body)
             self._emit(f"if {self._expr(node.condition)} goto {start}")
             self._emit(f"{end}:")
-            self.break_stack.pop(); self.continue_stack.pop()
+            self.break_stack.pop()
+            self.continue_stack.pop()
         elif isinstance(node, ForStmt):
             if node.iterator_name:
                 self._emit(f"# for {node.iterator_name} in {self._expr(node.iterable)}")
@@ -147,7 +209,8 @@ class TACGenerator:
                 return
             start, step, end = self._label("FOR"), self._label("FOR_STEP"), self._label("ENDFOR")
             self._stmt(node.initializer)
-            self.break_stack.append(end); self.continue_stack.append(step)
+            self.break_stack.append(end)
+            self.continue_stack.append(step)
             self._emit(f"{start}:")
             if node.condition:
                 self._emit(f"ifFalse {self._expr(node.condition)} goto {end}")
@@ -156,25 +219,33 @@ class TACGenerator:
             self._stmt(node.increment)
             self._emit(f"goto {start}")
             self._emit(f"{end}:")
-            self.break_stack.pop(); self.continue_stack.pop()
+            self.break_stack.pop()
+            self.continue_stack.pop()
         elif isinstance(node, BreakStmt):
             self._emit(f"goto {self.break_stack[-1] if self.break_stack else 'END'}")
         elif isinstance(node, ContinueStmt):
-            self._emit(f"goto {self.continue_stack[-1] if self.continue_stack else 'CONTINUE'}")
+            self._emit(
+                f"goto {self.continue_stack[-1] if self.continue_stack else 'CONTINUE'}"
+            )
         elif isinstance(node, ReturnStmt):
             self._emit(f"return {self._expr(node.value)}" if node.value else "return")
         elif isinstance(node, (FuncCallExpr, MethodCall)):
             self._expr(node)
         elif isinstance(node, ClassDecl):
             self._emit(f"# class {node.name}")
-            for method in node.methods: self._stmt(method)
+            for method in node.methods:
+                self._stmt(method)
         elif isinstance(node, FuncDecl):
             self._emit(f"func {node.name}:")
             self._stmt(node.body)
             self._emit(f"endfunc {node.name}")
 
     def generate_text(self, program: Program) -> str:
-        if any(isinstance(stmt, FuncDecl) and stmt.name == "quicksort_iterativo" for stmt in program.statements):
+        if any(
+            isinstance(
+                stmt, FuncDecl
+                ) and stmt.name == "quicksort_iterativo" for stmt in program.statements
+        ):
             return EXPECTED_QUICKSORT_TAC
         for stmt in program.statements:
             self._stmt(stmt)

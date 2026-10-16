@@ -1,14 +1,47 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
+
 from ..sintatico.ast import (
-    ASTNode, Program, VarDecl, Assignment, PrintStmt, SeqBlock, ParBlock, BinaryExpr, 
-    UnaryExpr, NumberExpr, StringExpr, BoolExpr, IdentifierExpr, IfStmt, WhileStmt,
-    DoWhileStmt, ForStmt, BreakStmt, ContinueStmt, InputExpr,
-    ClassDecl, FuncDecl, ReturnStmt, MethodCall, FuncCallExpr, PropertyAccess, PropertyAssign, NewExpr, ThisExpr,
-    CChannelExpr, SendStmt, ReceiveExpr, ListLiteral, MatrixCreateExpr, IndexExpr, IndexAssign
+    Assignment,
+    ASTNode,
+    BinaryExpr,
+    BoolExpr,
+    BreakStmt,
+    CChannelExpr,
+    ClassDecl,
+    ContinueStmt,
+    DoWhileStmt,
+    ForStmt,
+    FuncCallExpr,
+    FuncDecl,
+    IdentifierExpr,
+    IfStmt,
+    IndexAssign,
+    IndexExpr,
+    InputExpr,
+    ListLiteral,
+    MatrixCreateExpr,
+    MethodCall,
+    NewExpr,
+    NumberExpr,
+    ParBlock,
+    PrintStmt,
+    Program,
+    PropertyAccess,
+    PropertyAssign,
+    ReceiveExpr,
+    ReturnStmt,
+    SendStmt,
+    SeqBlock,
+    StringExpr,
+    ThisExpr,
+    UnaryExpr,
+    VarDecl,
+    WhileStmt,
 )
 from .driver_gcc import DriverGCC
+
 
 class CppCodeGenerator:
     @staticmethod
@@ -22,7 +55,7 @@ class CppCodeGenerator:
             else: res.append(ch)
         return "".join(res)
 
-    def _translate_expression(self, node: Optional[ASTNode]) -> str:
+    def _translate_expression(self, node: ASTNode | None) -> str:
         if node is None: return "0"
         if isinstance(node, NumberExpr): return node.value
         if isinstance(node, StringExpr): return f'"{self._escape_string(node.value)}"'
@@ -90,7 +123,7 @@ class CppCodeGenerator:
 
         return "0"
 
-    def _has_value_return(self, node: Optional[ASTNode]) -> bool:
+    def _has_value_return(self, node: ASTNode | None) -> bool:
         if node is None: return False
         if isinstance(node, ReturnStmt): return node.value is not None
         if isinstance(node, (SeqBlock, ParBlock)):
@@ -101,7 +134,7 @@ class CppCodeGenerator:
             return self._has_value_return(node.body)
         return False
 
-    def _uses_float_return(self, node: Optional[ASTNode]) -> bool:
+    def _uses_float_return(self, node: ASTNode | None) -> bool:
         """Detecta aritmética de ponto flutuante no corpo da função."""
         if node is None:
             return False
@@ -121,7 +154,7 @@ class CppCodeGenerator:
             return self._uses_float_return(node.value)
         return False
 
-    def _return_type(self, body: Optional[ASTNode]) -> str:
+    def _return_type(self, body: ASTNode | None) -> str:
         if not self._has_value_return(body):
             return "void"
         # auto falha no g++ quando há return double e return 0 (int) na mesma função
@@ -129,7 +162,7 @@ class CppCodeGenerator:
             return "double"
         return "auto"
 
-    def _translate_statement(self, node: Optional[ASTNode], indent: str = "") -> str:
+    def _translate_statement(self, node: ASTNode | None, indent: str = "") -> str:
         if node is None: return ""
         if isinstance(node, VarDecl):
             expr = self._translate_expression(node.init_value) if node.init_value else "0"
@@ -209,7 +242,7 @@ class CppCodeGenerator:
             return res
         return ""
 
-    def _translate_for_part(self, node: Optional[ASTNode]) -> str:
+    def _translate_for_part(self, node: ASTNode | None) -> str:
         if node is None: return ""
         if isinstance(node, VarDecl):
             expr = self._translate_expression(node.init_value) if node.init_value else "0"

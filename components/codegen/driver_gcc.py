@@ -41,7 +41,7 @@ class DriverGCC:
             command.append("-lws2_32")
 
         try:
-            result = subprocess.run(command)
+            result = subprocess.run(command, check=False)
         except FileNotFoundError:
             print(
                 f"[ERRO] O compilador C++ '{compiler_path}' nao pode ser iniciado. "

@@ -10,7 +10,7 @@ import socket
 import sys
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from .program_analyzer import get_program_spec
 
@@ -37,14 +37,14 @@ def get_terminal_id() -> str:
     return f"{hostname}-{os.getpid()}"
 
 
-def get_test_spec(filename: str) -> Optional[dict[str, Any]]:
+def get_test_spec(filename: str) -> dict[str, Any] | None:
     path = os.path.join(TESTS_DIR, os.path.basename(filename))
     if not os.path.isfile(path):
         return None
     return get_program_spec(path)
 
 
-def _load_session() -> Optional[dict[str, Any]]:
+def _load_session() -> dict[str, Any] | None:
     if not os.path.exists(SESSION_FILE):
         return None
     try:
@@ -84,7 +84,7 @@ def append_session_log(message: str, source: str = "initiator") -> None:
     _save_session(session)
 
 
-def set_session_phase(phase: str, message: str, percent: Optional[int] = None) -> None:
+def set_session_phase(phase: str, message: str, percent: int | None = None) -> None:
     session = _load_session()
     if session is None:
         return
@@ -231,7 +231,7 @@ def prompt_new_user_on_active_session(session: dict[str, Any]) -> str:
         print("  [ERRO] Digite 1 ou 2.")
 
 
-def _assign_role(session: dict[str, Any]) -> Optional[str]:
+def _assign_role(session: dict[str, Any]) -> str | None:
     roles = session.get("roles", [])
     taken = {p["role"] for p in session.get("participants", [])}
     for role in roles:
@@ -380,7 +380,7 @@ def _announce_input_requirement(spec: dict[str, Any]) -> None:
     print()
 
 
-def check_active_session_for_new_terminal() -> tuple[Optional[str], Optional[dict]]:
+def check_active_session_for_new_terminal() -> tuple[str | None, dict | None]:
     session = _load_session()
     if session is None or session.get("status") in ("completed", "cancelled"):
         return None, session
@@ -491,7 +491,7 @@ def finalize_test_execution(test_path: str, output: str = "") -> None:
         clear_session()
 
 
-def get_spec_summary(filename: str) -> Optional[dict[str, Any]]:
+def get_spec_summary(filename: str) -> dict[str, Any] | None:
     path = os.path.join(TESTS_DIR, os.path.basename(filename))
     if not os.path.isfile(path):
         return None

@@ -4,20 +4,20 @@ import ast
 import operator
 import re
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, ClassVar
 
 
 class TACExecutor:
     """Executa TAC com expressões, desvios, atribuições simples e print."""
 
-    _binary_ops = {
+    _binary_ops: ClassVar = {
         ast.Add: operator.add,
         ast.Sub: operator.sub,
         ast.Mult: operator.mul,
         ast.Div: operator.truediv,
         ast.Mod: operator.mod,
     }
-    _compare_ops = {
+    _compare_ops: ClassVar = {
         ast.Eq: operator.eq,
         ast.NotEq: operator.ne,
         ast.Lt: operator.lt,
@@ -104,7 +104,9 @@ class TACExecutor:
         while pc < len(lines):
             steps += 1
             if steps > self.max_steps:
-                raise RuntimeError(f"Limite de execucao TAC ({self.max_steps}) excedido")
+                raise RuntimeError(
+                    f"Limite de execucao TAC ({self.max_steps}) excedido"
+                )
 
             line = lines[pc]
             pc += 1
