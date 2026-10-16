@@ -1,211 +1,247 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import List, Optional
+
 
 class ASTNode:
     line: int = 1
 
+
 @dataclass
 class NumberExpr(ASTNode):
-    value: str
+    value: str = ""
     line: int = 1
+
 
 @dataclass
 class StringExpr(ASTNode):
-    value: str
+    value: str = ""
     line: int = 1
+
 
 @dataclass
 class BoolExpr(ASTNode):
-    value: bool
+    value: bool = False
     line: int = 1
+
 
 @dataclass
 class IdentifierExpr(ASTNode):
-    name: str
+    name: str = ""
     line: int = 1
+
 
 @dataclass
 class BinaryExpr(ASTNode):
-    op: str
-    left: ASTNode
-    right: ASTNode
+    op: str = ""
+    left: ASTNode | None = None
+    right: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class UnaryExpr(ASTNode):
-    op: str
-    operand: ASTNode
+    op: str = ""
+    operand: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class VarDecl(ASTNode):
-    name: str
-    init_value: Optional[ASTNode] = None
+    name: str = ""
+    init_value: ASTNode | None = None
     type: str = "var"
     line: int = 1
 
+
 @dataclass
 class Assignment(ASTNode):
-    name: str
-    value: ASTNode = None
+    name: str = ""
+    value: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class PrintStmt(ASTNode):
-    arguments: List[ASTNode] = field(default_factory=list)
+    arguments: list[ASTNode] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class SeqBlock(ASTNode):
-    statements: List[ASTNode] = field(default_factory=list)
+    statements: list[ASTNode] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class ParBlock(ASTNode):
-    statements: List[ASTNode] = field(default_factory=list)
+    statements: list[ASTNode] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class IfStmt(ASTNode):
-    condition: ASTNode
-    then_branch: ASTNode
-    else_branch: Optional[ASTNode] = None
+    condition: ASTNode | None = None
+    then_branch: ASTNode | None = None
+    else_branch: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class WhileStmt(ASTNode):
-    condition: ASTNode
-    body: ASTNode
+    condition: ASTNode | None = None
+    body: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class DoWhileStmt(ASTNode):
-    body: ASTNode
-    condition: ASTNode
+    body: ASTNode | None = None
+    condition: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class ForStmt(ASTNode):
-    initializer: Optional[ASTNode]
-    condition: Optional[ASTNode]
-    increment: Optional[ASTNode]
-    body: ASTNode
-    iterator_name: Optional[str] = None
-    iterable: Optional[ASTNode] = None
+    initializer: ASTNode | None = None
+    condition: ASTNode | None = None
+    increment: ASTNode | None = None
+    body: ASTNode | None = None
+    iterator_name: str | None = None
+    iterable: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class BreakStmt(ASTNode):
     line: int = 1
 
+
 @dataclass
 class ContinueStmt(ASTNode):
     line: int = 1
 
+
 @dataclass
 class ClassDecl(ASTNode):
-    name: str
-    superclass: Optional[str]
-    attributes: List[VarDecl]
-    methods: List[FuncDecl]
+    name: str = ""
+    superclass: str | None = None
+    attributes: list[VarDecl] = field(default_factory=list)
+    methods: list[FuncDecl] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class FuncDecl(ASTNode):
-    name: str
-    params: List[str]
-    body: ASTNode
+    name: str = ""
+    params: list[str] = field(default_factory=list)
+    body: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class ReturnStmt(ASTNode):
-    value: Optional[ASTNode]
+    value: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class MethodCall(ASTNode):
-    object: ASTNode
-    method_name: str
-    arguments: List[ASTNode]
+    object: ASTNode | None = None
+    method_name: str = ""
+    arguments: list[ASTNode] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class FuncCallExpr(ASTNode):
-    name: str
-    arguments: List[ASTNode]
+    name: str = ""
+    arguments: list[ASTNode] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class PropertyAccess(ASTNode):
-    object: ASTNode
-    property_name: str
+    object: ASTNode | None = None
+    property_name: str = ""
     line: int = 1
+
 
 @dataclass
 class PropertyAssign(ASTNode):
-    object: ASTNode
-    property_name: str
-    value: ASTNode
+    object: ASTNode | None = None
+    property_name: str = ""
+    value: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class NewExpr(ASTNode):
-    class_name: str
-    arguments: List[ASTNode]
+    class_name: str = ""
+    arguments: list[ASTNode] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class ThisExpr(ASTNode):
     line: int = 1
 
+
 @dataclass
 class CChannelExpr(ASTNode):
-    ip: ASTNode
-    port: ASTNode
+    ip: ASTNode | None = None
+    port: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class SendStmt(ASTNode):
-    channel: ASTNode
-    message: ASTNode
+    channel: ASTNode | None = None
+    message: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class ReceiveExpr(ASTNode):
-    channel: ASTNode
+    channel: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class InputExpr(ASTNode):
-    prompt: Optional[ASTNode] = None
+    prompt: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class ListLiteral(ASTNode):
-    elements: List[ASTNode]
+    elements: list[ASTNode] = field(default_factory=list)
     line: int = 1
+
 
 @dataclass
 class MatrixCreateExpr(ASTNode):
-    rows: ASTNode
-    cols: ASTNode
-    init_value: ASTNode
+    rows: ASTNode | None = None
+    cols: ASTNode | None = None
+    init_value: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class IndexExpr(ASTNode):
-    object: ASTNode
-    index: ASTNode
+    object: ASTNode | None = None
+    index: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class IndexAssign(ASTNode):
-    target: ASTNode
-    value: ASTNode
+    target: ASTNode | None = None
+    value: ASTNode | None = None
     line: int = 1
+
 
 @dataclass
 class Program(ASTNode):
-    statements: List[ASTNode] = field(default_factory=list)
+    statements: list[ASTNode] = field(default_factory=list)
     line: int = 1

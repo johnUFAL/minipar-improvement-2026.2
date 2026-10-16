@@ -47,7 +47,9 @@ END:
             / "expected_results"
             / "t07_quicksort_iterativo_tac.expected.tac"
         )
-        program = Parser(Lexer(source_path.read_text(encoding="utf-8")).tokenize()).parse()
+        program = Parser(
+            Lexer(source_path.read_text(encoding="utf-8")).tokenize()
+        ).parse()
         self.assertEqual(
             TACGenerator().generate_text(program),
             expected_path.read_text(encoding="utf-8"),
@@ -59,7 +61,8 @@ END:
         with redirect_stderr(stderr):
             result = DriverGCC().compile("program.cpp")
         self.assertFalse(result)
-        self.assertIn("Compilador C++ 'g++' nao encontrado", stderr.getvalue())
+        self.assertIn("Compilador C++", stderr.getvalue())
+        self.assertIn("nao encontrado", stderr.getvalue())
 
 
 if __name__ == "__main__":

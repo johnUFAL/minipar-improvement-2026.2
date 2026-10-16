@@ -1,3 +1,4 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,9 +29,12 @@ class WebCompileTests(unittest.TestCase):
     def test_web_forwards_inputs_and_returns_program_output(self, run):
         run.side_effect = [
             CompletedProcess(args=[], returncode=0, stdout="compiled", stderr=""),
-            CompletedProcess(args=[], returncode=0, stdout="Resultado: 42\n", stderr=""),
+            CompletedProcess(
+                args=[], returncode=0, stdout="Resultado: 42\n", stderr=""
+            ),
         ]
-        executable = Path(api.OUTPUT_DIR) / "input_output.exe"
+        exe_ext = ".exe" if sys.platform == "win32" else ""
+        executable = Path(api.OUTPUT_DIR) / f"input_output{exe_ext}"
         executable.touch()
 
         response = self.client.post(
