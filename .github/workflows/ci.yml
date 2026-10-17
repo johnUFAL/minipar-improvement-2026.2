@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Instalar dependências
+        run: pip install -e ".[dev]"
+
+      - name: Verificar g++ com suporte a C++20
+        run: |
+          g++ --version
+          echo 'int main() { return 0; }' | g++ -std=c++20 -x c++ - -o /dev/null
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Tipos (mypy)
+        run: mypy
+
+      - name: Benchmarks compilam
+        run: python -m py_compile benchmarks/*.py
+
+      - name: Testes (pytest)
+        run: pytest -v

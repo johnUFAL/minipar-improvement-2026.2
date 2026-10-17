@@ -2,6 +2,8 @@
 
 Compilador MiniPar em Python, com geração de TAC e transpilação para C++20. A IDE web permite editar, compilar e executar os programas. O runtime C++ é compilado e linkado junto com cada programa gerado.
 
+**Pipeline:** fonte `.mp` → Lexer → Parser (AST) → Semântico/Tabela de Símbolos → TAC → C++20 → `g++` → binário
+
 Desenvolvido por:
 
 - 2026.1
@@ -32,14 +34,14 @@ erros/             diagnosticos.py
 runtime/           minipar_rt.hpp, canal.cpp, paralelo.cpp
 interfaces/        cli.py, web/api.py, web/frontend/
 programas_teste/   programas MiniPar (.mp)
-benchmarks/        scripts Python de baseline, quando disponíveis
+benchmarks/        t08_..., t09_..., t10_...
 docs/              gramatica.md, uml/, relatorio/, backlog.md
 tests/             unitarios/, integracao/, programas/
 ```
 
 ## Requisitos
 
-- Python 3.8 ou superior
+- Python 3.11+
 - `g++` com suporte a C++20
 - Flask para a IDE Web
 
@@ -50,7 +52,7 @@ de iniciar o compilador MiniPar.
 Instale as dependências com:
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 ## Uso
@@ -72,8 +74,9 @@ O compilador grava os arquivos `.tac`, `.cpp` e o executável em `output/`. No m
 Para executar os testes unitários:
 
 ```bash
-python -m unittest discover -s tests/unitarios
+pytest
 ```
+*(O pytest executa os TestCase existentes, então nada precisa ser reescrito.)*
 
 ## Fases
 
@@ -149,7 +152,7 @@ Formato: `tipo: descrição curta no imperativo`.
     git push -u origin feat/nome-curto-da-mudanca
 
 No GitHub, abra um PR para a `main` descrevendo **o que** mudou, **por que**
-mudou e **como testar** (ex.: `python Teste10-....py`).
+mudou e **como testar** (ex.: `python benchmarks/t10_6_nucleos_avaliacao_2_fractais.py`).
 
 ### 4. Review e merge
 
