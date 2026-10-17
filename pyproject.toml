@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minipar"
+version = "0.1.0"
+description = "Compilador MiniPar: TAC + transpilação para C++20"
+requires-python = ">=3.11"
+dependencies = ["Flask>=3.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+
+[tool.setuptools.packages.find]
+include = ["components*", "erros*", "interfaces*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["output", "temp_code"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E701", "E702"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["components", "erros", "interfaces"]
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
