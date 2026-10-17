@@ -22,3 +22,9 @@ __pycache__
 /temp_code/*
 
 venv
+
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+.venv

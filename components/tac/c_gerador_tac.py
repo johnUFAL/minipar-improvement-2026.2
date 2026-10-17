@@ -151,17 +151,12 @@ class TACGenerator:
             self._emit(f"{node.name} = {self._expr(node.value)}")
         elif isinstance(node, PropertyAssign):
             self._emit(
-                f"{self._expr(node.object)}.{node.property_name} = {self._expr(
-                    node.value
-                    )}"
-                )
+               f"{self._expr(node.object)}.{node.property_name} = {self._expr(node.value)}"
+            )
         elif isinstance(node, IndexAssign):
-            # CORREÇÃO CATEGORIA 2: cast para IndexExpr para acessar .object e .index
             target = cast(IndexExpr, node.target)
             self._emit(
-                f"{
-                    self._expr(target.object)
-                }[{self._expr(target.index)}] = {self._expr(node.value)}"
+                f"{self._expr(target.object)}[{self._expr(target.index)}] = {self._expr(node.value)}"
             )
         elif isinstance(node, PrintStmt):
             for arg in node.arguments:
