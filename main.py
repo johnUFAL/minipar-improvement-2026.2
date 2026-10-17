@@ -23,9 +23,7 @@ def start_interactive():
         print("  MINIPAR — PARTICIPANTE DE TESTE")
         print("=" * 45)
         print(f"\n  Terminal identificado: {get_terminal_id()}")
-        print(f"  Teste em andamento: {session.get(
-            'titulo', session.get('test_file', ''))}"
-        )
+        print(f"  Teste em andamento: {session.get('titulo', session.get('test_file', ''))}")
         print("\n  Monitor de progresso iniciado...\n")
         run_joiner_progress_monitor(session)
     elif action == "independent":

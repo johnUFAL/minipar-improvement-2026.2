@@ -319,10 +319,9 @@ class SemanticAnalyzer:
             elif cls and len(cls.methods[node.method_name]) != len(node.arguments):
                 self._report(
                     node.line,
-                    f"Metodo '{node.method_name}' espera {len(cls.methods[
-                        node.method_name
-                        ])} argumento(s), recebeu {len(node.arguments)}."
-                    )
+                    f"Metodo '{node.method_name}' espera {len(cls.methods[node.method_name])} argumento(s), recebeu {len(node.arguments)}."
+                )
+
             self.validate_node(node.object)
             for arg in node.arguments:
                 self.validate_node(arg)
@@ -335,9 +334,7 @@ class SemanticAnalyzer:
                  self._functions[node.name].params) != len(node.arguments):
                 self._report(
                     node.line,
-                    f"Funcao '{node.name}' espera {len(self._functions[
-                        node.name
-                        ].params)} argumento(s), recebeu {len(node.arguments)}."
+                    f"Funcao '{node.name}' espera {len(self._functions[node.name].params)} argumento(s), recebeu {len(node.arguments)}."
                     )
             for arg in node.arguments:
                 self.validate_node(arg)
