@@ -221,7 +221,7 @@ if __name__ == "__main__":
     print("==========================================")
     print("         BENCHMARK DE DESEMPENHO          ")
     print("==========================================")
-    print(f"Núcleos Utilizados (Paralelo) : 5")
+    print("Núcleos Utilizados (Paralelo) : 5")
     print(f"Tempo Sequencial             : {tempo_seq:.2f} s")
     print(f"Tempo Paralelo               : {tempo_par:.2f} s")
     print(f"Aceleração (Speedup)         : {speedup:.2f}x mais rápido!")
