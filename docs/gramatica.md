@@ -1,1033 +1,310 @@
-# Gramática Formal BNF — Linguagem MiniPar 2026.1
+# Gramática Formal (EBNF) — Linguagem MiniPar 2026.2
 
-**Projeto:** MiniPar-Improvement — Compilador da Linguagem MiniPar 2026.1 Orientada a Objetos  
-**Autores:** Emanuele Vitória de Jesus Lima · Jose Lucas de Oliveira Quintela · Luiz Miguel de Melo Bomfim  
-**Instituição:** Universidade Federal de Alagoas — Instituto de Computação · Ciência da Computação  
-**Disciplina:** Compiladores — Prof. Arturo Hernandez Dominguez  
-**Repositório:** https://github.com/luizwhirl/minipar-improvement  
+**Issue:** Task 2 — Sprint 0 (Fundação e Arquitetura) · Labels: gramatica, decisao, documentacao, P0 · Depende de: #1
+**Base:** BNF do relatório 2026.1 + enunciado 2026.2 (seção 2 e Observações 1–5).
+**Status:** proposta para revisão. Itens abertos estão na seção 6.
 
 ---
 
-> Esta gramática foi derivada diretamente da implementação real do compilador
-> (arquivos `components/lexico/c_lexico.py`, `components/sintatico/c_sintatico.py`
-> e `components/sintatico/ast.py`), cruzada com
-> o relatório técnico do projeto e as especificações formais fornecidas pelo professor.
-> Ela descreve **toda** a sintaxe aceita pelo compilador MiniPar 2026.1.
+## 1. Decisões de projeto
+
+Cada decisão foi tomada uma vez, por escrito, porque léxico, parser, semântico e os dois geradores dependem delas.
+
+| # | Decisão | Veredito | Justificativa |
+|---|---------|----------|---------------|
+| 1 | Blocos por indentação (`INDENT`/`DEDENT`) | **Aceita** | O enunciado diz "todas as instruções indentadas depois do SEQ/PAR" e permite sintaxe estilo Python. Os 10 testes originais são Python, então a tradução fica quase literal. Custo: o léxico precisa de uma pilha de indentação (a implementação 2026.1 usa `{ }` e `;`). |
+| 2 | Tipos de valor: `bool`, `int`, `float`, `string`, `list` (mais classes do usuário) | **Aceita, com ajuste** | Testes 3–5 usam decimais (0.5, 0.01) e os Testes 4–7 usam listas. `float` e `list` entram como tipos nativos; matrizes são listas de listas. O enunciado lista `c_channel` como tipo, mas aqui o canal é uma **entidade nomeada** criada por `decl_canal`, não um valor: nenhuma expressão produz um canal, então um tipo `c_channel` ficaria sem uso (ver decisão 15). |
+| 3 | Sem list comprehension, tuplas, `zip`, `enumerate`, f-strings, `try/except`, ternário | **Aceita** | Cada um exigiria produções ou regras semânticas próprias. Sem eles o parser continua descendente recursivo, sem ambiguidade. Tudo é reescrito com `while`/`for`, concatenação e builtins (seção 5). |
+| 4 | Precedência: `or` < `and` < `not` < comparações < `+ -` < `* / %` < `-` unário < postfixo (`()`, `.`, `[]`) | **Aceita** | Segue a Observação 2 do enunciado. Um não-terminal por nível, associatividade à esquerda, e a árvore já sai com a precedência certa (útil para o TAC). |
+| 5 | E/S: `print(...)` e `input()`; `sys.stdin.readline()` **não** vira alias | **Alterada** | Alias exigiria o conceito de módulo (`sys.stdin`) só para um sinônimo. Os programas de teste do enunciado usam `sys.stdin.readline()` apenas em comentário. `input()` cobre o caso. Se o professor exigir o nome literal, é um builtin a mais, sem mudar a gramática. |
+| 6 | Concorrência: `SEQ`, `PAR`, `fork`/`join`, `c_channel` com `.send()`/`.receive()` | **Aceita, com ajuste** | `fork t em core(n):` e `fork t em host("pc2"):` tornam a alocação parte da sintaxe, como o enunciado pede. A cláusula `em` é opcional (sem ela, o runtime escolhe). O `join` aceita lista de tarefas. |
+
+**Decisões adicionais** (necessárias para fechar a gramática):
+
+| # | Decisão | Por quê |
+|---|---------|---------|
+| 7 | Instanciação sempre com `new` (`n = new Neuronio(1, 0)`) | Diferencia chamada de função de criação de objeto já no primeiro token. Sem `new`, o parser precisaria consultar a tabela de símbolos. |
+| 8 | Atributos declarados **no corpo da classe**, com valor inicial; o construtor é o método `init`; `self` referencia a instância | O gerador C++ precisa dos membros da classe antes de emitir qualquer método. Se os atributos nascessem por `self.x = ...` dentro do `init`, seria preciso varrer o corpo dos métodos para descobri-los. |
+| 9 | Atribuição composta `+=`, `-=`, `*=`, `/=` | Quase todo teste usa `+=`. Custa uma linha na gramática e é açúcar sintático: o parser gera `x = x + ...`. |
+| 10 | Parâmetros com tipo opcional e valor padrão literal; retorno com `-> tipo` opcional | Testes 3, 4 e 5 usam valores padrão (`peso_inicial=0.5`, `taxa_aprendizado=0.2`). Os tipos opcionais preenchem o `tipos_var` que estava como "…" no enunciado. |
+| 11 | Quebra de linha dentro de `(` `)` e `[` `]` é ignorada pelo léxico; linhas em branco e só com comentário não geram `NEWLINE` | Necessário para listas e expressões em várias linhas (Teste 5) e evita que comentários quebrem a indentação. |
+| 12 | `SEQ` e `PAR` em maiúsculas, sem `:`; demais palavras reservadas em minúsculas | O enunciado escreve `SEQ`/`PAR` sem dois-pontos. Os blocos `if/while/for/def/class` usam `:` como em Python. |
+| 13 | Cada filho direto de `PAR` é uma thread; para agrupar várias instruções numa thread, usar `SEQ` aninhado | É o modelo que o enunciado descreve (Teste 2) e mantém a produção de `PAR` igual à de `SEQ`. |
+| 14 | Um único bloco raiz (`SEQ` ou `PAR`) depois das declarações | O enunciado define `programa_minipar → bloco_stmt → bloco_SEQ \| bloco_PAR`. |
+| 15 | Canais só existem via `decl_canal`, no topo do programa; `c_channel` **não** é tipo | Todos os testes (T1 e adicionais) declaram o canal no topo. Isso também remove o `c_channel(ip, porta)` como expressão do 2026.1. Limitação consciente: não é possível criar canal dentro de função/bloco. Se um teste futuro precisar, a gramática volta a ter `c_channel(...)` como expressão e `c_channel` entra em `tipo`. |
+| 16 | Comparação **não** encadeia: `expr_comp = expr_arit [ op_rel expr_arit ]` | Em Python `a < b < c` significa `a < b and b < c`; se o parser aceitasse e montasse `(a < b) < c`, o programa mudaria de significado em silêncio. Como os testes vêm de Python, é melhor dar erro sintático. |
+| 17 | `void` só aparece em retorno (`tipo_retorno`), nunca em parâmetro ou variável | Custa uma produção a mais e elimina uma checagem semântica. |
+| 18 | Blocos e classes não podem ser vazios; não existe `pass` | `suite` e `decl_classe` exigem ao menos um membro/comando. Nenhum teste precisa de bloco vazio, e evita criar uma palavra reservada só para isso. |
+| 19 | Construções do 2026.1 removidas: `do-while`, `for` estilo C, `var`, `dict`, `number`, `matrix`, `c_channel(ip, porta)` | `do-while` e `for` C são cobertos por `while` + `break` e `for … in range(...)`. `var` some porque a declaração é a primeira atribuição. `number` vira `int`/`float`. `matrix` vira lista de listas. `dict` não é usado por nenhum teste. Registrado para quem comparar com o BNF antigo. |
 
 ---
 
-## Sumário
+## 2. Léxico
 
-1. [Notação utilizada](#1-notação-utilizada)
-2. [Tokens (Análise Léxica)](#2-tokens-análise-léxica)
-3. [Programa](#3-programa)
-4. [Declarações](#4-declarações)
-5. [Comandos](#5-comandos)
-6. [Blocos Sequencial e Paralelo](#6-blocos-sequencial-e-paralelo)
-7. [Estruturas de Controle](#7-estruturas-de-controle)
-8. [Orientação a Objetos](#8-orientação-a-objetos)
-9. [Funções](#9-funções)
-10. [Expressões](#10-expressões)
-11. [Comunicação por Canais](#11-comunicação-por-canais)
-12. [Coleções](#12-coleções)
-13. [Entrada e Saída](#13-entrada-e-saída)
-14. [Tipos e Literais](#14-tipos-e-literais)
-15. [Biblioteca Nativa](#15-biblioteca-nativa)
-16. [Comentários](#16-comentários)
-17. [Gramática Consolidada (BNF Completa)](#17-gramática-consolidada-bnf-completa)
+**Tokens de estrutura:** `NEWLINE`, `INDENT`, `DEDENT`, `EOF`.
+Indentação com 4 espaços por nível; tabulação é erro léxico (evita indentação ambígua).
+
+**Palavras reservadas**
+
+```
+SEQ  PAR  fork  join  em  core  host  c_channel
+class  extends  new  self  def  return
+if  elif  else  while  for  in  break  continue
+and  or  not  true  false
+bool  int  float  string  list  void
+```
+
+**Literais e identificadores**
+
+```ebnf
+INT     = digito { digito } ;
+FLOAT   = digito { digito } "." digito { digito } ;
+STRING  = '"' { caractere | "\n" | "\t" | '\"' | "\\" } '"' ;
+IDENT   = ( letra | "_" ) { letra | digito | "_" } ;
+```
+
+**Operadores:** `+ - * / %`  `== != < > <= >=`  `= += -= *= /=`  `->`
+**Delimitadores:** `( ) [ ] . , :`
+**Comentário:** `#` até o fim da linha (descartado pelo léxico).
 
 ---
 
-## 1. Notação utilizada
+## 3. Gramática EBNF completa
 
-| Símbolo | Significado |
-|---------|-------------|
-| `::=` | Definição de produção |
-| `\|` | Alternativa (ou) |
-| `{ x }` | Zero ou mais repetições de `x` |
-| `[ x ]` | Opcional (zero ou uma ocorrência de `x`) |
-| `( x )` | Agrupamento |
-| `"token"` | Terminal literal (palavra reservada ou símbolo) |
-| `<não-terminal>` | Símbolo não-terminal |
+Notação: `{ x }` zero ou mais, `[ x ]` opcional, `( a | b )` agrupamento, `"t"` terminal, MAIÚSCULAS = token.
 
----
+```ebnf
+(* ── Programa ── *)
+programa       = { decl_canal | decl_funcao | decl_classe } bloco_raiz EOF ;
+bloco_raiz     = bloco_seq | bloco_par ;
 
-## 2. Tokens (Análise Léxica)
+(* ── Canais ── *)
+decl_canal     = "c_channel" IDENT IDENT IDENT NEWLINE ;
+                 (* c_channel <nome> <comp1> <comp2> *)
 
-O analisador léxico (`components/lexico/c_lexico.py`) produz os seguintes tokens a partir do código-fonte.
-Comentários iniciados por `#` são descartados pelo lexer antes da geração de tokens.
+(* ── Funções ── *)
+decl_funcao    = "def" IDENT "(" [ params ] ")" [ "->" tipo_retorno ] ":" suite ;
+params         = param { "," param } ;
+param          = IDENT [ ":" tipo ] [ "=" literal ] ;
+tipo           = "bool" | "int" | "float" | "string" | "list" | IDENT ;
+tipo_retorno   = tipo | "void" ;
 
-### 2.1 Palavras Reservadas
+(* ── Classes ── *)
+decl_classe    = "class" IDENT [ "extends" IDENT ] ":"
+                 NEWLINE INDENT membro { membro } DEDENT ;
+membro         = decl_atributo | decl_metodo ;
+decl_atributo  = IDENT [ ":" tipo ] "=" expr NEWLINE ;
+decl_metodo    = decl_funcao ;       (* o método "init" é o construtor *)
 
-```
-class  extends  new  func  var
-if  else  while  do  for  in
-break  continue  return
-seq  par  this
-c_channel  send  receive  input  print  matrix
-true  false
-number  int  string  bool  void  list  dict
-```
+(* ── Blocos e concorrência ── *)
+suite          = NEWLINE INDENT stmt { stmt } DEDENT ;
+bloco_seq      = "SEQ" suite ;
+bloco_par      = "PAR" suite ;
+fork_stmt      = "fork" IDENT [ "em" alocacao ] ":" suite ;
+alocacao       = "core" "(" expr ")"
+               | "host" "(" ( STRING | IDENT ) ")" ;
+join_stmt      = "join" IDENT { "," IDENT } NEWLINE ;
 
-### 2.2 Literais
+(* ── Comandos ── *)
+stmt           = bloco_seq | bloco_par | fork_stmt | join_stmt
+               | if_stmt | while_stmt | for_stmt
+               | return_stmt | break_stmt | continue_stmt
+               | simples_stmt ;
 
-```bnf
-<NUMBER>         ::= <digito> { <digito> } [ "." <digito> { <digito> } ]
-<STRING_LITERAL> ::= '"' { <caractere> } '"'
-<BOOL_LITERAL>   ::= "true" | "false"
-<IDENTIFIER>     ::= ( <letra> | "_" ) { <letra> | <digito> | "_" }
-```
+if_stmt        = "if" expr ":" suite
+                 { "elif" expr ":" suite }
+                 [ "else" ":" suite ] ;
+while_stmt     = "while" expr ":" suite ;
+for_stmt       = "for" IDENT "in" expr ":" suite ;
+return_stmt    = "return" [ expr ] NEWLINE ;
+break_stmt     = "break" NEWLINE ;
+continue_stmt  = "continue" NEWLINE ;
 
-### 2.3 Operadores
+simples_stmt   = expr [ ":" tipo "=" expr | op_atrib expr ] NEWLINE ;
+op_atrib       = "=" | "+=" | "-=" | "*=" | "/=" ;
+                 (* ver §4: o parser fatora o prefixo comum *)
 
-| Categoria | Tokens |
-|-----------|--------|
-| Aritméticos | `+`  `-`  `*`  `/`  `%` |
-| Relacionais | `==`  `!=`  `<`  `>`  `<=`  `>=` |
-| Lógicos | `&&`  `\|\|`  `!` |
-| Atribuição | `=` |
+(* ── Expressões (menor → maior precedência) ── *)
+expr           = expr_or ;
+expr_or        = expr_and  { "or"  expr_and } ;
+expr_and       = expr_not  { "and" expr_not } ;
+expr_not       = "not" expr_not | expr_comp ;
+expr_comp      = expr_arit [ op_rel expr_arit ] ;   (* sem encadeamento, decisão 16 *)
+op_rel         = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
+expr_arit      = expr_termo { ( "+" | "-" ) expr_termo } ;
+expr_termo     = expr_unario { ( "*" | "/" | "%" ) expr_unario } ;
+expr_unario    = "-" expr_unario | expr_posfixo ;
+expr_posfixo   = primario { "." IDENT [ "(" [ args ] ")" ] | "[" expr "]" } ;
 
-### 2.4 Delimitadores
-
-```
-(  )  {  }  [  ]  .  ;  ,
-```
-
-### 2.5 Tipos declaráveis
-
-```bnf
-<tipo> ::= "number" | "int" | "string" | "bool" | "void" | "list" | "dict"
-```
-
----
-
-## 3. Programa
-
-O programa MiniPar é uma sequência de zero ou mais declarações e comandos no nível global.
-
-```bnf
-<programa> ::= { <declaracao_global> | <comando> }
-
-<declaracao_global> ::= <declaracao_classe>
-                      | <declaracao_funcao>
-                      | <declaracao_variavel>
-```
-
----
-
-## 4. Declarações
-
-### 4.1 Declaração de Variável
-
-```bnf
-<declaracao_variavel> ::= "var" <IDENTIFIER> [ "=" <expressao> ] ";"
-                        | <tipo> <IDENTIFIER> [ "=" <expressao> ] ";"
+primario       = INT | FLOAT | STRING | "true" | "false" | "self"
+               | IDENT [ "(" [ args ] ")" ]
+               | "new" IDENT "(" [ args ] ")"
+               | lista
+               | "(" expr ")" ;
+lista          = "[" [ args ] "]" ;
+args           = expr { "," expr } ;
+literal        = [ "-" ] ( INT | FLOAT ) | STRING | "true" | "false" ;
 ```
 
-**Exemplos:**
+**Chamada de método, envio e recebimento** são todos `expr_posfixo` seguido de `NEWLINE`:
 
-```minipar
-var x = 42;
-var nome = "MiniPar";
-number total = 0;
-bool ativo = true;
 ```
-
-### 4.2 Declaração de Função
-
-```bnf
-<declaracao_funcao> ::= "func" <IDENTIFIER> "(" [ <lista_parametros> ] ")" <bloco_seq>
-
-<lista_parametros> ::= <parametro> { "," <parametro> }
-
-<parametro> ::= [ <tipo> ] <IDENTIFIER>
-```
-
-**Exemplos:**
-
-```minipar
-func somar(a, b) {
-    return a + b;
-}
-
-func calcular(number x, number y) {
-    return x * y;
-}
-```
-
-### 4.3 Declaração de Classe
-
-```bnf
-<declaracao_classe> ::= "class" <IDENTIFIER> [ "extends" <IDENTIFIER> ] "{"
-                            { <membro_classe> }
-                        "}"
-
-<membro_classe> ::= "var" <declaracao_variavel>
-                  | "func" <declaracao_funcao>
-```
-
-**Exemplos:**
-
-```minipar
-class Animal {
-    var nome = "Animal";
-    func falar() {
-        print("...");
-    }
-}
-
-class Cachorro extends Animal {
-    func falar() {
-        print("Au!");
-    }
-}
+neuronio.treinar()                       # chamada de método
+calculadora.send(op, v1, v2)             # envio pelo canal
+calculadora.receive(op, v1, v2)          # recepção: os argumentos são variáveis preenchidas
+x = calculadora.receive()                # forma alternativa, como expressão
 ```
 
 ---
 
-## 5. Comandos
+**Restrições conscientes** (aceitas pela gramática ou rejeitadas de propósito):
 
-```bnf
-<comando> ::= <declaracao_variavel>
-            | <atribuicao>
-            | <bloco_seq>
-            | <bloco_par>
-            | <comando_if>
-            | <comando_while>
-            | <comando_do_while>
-            | <comando_for>
-            | <comando_print>
-            | <comando_send>
-            | <comando_return>
-            | <comando_break>
-            | <comando_continue>
-            | <chamada_funcao> ";"
-            | <chamada_metodo> ";"
-```
-
-### 5.1 Atribuição
-
-A atribuição suporta identificadores simples, propriedades de objetos e indexação de coleções:
-
-```bnf
-<atribuicao> ::= <alvo_atribuicao> "=" <expressao> ";"
-
-<alvo_atribuicao> ::= <IDENTIFIER>
-                    | <expressao_posfixo> "." <IDENTIFIER>
-                    | <expressao_posfixo> "[" <expressao> "]"
-```
-
-**Exemplos:**
-
-```minipar
-x = 10;
-objeto.campo = 42;
-lista[0] = "primeiro";
-```
-
-### 5.2 Comando Print
-
-```bnf
-<comando_print> ::= "print" "(" [ <expressao> { "," <expressao> } ] ")" ";"
-```
-
-**Exemplos:**
-
-```minipar
-print("Olá, mundo!");
-print("Valor:", x, "e", y);
-```
-
-### 5.3 Comando Return
-
-```bnf
-<comando_return> ::= "return" [ <expressao> ] ";"
-```
-
-### 5.4 Comandos Break e Continue
-
-```bnf
-<comando_break>    ::= "break" ";"
-<comando_continue> ::= "continue" ";"
-```
-
-> `break` e `continue` são válidos somente dentro de laços (`while`, `do-while`, `for`).  
-> O analisador semântico reporta erro se forem usados fora de laço.
+- `suite` e `decl_classe` exigem pelo menos um elemento (decisão 18).
+- `decl_canal` só no topo (decisão 15).
+- `a < b < c` é erro sintático (decisão 16).
+- Parâmetros e variáveis não aceitam `void` (decisão 17).
+- A semântica de "argumentos preenchidos" em `receive(a, b, c)` é regra do semântico, não da gramática (§6).
 
 ---
 
-## 6. Blocos Sequencial e Paralelo
+## 4. Verificação de conflitos (LL(1))
 
-### 6.1 Bloco Sequencial (SEQ)
+A gramática é LL(1) com **uma** exceção (fatoração à esquerda em `simples_stmt`). Pontos de decisão verificados:
 
-Executa os comandos internos em ordem, da mesma forma que um bloco tradicional.
-
-```bnf
-<bloco_seq> ::= "seq" "{" { <comando> } "}"
-              | "{" { <comando> } "}"
-```
-
-O `seq` é opcional: blocos com chaves `{ }` são tratados como sequenciais por padrão.
-
-### 6.2 Bloco Paralelo (PAR)
-
-Cada comando interno é executado como uma `std::thread` independente em C++.  
-As threads são sincronizadas por `join()` ao final do bloco.
-
-```bnf
-<bloco_par> ::= "par" "{" { <comando> } "}"
-```
-
-**Exemplo:**
-
-```minipar
-par {
-    seq { print("Thread A"); }
-    seq { print("Thread B"); }
-    seq { print("Thread C"); }
-}
-```
-
----
-
-## 7. Estruturas de Controle
-
-### 7.1 If / Else
-
-```bnf
-<comando_if> ::= "if" "(" <expressao> ")" <comando>
-                 [ "else" <comando> ]
-```
-
-**Exemplos:**
-
-```minipar
-if (x > 0) {
-    print("positivo");
-}
-
-if (x > 0) {
-    print("positivo");
-} else {
-    print("negativo ou zero");
-}
-
-# Encadeamento if-else-if
-if (x > 0) {
-    print("positivo");
-} else if (x < 0) {
-    print("negativo");
-} else {
-    print("zero");
-}
-```
-
-### 7.2 While
-
-```bnf
-<comando_while> ::= "while" "(" <expressao> ")" <comando>
-```
-
-**Exemplo:**
-
-```minipar
-while (i < 10) {
-    i = i + 1;
-}
-```
-
-### 7.3 Do-While
-
-```bnf
-<comando_do_while> ::= "do" <comando> "while" "(" <expressao> ")" [ ";" ]
-```
-
-**Exemplo:**
-
-```minipar
-do {
-    tentativas = tentativas + 1;
-} while (tentativas < 5);
-```
-
-### 7.4 For
-
-O `for` suporta tanto o estilo clássico (inicializador; condição; incremento) quanto o estilo iterador (`for var x in colecao`):
-
-```bnf
-<comando_for> ::= "for" "(" <for_classico> | <for_iterador> ")" <comando>
-
-<for_classico> ::= [ <inicializador_for> ] ";" [ <expressao> ] ";" [ <incremento_for> ]
-
-<inicializador_for> ::= "var" <IDENTIFIER> [ "=" <expressao> ]
-                      | <tipo> <IDENTIFIER> [ "=" <expressao> ]
-                      | <alvo_atribuicao> "=" <expressao>
-                      | <expressao>
-
-<incremento_for>    ::= <alvo_atribuicao> "=" <expressao>
-                      | <expressao>
-
-<for_iterador>      ::= "var" <IDENTIFIER> "in" <expressao>
-```
-
-**Exemplos:**
-
-```minipar
-# For clássico
-for (var i = 0; i < 10; i = i + 1) {
-    print(i);
-}
-
-# For iterador
-for (var item in lista) {
-    print(item);
-}
-
-# For com range()
-for (var i in range(5)) {
-    print(i);
-}
-```
-
----
-
-## 8. Orientação a Objetos
-
-### 8.1 Instanciação com new
-
-```bnf
-<expressao_new> ::= "new" <IDENTIFIER> "(" [ <lista_argumentos> ] ")"
-```
-
-**Exemplo:**
-
-```minipar
-var obj = new MinhaClasse();
-var rede = new RedeNeural(0.5);
-```
-
-### 8.2 Acesso a Propriedades
-
-```bnf
-<acesso_propriedade> ::= <expressao_posfixo> "." <IDENTIFIER>
-```
-
-**Exemplo:**
-
-```minipar
-print(neuronio.peso);
-```
-
-### 8.3 Chamada de Método
-
-```bnf
-<chamada_metodo> ::= <expressao_posfixo> "." <IDENTIFIER> "(" [ <lista_argumentos> ] ")"
-```
-
-**Exemplo:**
-
-```minipar
-neuronio.treinar();
-algoritmo.ordenar();
-rede.feedforward(x1, x2);
-```
-
-### 8.4 Atribuição de Propriedade
-
-```bnf
-<atrib_propriedade> ::= <expressao_posfixo> "." <IDENTIFIER> "=" <expressao> ";"
-```
-
-**Exemplo:**
-
-```minipar
-this.peso = this.peso + 0.01;
-obj.nome = "novo";
-```
-
-### 8.5 Referência a this
-
-Dentro de métodos de uma classe, `this` refere-se à instância corrente.
-
-```bnf
-<expressao_this> ::= "this"
-```
-
-### 8.6 Herança
-
-```bnf
-<declaracao_classe> ::= "class" <IDENTIFIER> "extends" <IDENTIFIER> "{"
-                            { <membro_classe> }
-                        "}"
-```
-
-**Exemplo:**
-
-```minipar
-class Cachorro extends Animal {
-    func latir() {
-        print("Au!");
-    }
-}
-```
-
----
-
-## 9. Funções
-
-### 9.1 Chamada de Função
-
-```bnf
-<chamada_funcao> ::= <IDENTIFIER> "(" [ <lista_argumentos> ] ")"
-
-<lista_argumentos> ::= <expressao> { "," <expressao> }
-```
-
-### 9.2 Recursão
-
-Funções podem se chamar recursivamente sem nenhuma sintaxe especial:
-
-```minipar
-func fatorial(n) {
-    if (n <= 1) {
-        return 1;
-    }
-    return n * fatorial(n - 1);
-}
-```
-
----
-
-## 10. Expressões
-
-As expressões seguem a hierarquia de precedência implementada no parser (da menor para a maior precedência):
-
-```bnf
-<expressao> ::= <expressao_ou>
-
-<expressao_ou>  ::= <expressao_e> { "||" <expressao_e> }
-
-<expressao_e>   ::= <expressao_comp> { "&&" <expressao_comp> }
-
-<expressao_comp> ::= <expressao_termo>
-                     { ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) <expressao_termo> }
-
-<expressao_termo> ::= <expressao_fator> { ( "+" | "-" ) <expressao_fator> }
-
-<expressao_fator> ::= <expressao_unaria> { ( "*" | "/" | "%" ) <expressao_unaria> }
-
-<expressao_unaria> ::= ( "-" | "+" | "!" ) <expressao_unaria>
-                     | <expressao_posfixo>
-
-<expressao_posfixo> ::= <expressao_primaria>
-                        { "." <IDENTIFIER> [ "(" [ <lista_argumentos> ] ")" ]
-                        | "[" <expressao> "]"
-                        }
-
-<expressao_primaria> ::= <NUMBER>
-                       | <STRING_LITERAL>
-                       | <BOOL_LITERAL>
-                       | <IDENTIFIER> [ "(" [ <lista_argumentos> ] ")" ]
-                       | "this"
-                       | <expressao_new>
-                       | <expressao_c_channel>
-                       | <expressao_receive>
-                       | <expressao_input>
-                       | <expressao_lista>
-                       | <expressao_matrix>
-                       | "(" <expressao> ")"
-```
-
-### Tabela de Precedência (maior nível = avaliado primeiro)
-
-| Nível | Operadores | Associatividade |
+| Ponto | Lookahead | Como se resolve |
 |-------|-----------|-----------------|
-| 7 (mais alta) | `()` `[]` `.` (posfixo) | esquerda |
-| 6 | `!` `-` (unário) `+` (unário) | direita |
-| 5 | `*` `/` `%` | esquerda |
-| 4 | `+` `-` | esquerda |
-| 3 | `==` `!=` `<` `>` `<=` `>=` | esquerda |
-| 2 | `&&` | esquerda |
-| 1 (mais baixa) | `\|\|` | esquerda |
+| `programa`: declaração ou bloco raiz | `c_channel` / `def` / `class` vs `SEQ` / `PAR` | FIRST disjuntos |
+| `membro` | `IDENT` (atributo) vs `def` (método) | FIRST disjuntos |
+| `stmt` | palavra reservada vs `IDENT`/`self`/`new`/`(`/literal | FIRST dos comandos são palavras reservadas; o resto cai em `simples_stmt` |
+| `if`: `elif` / `else` | `elif`, `else` | Sem *dangling else*: a indentação fecha o bloco (`DEDENT` precede `elif`/`else`) |
+| `fork`: alocação opcional | `em` vs `:` | FIRST disjuntos |
+| `alocacao` | `core` vs `host` | FIRST disjuntos |
+| `decl_funcao`: retorno opcional | `->` vs `:` | FIRST disjuntos |
+| `expr_comp`: operador opcional | `op_rel` | FIRST(op_rel) ∩ FOLLOW(expr_comp) = ∅ |
+| `param` | `:` (tipo), `=` (padrão), `,`/`)` | FIRST disjuntos |
+| `primario` com `IDENT` | `(` ou não | `[ "(" ... ")" ]` decidido por 1 token |
+| Laços `{ ... }` em `suite` | `DEDENT` encerra | `DEDENT` ∉ FIRST(stmt) |
+| `expr_*` | operador do nível | Recursão à esquerda eliminada com `{ }`; associatividade à esquerda no construtor da AST |
+
+**Exceção 1 — `simples_stmt`.** Uma instrução pode começar com `expr` (chamada) ou com um alvo de atribuição (`x`, `self.peso`, `a[i]`), que também são `expr`. O parser lê a `expr` e só depois olha o próximo token (`=`, `+=`, `:` ou `NEWLINE`). A validação fica no semântico:
+
+- sem sufixo → a `expr` deve ser chamada de função ou de método;
+- com `op_atrib` → a `expr` deve ser identificador, acesso `.campo` ou índice `[ ]`;
+- com `":" tipo "="` → a `expr` deve ser um identificador simples.
+
+Escolhi isso em vez de duas produções por não precisar de lookahead ilimitado nem de backtracking.
+
+**Exceção 2 — `INDENT`/`DEDENT`.** Não são caracteres da gramática: o léxico os produz comparando a indentação com uma pilha. Vários `DEDENT` seguidos fecham vários blocos de uma vez.
 
 ---
 
-## 11. Comunicação por Canais
+## 5. Cobertura dos programas de teste
 
-A comunicação entre processos/computadores é feita via canais TCP implementados pela classe `MiniParChannel` no C++ gerado.
+> O enunciado tem 10 programas (Testes 1–10). Se os rótulos T32–T39 da issue forem a numeração do board, basta renomear a coluna.
 
-### 11.1 Criação de Canal
+### 5.1 Reescritas necessárias (o que não existe em MiniPar)
 
-```bnf
-<expressao_c_channel> ::= "c_channel" "(" <expressao> "," <expressao> ")"
-```
+| Python | MiniPar | Por quê |
+|--------|---------|---------|
+| `return 1 if soma >= 0 else 0` | `if soma >= 0:` / `return 1` / `return 0` | sem ternário (decisão 3) |
+| `f"Peso: {self.peso:.4f}"` | `"Peso: " + format_float(self.peso, 4)` | sem f-string |
+| `[x for x in array[1:] if x <= pivot]` | laço `for` + `menores.append(x)` | sem comprehension |
+| `a, b = stack.pop()` (tuplas) | duas listas de pilha, ou empilhar `inicio` e `fim` em sequência | sem tuplas |
+| `arr[i], arr[j] = arr[j], arr[i]` | `tmp = arr[i]` / `arr[i] = arr[j]` / `arr[j] = tmp` | sem atribuição múltipla |
+| `zip(entradas, saidas)` | `for i in range(len(entradas)):` | sem `zip` |
+| `float('inf')` | `inf()` | builtin |
+| `try/except ValueError` | `if is_number(token):` | sem exceções |
+| `x & 0x7FFFFFFF` (LCG, Testes 8–10) | `x % 2147483648` | equivalente para inteiros não negativos; evita operadores bit a bit |
+| variável global `_estado_random` | atributo de uma classe `Gerador` | sem `global`; vira atributo (decisão 8) |
+| `__import__("time").perf_counter()` | `clock()` | builtin |
 
-O primeiro argumento é o endereço IP (string) e o segundo é a porta (número).
+### 5.2 Builtins (não são sintaxe, são nomes pré-definidos no semântico)
 
-**Exemplo:**
+`print`, `input`, `len`, `range`, `str`, `int`, `float`, `exp`, `random`, `inf`, `clock`, `format_float(x, casas)`, `is_number(s)`.
+Métodos: lista → `append`, `pop`; string → `split`, `strip`; `c_channel` → `send`, `receive`.
 
-```minipar
-var canal = c_channel("127.0.0.1", 5000);
-var canal_remoto = c_channel("192.168.1.10", 8080);
-```
+### 5.3 Construção usada em cada teste → produção
 
-### 11.2 Envio de Mensagem (Send)
+| Teste | Construção | Produção |
+|-------|-----------|----------|
+| **T1** Calculadora cliente-servidor | `c_channel calculadora computador_1 computador_2` | `decl_canal` |
+| | `SEQ` + instruções indentadas | `bloco_raiz`, `bloco_seq`, `suite` |
+| | `op = input()` | `simples_stmt` (`op_atrib`), `primario` (`IDENT "(" ")"`) |
+| | `calculadora.send(op, v1, v2)` / `.receive(...)` | `simples_stmt` → `expr_posfixo` (`"." IDENT "(" args ")"`) |
+| | `if op == "+": … elif …` | `if_stmt`, `expr_comp`, `op_rel` |
+| **T2** Fatorial ∥ Fibonacci | `PAR` com dois `SEQ` filhos | `bloco_par`, `bloco_seq` |
+| | `while i <= n:` | `while_stmt` |
+| | `fat *= i` | `op_atrib` (`*=`) |
+| **T3** Neurônio | `class Neuronio:` com atributos e métodos | `decl_classe`, `decl_atributo`, `decl_metodo` |
+| | `def init(input_val, output_desejado, peso_inicial=0.5)` | `param` com `literal` padrão |
+| | `n = new Neuronio(1, 0)` | `primario` (`"new" IDENT "(" args ")"`) |
+| | `self.peso += taxa * x * erro` | `expr_posfixo` com `"self"`, `op_atrib` |
+| | `while self.erro != 0:` | `while_stmt`, `op_rel` (`!=`) |
+| | `n.treinar()` | chamada de método |
+| **T4** Rede XOR | funções `sigmoid`, `sigmoid_derivada` | `decl_funcao`, `-> float` |
+| | `exp(-x)`, `1 / (1 + exp(-x))` | `expr_unario`, `expr_termo`, `primario` entre `( )` |
+| | `self.pesos[i] += …` | `expr_posfixo` (`"[" expr "]"`), `op_atrib` |
+| | listas `[[0,0],[0,1],…]` | `lista` aninhada |
+| | `for i in range(len(x)):` | `for_stmt` |
+| | `random()` | chamada de função builtin |
+| **T5** Recomendação | 4 classes com herança de dados e listas de objetos | `decl_classe`, `lista`, `new` |
+| | `relu`, `sigmoid` como métodos | `decl_metodo` |
+| | listas em várias linhas | quebra de linha ignorada (decisão 11) |
+| | `if saida[i] > 0.5 and not comprou:` (o teste `in` vira laço de busca que preenche `comprou`) | `expr_and`, `expr_not` |
+| | `print(produto)` dentro de `for` | `for_stmt`, chamada de função |
+| **T6** Quicksort recursivo | método recursivo `_quicksort` | `decl_metodo`, `return_stmt`, chamada via `self.` |
+| | `entrada = input()`, `entrada.split()`, `is_number` | `expr_posfixo`, builtins |
+| | `array[1:]` → laço com índice | `for_stmt`, `[ expr ]` |
+| | concatenação de listas `a + [p] + b` → laço com `append` | `expr_arit`, método `append` |
+| **T7** Quicksort iterativo | `def quicksort_iterativo(arr):` | `decl_funcao` |
+| | `while len(stack) > 0:` | `while_stmt` |
+| | `continue` | `continue_stmt` |
+| | `arr[i] = arr[j]` | `simples_stmt`, `expr_posfixo` |
+| | `print("Array ordenado:", arr)` | chamada com vários `args` |
+| **T8** Avaliação (4 núcleos) | `fork prof em core(1):` … `fork mon3 em core(4):` | `fork_stmt`, `alocacao` (`core`) |
+| | `join prof, mon1, mon2, mon3` | `join_stmt` |
+| | classe `Gerador` (LCG) | `decl_classe`, `%` em `expr_termo` |
+| | `simular_atraso(segundos)` com `int(...)` e `while` | `decl_funcao`, builtins |
+| **T9** + Mandelbrot (5 núcleos) | 5º `fork … em core(5)` | `fork_stmt` |
+| | laços aninhados, `while zx*zx + zy*zy <= 4.0 and it < 100:` | `while_stmt`, `expr_and`, `FLOAT` |
+| | `linha = linha + caracteres[idx]` | `expr_arit`, índice em string |
+| **T10** + Sierpinski (6 núcleos) | 6º `fork … em core(6)` | `fork_stmt` |
+| | recursão `desenhar(x, y, lado, grau)` | `decl_funcao`, chamada recursiva |
+| | tapete em matriz ASCII (substitui `turtle`; ver §6) | `lista` aninhada, índice duplo `m[i][j] = "#"` |
+| **Testes adicionais** (repo) | `fork t em host("computador_2"):` | `alocacao` (`host`) |
+| | `PAR` com `send`/`receive` em 3 canais | `bloco_par`, `decl_canal` ×3 |
 
-```bnf
-<comando_send> ::= "send" "(" <expressao> "," <expressao> ")" ";"
-```
+### 5.4 Cobertura das Observações do enunciado
 
-O primeiro argumento é o canal e o segundo é a mensagem a enviar.
-
-**Exemplo:**
-
-```minipar
-send(canal, "Hello Server");
-send(canal, resultado);
-```
-
-### 11.3 Recebimento de Mensagem (Receive)
-
-```bnf
-<expressao_receive> ::= "receive" "(" <expressao> ")"
-```
-
-**Exemplo:**
-
-```minipar
-var mensagem = receive(canal);
-var dado = receive(c_channel("127.0.0.1", 5000));
-```
-
----
-
-## 12. Coleções
-
-### 12.1 Lista (Array)
-
-```bnf
-<expressao_lista> ::= "[" [ <expressao> { "," <expressao> } ] "]"
-```
-
-**Exemplos:**
-
-```minipar
-var vazio = [];
-var numeros = [1, 2, 3, 4, 5];
-var misto = [0, "texto", true];
-```
-
-### 12.2 Indexação
-
-```bnf
-<expressao_indice> ::= <expressao_posfixo> "[" <expressao> "]"
-```
-
-**Exemplo:**
-
-```minipar
-var primeiro = lista[0];
-var ultimo = lista[len(lista) - 1];
-```
-
-### 12.3 Atribuição por Índice
-
-```bnf
-<atrib_indice> ::= <expressao_posfixo> "[" <expressao> "]" "=" <expressao> ";"
-```
-
-**Exemplo:**
-
-```minipar
-lista[0] = 99;
-matriz[i][j] = "#";
-```
-
-### 12.4 Matriz (Matrix)
-
-Cria uma matriz bidimensional de `linhas × colunas` inicializada com um valor padrão.
-
-```bnf
-<expressao_matrix> ::= "matrix" "(" <expressao> "," <expressao> "," <expressao> ")"
-```
-
-**Exemplo:**
-
-```minipar
-var tela = matrix(9, 9, " ");       # matriz 9×9 de espaços
-var zeros = matrix(3, 3, 0);        # matriz 3×3 de zeros
-```
+| Observação | Onde |
+|-----------|------|
+| 1 `programa_minipar` | `programa` |
+| 2 Precedência | §3 `expr_*` e decisão 4 |
+| 3 Instanciação, método, recursão | `new`, `expr_posfixo`, chamada de função/método recursiva |
+| 4 Gramática cobre todos os testes | tabela 5.3 |
+| 5 Tratamento de erros | `NEWLINE`/`INDENT` inconsistentes → erro léxico; produção esperada ausente → erro sintático com linha e coluna; regras de `simples_stmt` → erro semântico |
 
 ---
 
-## 13. Entrada e Saída
+## 6. Decisões em aberto
 
-### 13.1 Saída (Print)
-
-```bnf
-<comando_print> ::= "print" "(" [ <expressao> { "," <expressao> } ] ")" ";"
-```
-
-Múltiplos argumentos são impressos separados por espaço seguidos de `\n`.
-
-### 13.2 Entrada (Input)
-
-```bnf
-<expressao_input> ::= "input" "(" [ <expressao> ] ")"
-```
-
-Lê uma linha da entrada padrão (stdin). O argumento opcional é exibido como prompt antes da leitura.
-
-**Exemplos:**
-
-```minipar
-var nome = input("Seu nome: ");
-var valor = input();
-var numero = to_number(input("Digite um número: "));
-```
+| Item | Proposta | Responsável |
+|------|----------|-------------|
+| Sintaxe por indentação em vez das chaves do 2026.1 | O enunciado exige a BNF do relatório 2026.1 "revisada e complementada" e permite sintaxe estilo Python. Confirmar que a troca de `{ }`/`;` por indentação é aceita como "revisão". | Professor (Arturo) |
+| Gráficos no Teste 10 (`turtle`) | Trocar pelo tapete em matriz ASCII, como já feito em `teste_adicional2_tapete_sierpinski.mp`. Evita criar uma API gráfica na linguagem. | Equipe → confirmar com professor |
+| Mapeamento `computador_1`/`computador_2` → IP:porta | Arquivo de configuração `hosts.cfg` lido pelo runtime; a gramática só usa os nomes. | Equipe (runtime) |
+| Semântica de `receive(a, b, c)` | Argumentos são variáveis preenchidas pela mensagem recebida (como no enunciado); a forma `x = canal.receive()` também é aceita. | Equipe (semântico) |
+| `sys.stdin.readline()` literal | Só se o professor exigir; vira builtin sem mudar a gramática. | Professor |
+| Arquivo antigo `docs/gramatica.md` (2026.1) | Renomear para `docs/gramatica-2026.1.md` antes de adicionar este, preservando o histórico. | Equipe |
 
 ---
 
-## 14. Tipos e Literais
-
-### 14.1 Número
-
-```bnf
-<literal_numero> ::= <digito> { <digito> } [ "." { <digito> } ]
-```
-
-Representa inteiros e ponto flutuante. Internamente ambos são tratados como `double` no C++ gerado.
-
-**Exemplos:** `0`, `42`, `3.14`, `0.5`
-
-### 14.2 String
-
-```bnf
-<literal_string> ::= '"' { <caractere_string> } '"'
-
-<caractere_string> ::= <qualquer_caractere_exceto_aspas_e_barra>
-                     | "\\" "n"    # newline
-                     | "\\" "t"    # tab
-                     | "\\" '"'    # aspas duplas
-                     | "\\" "\\"   # barra invertida
-```
-
-### 14.3 Booleano
-
-```bnf
-<literal_bool> ::= "true" | "false"
-```
-
-### 14.4 Identificador
-
-```bnf
-<IDENTIFIER> ::= ( <letra> | "_" ) { <letra> | <digito> | "_" }
-
-<letra>  ::= "A" | ... | "Z" | "a" | ... | "z"
-<digito> ::= "0" | ... | "9"
-```
-
----
-
-## 15. Biblioteca Nativa
-
-As seguintes funções são reconhecidas pelo analisador semântico e traduzidas diretamente pelo gerador de código C++:
-
-| Função MiniPar | Assinatura | Descrição |
-|---------------|------------|-----------|
-| `print(...)` | `print(expr, ...)` | Imprime na saída padrão |
-| `input([prompt])` | `input()` / `input(expr)` | Lê linha do stdin |
-| `exp(x)` | `exp(number)` → `number` | Exponencial natural (eˣ) |
-| `random()` | `random()` → `number` | Número aleatório entre 0 e 1 |
-| `range(n)` / `range(a,b)` | `range(int)` → `list` | Gera sequência inteira |
-| `len(col)` | `len(list\|string)` → `number` | Comprimento de coleção |
-| `to_number(s)` | `to_number(string)` → `number` | Converte string para número |
-| `parse_ints(s)` | `parse_ints(string)` → `list` | Parseia inteiros de string separados por espaço |
-
-### Métodos de Lista (acesso via ponto)
-
-| Método | Descrição |
-|--------|-----------|
-| `.append(v)` / `.push_back(v)` | Adiciona elemento ao final |
-| `.pop()` | Remove e retorna o último elemento |
-| `.size()` | Retorna o tamanho da lista |
-
----
-
-## 16. Comentários
-
-```bnf
-<comentario> ::= "#" { <qualquer_caractere> } <fim_de_linha>
-```
-
-Comentários iniciam com `#` e vão até o final da linha. São descartados pelo lexer.
-
-**Exemplos:**
-
-```minipar
-# Isso é um comentário de linha inteira
-var x = 10; # Comentário ao final da linha
-```
-
----
-
-## 17. Gramática Consolidada (BNF Completa)
-
-A seguir a gramática completa em formato BNF, em ordem de definição:
-
-```bnf
-(* ============================================================ *)
-(*       GRAMÁTICA BNF — LINGUAGEM MINIPAR 2026.1               *)
-(*       Compilador: minipar-improvement                        *)
-(*       Repositório: github.com/luizwhirl/minipar-improvement  *)
-(* ============================================================ *)
-
-
-(* ─── ESTRUTURA GLOBAL ─── *)
-
-<programa> ::= { <declaracao_global> | <comando> }
-
-<declaracao_global> ::= <declaracao_classe>
-                      | <declaracao_funcao>
-                      | <declaracao_variavel>
-
-
-(* ─── DECLARAÇÕES ─── *)
-
-<declaracao_variavel> ::= "var" <IDENTIFIER> [ "=" <expressao> ] ";"
-                        | <tipo> <IDENTIFIER> [ "=" <expressao> ] ";"
-
-<declaracao_funcao>   ::= "func" <IDENTIFIER> "(" [ <lista_parametros> ] ")" <bloco_seq>
-
-<lista_parametros>    ::= <parametro> { "," <parametro> }
-<parametro>           ::= [ <tipo> ] <IDENTIFIER>
-
-<declaracao_classe>   ::= "class" <IDENTIFIER> [ "extends" <IDENTIFIER> ]
-                          "{" { <membro_classe> } "}"
-
-<membro_classe>       ::= "var" <declaracao_variavel>
-                        | "func" <declaracao_funcao>
-
-
-(* ─── COMANDOS ─── *)
-
-<comando> ::= <declaracao_variavel>
-            | <atribuicao>
-            | <bloco_seq>
-            | <bloco_par>
-            | <comando_if>
-            | <comando_while>
-            | <comando_do_while>
-            | <comando_for>
-            | <comando_print>
-            | <comando_send>
-            | <comando_return>
-            | <comando_break>
-            | <comando_continue>
-            | <chamada_funcao> ";"
-            | <chamada_metodo> ";"
-
-<atribuicao>        ::= <alvo_atribuicao> "=" <expressao> ";"
-<alvo_atribuicao>   ::= <IDENTIFIER>
-                      | <expressao_posfixo> "." <IDENTIFIER>
-                      | <expressao_posfixo> "[" <expressao> "]"
-
-<comando_print>     ::= "print" "(" [ <expressao> { "," <expressao> } ] ")" ";"
-<comando_send>      ::= "send"  "(" <expressao> "," <expressao> ")" ";"
-<comando_return>    ::= "return" [ <expressao> ] ";"
-<comando_break>     ::= "break" ";"
-<comando_continue>  ::= "continue" ";"
-
-
-(* ─── BLOCOS ─── *)
-
-<bloco_seq> ::= "seq" "{" { <comando> } "}"
-              | "{" { <comando> } "}"
-
-<bloco_par> ::= "par" "{" { <comando> } "}"
-
-
-(* ─── ESTRUTURAS DE CONTROLE ─── *)
-
-<comando_if>       ::= "if" "(" <expressao> ")" <comando> [ "else" <comando> ]
-
-<comando_while>    ::= "while" "(" <expressao> ")" <comando>
-
-<comando_do_while> ::= "do" <comando> "while" "(" <expressao> ")" [ ";" ]
-
-<comando_for>      ::= "for" "(" <for_cabecalho> ")" <comando>
-
-<for_cabecalho>    ::= <for_classico>
-                     | <for_iterador>
-
-<for_classico>     ::= [ <inicializador_for> ] ";" [ <expressao> ] ";" [ <incremento_for> ]
-
-<inicializador_for> ::= "var"  <IDENTIFIER> [ "=" <expressao> ]
-                      | <tipo> <IDENTIFIER> [ "=" <expressao> ]
-                      | <alvo_atribuicao> "=" <expressao>
-                      | <expressao>
-
-<incremento_for>   ::= <alvo_atribuicao> "=" <expressao>
-                     | <expressao>
-
-<for_iterador>     ::= "var" <IDENTIFIER> "in" <expressao>
-
-
-(* ─── ORIENTAÇÃO A OBJETOS ─── *)
-
-<expressao_new>         ::= "new" <IDENTIFIER> "(" [ <lista_argumentos> ] ")"
-<acesso_propriedade>    ::= <expressao_posfixo> "." <IDENTIFIER>
-<chamada_metodo>        ::= <expressao_posfixo> "." <IDENTIFIER> "(" [ <lista_argumentos> ] ")"
-<atrib_propriedade>     ::= <expressao_posfixo> "." <IDENTIFIER> "=" <expressao> ";"
-<expressao_this>        ::= "this"
-
-
-(* ─── COMUNICAÇÃO POR CANAIS ─── *)
-
-<expressao_c_channel>   ::= "c_channel" "(" <expressao> "," <expressao> ")"
-<expressao_receive>     ::= "receive" "(" <expressao> ")"
-(* send já listado em <comando_send> *)
-
-
-(* ─── COLEÇÕES ─── *)
-
-<expressao_lista>   ::= "[" [ <expressao> { "," <expressao> } ] "]"
-<expressao_indice>  ::= <expressao_posfixo> "[" <expressao> "]"
-<atrib_indice>      ::= <expressao_posfixo> "[" <expressao> "]" "=" <expressao> ";"
-<expressao_matrix>  ::= "matrix" "(" <expressao> "," <expressao> "," <expressao> ")"
-
-
-(* ─── ENTRADA E SAÍDA ─── *)
-
-<expressao_input>   ::= "input" "(" [ <expressao> ] ")"
-(* print já listado em <comando_print> *)
-
-
-(* ─── EXPRESSÕES (hierarquia de precedência) ─── *)
-
-<expressao>          ::= <expressao_ou>
-
-<expressao_ou>       ::= <expressao_e> { "||" <expressao_e> }
-
-<expressao_e>        ::= <expressao_comp> { "&&" <expressao_comp> }
-
-<expressao_comp>     ::= <expressao_termo>
-                         { ( "==" | "!=" | "<" | ">" | "<=" | ">=" )
-                           <expressao_termo> }
-
-<expressao_termo>    ::= <expressao_fator> { ( "+" | "-" ) <expressao_fator> }
-
-<expressao_fator>    ::= <expressao_unaria> { ( "*" | "/" | "%" ) <expressao_unaria> }
-
-<expressao_unaria>   ::= ( "-" | "+" | "!" ) <expressao_unaria>
-                       | <expressao_posfixo>
-
-<expressao_posfixo>  ::= <expressao_primaria>
-                         { "." <IDENTIFIER> [ "(" [ <lista_argumentos> ] ")" ]
-                         | "[" <expressao> "]"
-                         }
-
-<expressao_primaria> ::= <NUMBER>
-                       | <STRING_LITERAL>
-                       | <BOOL_LITERAL>
-                       | <IDENTIFIER> [ "(" [ <lista_argumentos> ] ")" ]
-                       | "this"
-                       | <expressao_new>
-                       | <expressao_c_channel>
-                       | <expressao_receive>
-                       | <expressao_input>
-                       | <expressao_lista>
-                       | <expressao_matrix>
-                       | "(" <expressao> ")"
-
-<lista_argumentos>   ::= <expressao> { "," <expressao> }
-<chamada_funcao>     ::= <IDENTIFIER> "(" [ <lista_argumentos> ] ")"
-
-
-(* ─── TIPOS E LITERAIS ─── *)
-
-<tipo>           ::= "number" | "int" | "string" | "bool" | "void" | "list" | "dict"
-
-<NUMBER>         ::= <digito> { <digito> } [ "." { <digito> } ]
-<STRING_LITERAL> ::= '"' { <caractere_string> } '"'
-<BOOL_LITERAL>   ::= "true" | "false"
-<IDENTIFIER>     ::= ( <letra> | "_" ) { <letra> | <digito> | "_" }
-
-<caractere_string> ::= <qualquer_char_exceto_aspas_e_barra>
-                     | "\n" | "\t" | '\"' | "\\"
-
-<letra>  ::= "A" | ... | "Z" | "a" | ... | "z"
-<digito> ::= "0" | ... | "9"
-
-
-(* ─── COMENTÁRIOS ─── *)
-
-<comentario> ::= "#" { <qualquer_char> } <nova_linha>
-(* Descartados pelo lexer — não aparecem na AST *)
-```
-
----
-
-## Notas de Implementação
-
-### Inferência de Tipos
-
-O analisador semântico (`components/semantico/c_semantico.py`) usa inferência simples de tipos com as seguintes regras:
-
-| Expressão | Tipo inferido |
-|-----------|--------------|
-| Literal numérico | `number` |
-| Literal string | `string` |
-| Literal booleano | `bool` |
-| Lista literal `[...]` | `list` |
-| `matrix(...)` | `matrix` |
-| `c_channel(...)` | `c_channel` |
-| `receive(...)` | `string` |
-| `input(...)` | `string` |
-| `new Classe(...)` | `Classe` |
-| `this` | nome da classe atual |
-| `op` relacional / lógico | `bool` |
-| `"a" + "b"` (concatenação) | `string` |
-| Operação aritmética | `number` |
-| Identificador | tipo declarado na tabela de símbolos |
-| Desconhecido | `unknown` (compatível com qualquer tipo) |
-
-### Regras Semânticas Verificadas
-
-| Regra | Erro reportado |
-|-------|---------------|
-| Redeclaração no mesmo escopo | `Variável 'x' já declarada.` |
-| Uso antes de declaração | `Variável 'x' não declarada.` |
-| Incompatibilidade de tipos | `Tipo incompatível em atribuição de 'x'.` |
-| Função não declarada | `Função 'f' não declarada.` |
-| Aridade errada (função) | `Função 'f' espera N argumento(s), recebeu M.` |
-| Classe não declarada | `Classe 'C' não declarada.` |
-| Superclasse não declarada | `Superclasse 'S' não declarada.` |
-| Método inexistente | `Método 'm' não declarado em 'C'.` |
-| Atributo inexistente | `Atributo 'a' não declarado em 'C'.` |
-| `break`/`continue` fora de laço | `'break' usado fora de laço de repetição.` |
-
-### Geração de Código C++20
-
-| Construto MiniPar | Código C++ gerado |
-|-------------------|------------------|
-| `class C { ... }` | `class C { public: ... };` |
-| `new C(args)` | `std::make_shared<C>(args)` |
-| `obj.metodo(args)` | `obj->metodo(args)` |
-| `obj.campo` | `obj->campo` |
-| `par { a; b; }` | `std::vector<std::thread>` + `emplace_back` + `join` |
-| `c_channel(ip, porta)` | `std::make_shared<MiniParChannel>(ip, porta)` |
-| `send(canal, msg)` | `canal->sendData(__to_string(msg))` |
-| `receive(canal)` | `canal->receiveData()` |
-| `[1, 2, 3]` | `std::vector<double>{1, 2, 3}` |
-| `matrix(l, c, v)` | `__make_matrix(l, c, v)` |
-| `exp(x)` | `std::exp(x)` |
-| `random()` | `random_val()` |
-| `to_number(s)` | `std::stod(s)` |
-| `len(x)` | `x.size()` |
-| `range(n)` | `__minipar_range(n)` |
-| `input(p)` | `input(p)` (helper C++) |
-
----
-
-*Gramática gerada em 15 de junho de 2026 — MiniPar-Improvement v2026.1*
+## 7. Impacto nos componentes (para as próximas issues)
+
+| Componente | Mudança |
+|-----------|---------|
+| Léxico | Pilha de indentação, tokens `NEWLINE`/`INDENT`/`DEDENT`, `FLOAT`, `->`, `+=` etc., novas palavras reservadas (`fork`, `join`, `em`, `core`, `host`, `elif`, `and`, `or`, `not`, `def`, `self`). Remover `var`, `do`, `seq`/`par` minúsculos. |
+| Parser | Um método por produção de §3; `simples_stmt` com o sufixo decidido após `expr`. |
+| AST | Novos nós: `ForkStmt`, `JoinStmt`, `Alocacao`, `ChannelDecl`, `AugAssign` (desugar para `Assignment`). |
+| Semântico | Regras de `simples_stmt`, tabela de builtins, checagem de `join` para tarefas já declaradas por `fork`. |
+| Geradores | `fork … em core(n)` → thread/processo com afinidade; `fork … em host(h)` → processo remoto via `c_channel`. |
