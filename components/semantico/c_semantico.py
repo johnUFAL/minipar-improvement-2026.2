@@ -63,9 +63,9 @@ class SemanticAnalyzer:
         return f" (Funcao: {self._current_function})" if self._current_function else ""
 
     def _define_symbol(
-        self, name: str, type_: str, line: int, params: list[str] | None = None
+        self, name: str, type_: str, line: int, params: tuple[str, ...] | None = None
     ) -> None:
-        if not self._symbol_table.define(Symbol(name, type_, params=params or [])):
+        if not self._symbol_table.define(Symbol(name, type_, params=params or ())):
             print(
                 f"[ERRO SEMANTICO] Linha {line}{self._get_context()}: Variavel '{name}'"
                 " ja declarada.", file=sys.stderr
@@ -154,7 +154,7 @@ class SemanticAnalyzer:
                 )
             elif isinstance(stmt, ClassDecl):
                 attrs = {a.name: a.type for a in stmt.attributes}
-                methods = {m.name: m.params for m in stmt.methods}
+                methods = {m.name: tuple(m.params) for m in stmt.methods}
                 self._classes[stmt.name] = Symbol(
                     stmt.name, "CLASS", attributes=attrs, methods=methods
                 )
