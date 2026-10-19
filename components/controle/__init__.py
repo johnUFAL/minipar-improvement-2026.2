@@ -1,3 +1,3 @@
-from .c_controle import Controle, compile_file
+from .c_controle import CControle, Controle, compile_file
 
-__all__ = ["Controle", "compile_file"]
+__all__ = ["CControle", "Controle", "compile_file"]
