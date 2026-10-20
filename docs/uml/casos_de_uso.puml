@@ -1,0 +1,77 @@
+@startuml casos_de_uso
+' Diagrama de casos de uso - MiniPar 2026.2 (Task 4, Sprint 0)
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor "Programador" as Prog
+actor "Aluno" as Aluno
+actor "Computador remoto\n(servidor/worker)" as Remoto
+
+rectangle "MiniPar Compiler & IDE" {
+  usecase "Compilar programa" as UC_COMP
+  usecase "Ver erros" as UC_ERROS
+  usecase "Escolher nível de\notimização" as UC_OPT
+
+  usecase "Ver tokens" as UC_TOK
+  usecase "Ver AST" as UC_AST
+  usecase "Ver tabela de símbolos" as UC_SYM
+  usecase "Ver TAC" as UC_TAC
+  usecase "Ver código C++" as UC_CPP
+
+  usecase "Executar localmente" as UC_LOCAL
+  usecase "Executar em dois\ncomputadores" as UC_DIST
+}
+
+' --- Associações ---
+Prog --> UC_COMP
+Prog --> UC_LOCAL
+Prog --> UC_DIST
+Prog --> UC_OPT
+Prog --> UC_ERROS
+
+Aluno --> UC_COMP
+Aluno --> UC_TOK
+Aluno --> UC_AST
+Aluno --> UC_SYM
+Aluno --> UC_TAC
+Aluno --> UC_CPP
+Aluno --> UC_ERROS
+
+UC_DIST --> Remoto
+
+' --- include: o caso base SEMPRE precisa do incluído ---
+UC_LOCAL ..> UC_COMP : <<include>>
+UC_DIST  ..> UC_COMP : <<include>>
+
+' --- extend: comportamento opcional/condicional sobre o caso base ---
+UC_ERROS ..> UC_COMP : <<extend>>\n[compilação falhou]
+UC_OPT   ..> UC_COMP : <<extend>>
+UC_TOK   ..> UC_COMP : <<extend>>
+UC_AST   ..> UC_COMP : <<extend>>
+UC_SYM   ..> UC_COMP : <<extend>>
+UC_TAC   ..> UC_COMP : <<extend>>
+UC_CPP   ..> UC_COMP : <<extend>>
+
+note bottom of UC_DIST
+  Hoje: sessão multi-terminal
+  (interfaces/test_orchestrator.py).
+  Alvo: fork ... em host("pc2") + c_channel.
+end note
+
+' ============================================================
+' RASTREABILIDADE: caso de uso -> issue do backlog
+' (preencher os números reais do board)
+' ------------------------------------------------------------
+' Compilar programa            -> #?  Pipeline léxico/sintático/semântico (components/controle)
+' Ver erros                    -> #?  Diagnósticos (erros/diagnosticos.py)
+' Escolher nível de otimização -> #?  Parâmetro -O no driver_gcc.py (hoje fixo em -O3)
+' Ver tokens                   -> #?  Exibir saída do léxico na IDE
+' Ver AST                      -> #?  Serializar/exibir AST na IDE
+' Ver tabela de símbolos       -> #?  Exibir TabelaSimbolos na IDE
+' Ver TAC                      -> #?  Aba TAC (já existe)
+' Ver código C++               -> #?  Aba C++ (já existe)
+' Executar localmente          -> #?  Execução do binário (cli.py / api.py)
+' Executar em dois computadores-> #?  Runtime de canais + fork em host()
+' ============================================================
+@enduml

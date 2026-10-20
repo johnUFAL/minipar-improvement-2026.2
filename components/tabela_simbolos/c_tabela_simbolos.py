@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True)
 class Symbol:
     name: str
     type: str
-    params: list[str] = field(default_factory=list)
+    params: tuple[str, ...] = field(default_factory=tuple)
     attributes: dict[str, str] = field(default_factory=dict)
-    methods: dict[str, list[str]] = field(default_factory=dict)
+    methods: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 class TabelaSimbolos:
