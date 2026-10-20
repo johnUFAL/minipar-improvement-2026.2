@@ -97,9 +97,14 @@ KEYWORDS: dict[str, TokenType] = {
 }
 
 
-@dataclass
+@dataclass(frozen=True)
 class Token:
+    """Unidade léxica imutável: o léxico a produz, o parser só a lê."""
     type: TokenType
     lexeme: str
     line: int
-    col: int
+    column: int
+
+    @property
+    def col(self) -> int:
+        return self.column
