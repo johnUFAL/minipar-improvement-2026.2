@@ -10,12 +10,37 @@ from components.codegen.driver_gcc import DriverGCC
 from components.lexico.c_lexico import Lexer
 from components.lexico.token import TokenType
 from components.semantico.c_semantico import SemanticAnalyzer
+from components.sintatico.ast import ASTNode
 from components.sintatico.c_sintatico import Parser
+from components.sintatico.visitor import ASTVisitor
 from components.tac.c_gerador_tac import TACGenerator
 from components.tac.executor_tac import TACExecutor
 
 
 class ComponentTests(unittest.TestCase):
+    def test_ast_visitor_traverses_tuple_children(self):
+        program = Parser(
+            Lexer("seq { print(42); }").tokenize()
+        ).parse()
+        visited: list[type[ASTNode]] = []
+
+        class RecordingVisitor(ASTVisitor):
+            def generic_visit(self, node: ASTNode) -> None:
+                visited.append(type(node))
+                super().generic_visit(node)
+
+        RecordingVisitor().visit(program)
+
+        self.assertEqual(
+            visited,
+            [
+                type(program),
+                type(program.statements[0]),
+                type(program.statements[0].statements[0]),
+                type(program.statements[0].statements[0].arguments[0]),
+            ],
+        )
+
     def test_lexer_preserves_token_position(self):
         tokens = Lexer("var total = 12;").tokenize()
         self.assertEqual(tokens[0].type, TokenType.VAR)

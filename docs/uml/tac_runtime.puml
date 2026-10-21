@@ -1,0 +1,80 @@
+@startuml tac_runtime
+title MiniPar - TAC e runtime C++
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+left to right direction
+hide empty members
+
+package "Codigo intermediario em Python" {
+  class TACGenerator {
+    +lines : list[str]
+    +generate_text(program : Program) : str
+    +generate(program : Program, output_name : str) : str
+  }
+  class TACExecutor {
+    +TACExecutor(max_steps : int = 100000)
+    +execute(tac : str, inputs : Iterable[str] = ()) : tuple[dict[str, Any], list[str]]
+  }
+  class "Texto TAC\n(.tac)" as TACText <<artefato>>
+}
+
+TACGenerator ..> Program : traduz AST
+TACGenerator ..> TACText : grava
+TACExecutor ..> TACText : interpreta texto
+
+package "Geracao e compilacao C++" {
+  class CppCodeGenerator {
+    +generate(program : Program, output_name : str) : bool
+  }
+  class DriverGCC {
+    +compile(source_path : str | Path) : bool
+  }
+  class "Codigo C++" as CppSource <<artefato>>
+  class "Executavel" as Executable <<artefato>>
+}
+
+CppCodeGenerator ..> Program : traduz AST
+CppCodeGenerator ..> CppSource : grava
+CppCodeGenerator *--> DriverGCC : instancia
+DriverGCC ..> Executable : compila
+
+package "Runtime compilado junto ao executavel (runtime/)" {
+  class MiniParChannel {
+    +ip : std::string
+    +port : int
+    +MiniParChannel(address : std::string, channel_port : int)
+    +sendData(message : std::string) : void
+    +receiveData() : std::string
+  }
+  class "minipar_parallel" as MiniparParallel <<funcao livre>> {
+    +minipar_parallel(tasks : const std::vector<std::function<void()>>&) : void
+  }
+  class "minipar_rt.hpp" as RuntimeHeader <<artefato>>
+  class "canal.cpp" as ChannelSource <<artefato>>
+  class "paralelo.cpp" as ParallelSource <<artefato>>
+}
+
+note right of RuntimeHeader
+  Tambem declara helpers de entrada,
+  conversao, listas, matrizes e range.
+end note
+
+DriverGCC ..> RuntimeHeader : inclui
+DriverGCC ..> ChannelSource : compila e linka
+DriverGCC ..> ParallelSource : compila e linka
+RuntimeHeader ..> MiniParChannel : declara
+RuntimeHeader ..> MiniparParallel : declara
+ChannelSource ..> MiniParChannel : define metodos
+ParallelSource ..> MiniparParallel : define
+Executable ..> MiniParChannel : usa
+Executable ..> MiniparParallel : usa
+
+note bottom of TACText
+  O TAC atual e texto; as classes InstrucaoTAC
+  e suas subclasses estao documentadas em
+  tac_planejado.puml, como modelo futuro.
+end note
+@enduml

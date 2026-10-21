@@ -1,0 +1,54 @@
+@startuml ast_fluxo
+title MiniPar - AST: fluxo de controle e blocos
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+hide empty members
+
+class ASTNode <<dataclass, frozen>> {
+  +line : int = 1
+}
+class BreakStmt <<dataclass, frozen>>
+class ContinueStmt <<dataclass, frozen>>
+class IfStmt <<dataclass, frozen>> {
+  +condition : ASTNode | None
+  +then_branch : ASTNode | None
+  +else_branch : ASTNode | None
+}
+class WhileStmt <<dataclass, frozen>> {
+  +condition : ASTNode | None
+  +body : ASTNode | None
+}
+class DoWhileStmt <<dataclass, frozen>> {
+  +body : ASTNode | None
+  +condition : ASTNode | None
+}
+class ForStmt <<dataclass, frozen>> {
+  +initializer : ASTNode | None
+  +condition : ASTNode | None
+  +increment : ASTNode | None
+  +body : ASTNode | None
+  +iterator_name : str | None
+  +iterable : ASTNode | None
+}
+class SeqBlock <<dataclass, frozen>> {
+  +statements : tuple[ASTNode, ...]
+}
+class ParBlock <<dataclass, frozen>> {
+  +statements : tuple[ASTNode, ...]
+}
+
+ASTNode <|-- BreakStmt
+ASTNode <|-- ContinueStmt
+ASTNode <|-- IfStmt
+ASTNode <|-- WhileStmt
+ASTNode <|-- DoWhileStmt
+ASTNode <|-- ForStmt
+ASTNode <|-- SeqBlock
+ASTNode <|-- ParBlock
+
+SeqBlock *-- "0..*" ASTNode : statements
+ParBlock *-- "0..*" ASTNode : statements
+@enduml
