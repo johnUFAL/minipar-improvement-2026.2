@@ -1,0 +1,259 @@
+@startuml classes
+title MiniPar - Classes dos componentes e contratos
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor White
+  BorderColor #444444
+  ArrowColor #444444
+}
+skinparam class<<contrato>> {
+  BackgroundColor #FFF8DC
+  BorderColor #B8860B
+}
+left to right direction
+hide empty members
+
+package "Dados compartilhados" {
+  enum TokenType {
+    IDENTIFIER
+    NUMBER
+    STRING_LITERAL
+    BOOL_LITERAL
+    CLASS
+    EXTENDS
+    NEW
+    FUNC
+    VAR
+    IF
+    ELSE
+    WHILE
+    DO
+    FOR
+    IN
+    BREAK
+    CONTINUE
+    RETURN
+    SEQ
+    PAR
+    THIS
+    C_CHANNEL
+    SEND
+    RECEIVE
+    INPUT
+    PRINT
+    MATRIX
+    TYPE
+    PLUS
+    MINUS
+    STAR
+    SLASH
+    MOD
+    ASSIGN
+    EQ
+    NEQ
+    NOT
+    AND
+    OR
+    LT
+    GT
+    LTE
+    GTE
+    LPAREN
+    RPAREN
+    LBRACE
+    RBRACE
+    LBRACKET
+    RBRACKET
+    DOT
+    SEMICOLON
+    COMMA
+    END_OF_FILE
+    UNKNOWN
+  }
+
+  class Token <<dataclass, frozen>> {
+    +type : TokenType
+    +lexeme : str
+    +line : int
+    +column : int
+    +col : int
+  }
+
+  class Diagnostic <<dataclass, frozen>> {
+    +phase : str
+    +message : str
+    +line : int | None
+    +column : int | None
+    +__str__() : str
+  }
+
+  class DiagnosticBag {
+    -_diagnostics : list[Diagnostic]
+    +report(diagnostic : Diagnostic) : None
+    +diagnostics : tuple[Diagnostic, ...]
+    +has_errors : bool
+  }
+
+  class Symbol <<dataclass, frozen>> {
+    +name : str
+    +type : str
+    +params : tuple[str, ...]
+    +attributes : dict[str, str]
+    +methods : dict[str, tuple[str, ...]]
+  }
+}
+
+Token --> TokenType : type
+DiagnosticBag "1" o-- "0..*" Diagnostic
+
+package "Componentes concretos" {
+  class Lexer {
+    +Lexer(source_code : str)
+    +tokenize() : list[Token]
+  }
+
+  class Parser {
+    -_tokens : list[Token]
+    -_pos : int
+    +Parser(tokens : list[Token])
+    +parse() : Program
+  }
+
+  class SemanticAnalyzer {
+    -_symbol_table : TabelaSimbolos
+    -_has_errors : bool
+    -_current_function : str | None
+    -_current_class : str | None
+    -_classes : dict[str, Symbol]
+    -_functions : dict[str, Symbol]
+    -_loop_depth : int
+    +analyze(program : Program) : bool
+  }
+
+  class TabelaSimbolos {
+    -_scopes : list[dict[str, Symbol]]
+    +enter_scope() : None
+    +exit_scope() : None
+    +define(symbol : Symbol) : bool
+    +lookup(name : str) : Symbol | None
+  }
+
+  class TACGenerator {
+    +lines : list[str]
+    +generate_text(program : Program) : str
+    +generate(program : Program, output_name : str) : str
+  }
+
+  class TACExecutor {
+    +TACExecutor(max_steps : int = 100000)
+    +execute(tac : str, inputs : Iterable[str] = ()) : tuple[dict[str, Any], list[str]]
+  }
+
+  class "TAC (.tac)" as TACText <<artefato>>
+
+  class CppCodeGenerator {
+    +generate(program : Program, output_name : str) : bool
+  }
+
+  class DriverGCC {
+    +compile(source_path : str | Path) : bool
+  }
+}
+
+Lexer ..> Token : cria
+Parser ..> Token : consome
+Parser ..> Program : produz
+SemanticAnalyzer ..> Program : analisa
+SemanticAnalyzer *-- TabelaSimbolos
+TabelaSimbolos o-- Symbol
+TACGenerator ..> Program : consome
+TACGenerator ..> TACText : grava
+TACExecutor ..> TACText : executa
+CppCodeGenerator ..> Program : consome
+CppCodeGenerator *--> DriverGCC
+
+package "Contratos ABC (components/interfaces.py)" {
+  interface ILexico <<contrato>> {
+    +initialize(source : str) : None
+    +next_token() : Token
+  }
+  interface ISintatico <<contrato>> {
+    +parse(lexer : ILexico, semantic_analyzer : ISemantico) : Program
+  }
+  interface ISemantico <<contrato>> {
+    +verify(node : ASTNode) : None
+    +diagnostics : Sequence[Diagnostic]
+  }
+  interface ITabelaSimbolos <<contrato>> {
+    +enter_scope() : None
+    +exit_scope() : None
+    +define(name : str, symbol : object) : bool
+    +lookup(name : str) : object | None
+  }
+  interface IGeradorTAC <<contrato>> {
+    +generate(program : Program, output_name : str) : str
+  }
+  interface IGeradorCpp <<contrato>> {
+    +generate(program : Program, output_name : str) : bool
+  }
+  interface IControle <<contrato>> {
+    +compile(source : str, output_name : str) : bool
+  }
+}
+
+class CControle {
+  +CControle(lexer : ILexico, parser : ISintatico, semantic_analyzer : ISemantico, tac_generator : IGeradorTAC, cpp_generator : IGeradorCpp)
+  +compile(source : str, output_name : str) : bool
+}
+class CompiladorMiniPar {
+  -_controller : IControle
+  +compile_file(source_path : str | Path, output_name : str) : bool
+  +compile_text(source : str, output_name : str) : bool
+}
+class "compile_file(...)" as CompileFile <<funcao>>
+
+CControle ..|> IControle
+CControle ..> ILexico : injeta
+CControle ..> ISintatico : injeta
+CControle ..> ISemantico : injeta
+CControle ..> IGeradorTAC : injeta
+CControle ..> IGeradorCpp : injeta
+CompiladorMiniPar ..> IControle
+CompileFile ..> Lexer
+CompileFile ..> Parser
+CompileFile ..> SemanticAnalyzer
+CompileFile ..> TACGenerator
+CompileFile ..> CppCodeGenerator
+
+note right of CControle
+  Os contratos definem o pipeline injetável,
+  mas Lexer, Parser, SemanticAnalyzer,
+  TabelaSimbolos e os geradores concretos
+  nao os implementam atualmente.
+  O teste de pipeline os exercita com dublês.
+end note
+
+note bottom of CompileFile
+  Fluxo concreto usado pelo CLI:
+  Lexer(source).tokenize() -> Parser(tokens).parse()
+  -> SemanticAnalyzer().analyze() -> TACGenerator()
+  -> CppCodeGenerator().
+end note
+
+note bottom of DiagnosticBag
+  A implementacao existe, mas o SemanticAnalyzer
+  atual reporta erros em stderr e retorna bool;
+  nao acumula DiagnosticBag.
+end note
+
+note bottom of Token
+  Outros diagramas:
+  AST: ast_expressoes.puml, ast_acessos.puml, ast_dados_io.puml,
+  ast_comandos.puml, ast_fluxo.puml e ast_declaracoes.puml
+  TAC: tac_runtime.puml e tac_planejado.puml
+end note
+@enduml
