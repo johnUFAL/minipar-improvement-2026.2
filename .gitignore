@@ -28,3 +28,4 @@ venv
 .ruff_cache
 *.egg-info
 .venv
+uv.lock
