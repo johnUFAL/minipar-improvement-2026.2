@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import sys
 from typing import cast
+
+from erros.diagnosticos import Diagnostic, DiagnosticBag, Phase
 
 from ..lexico.token import Token, TokenType
 from .ast import (
@@ -44,10 +45,24 @@ from .ast import (
 )
 
 
+class _ParseError(Exception):
+    pass
+
+
 class Parser:
-    def __init__(self, tokens: list[Token]) -> None:
+    def __init__(
+        self, tokens: list[Token], diagnostics: DiagnosticBag | None = None
+    ) -> None:
         self._tokens = tokens
         self._pos = 0
+        self._diagnostics = diagnostics if diagnostics is not None else DiagnosticBag()
+
+    @property
+    def diagnostics(self) -> tuple[Diagnostic, ...]:
+        return self._diagnostics.diagnostics
+
+    def set_diagnostic_collector(self, diagnostics: DiagnosticBag) -> None:
+        self._diagnostics = diagnostics
 
     def _peek(self) -> Token:
         if self._pos >= len(self._tokens):
@@ -70,11 +85,47 @@ class Parser:
         if self._peek().type == token_type:
             return self._advance()
         tok = self._peek()
-        print(
-            f"[ERRO SINTATICO] Linha {tok.line}: {err_msg} (Encontrado: {tok.lexeme!r})",
-            file=sys.stderr
+        self._syntax_error(
+            tok, f"{err_msg} (encontrado {tok.lexeme!r})"
         )
-        sys.exit(1)
+        raise _ParseError
+
+    def _syntax_error(self, token: Token, message: str) -> None:
+        if self._diagnostics is not None:
+            self._diagnostics.error(
+                Phase.SYNTAX,
+                message,
+                token.line,
+                token.column,
+                max(1, len(token.lexeme)),
+            )
+
+    def _synchronize(self) -> None:
+        if self._peek().type in (TokenType.END_OF_FILE, TokenType.RBRACE):
+            return
+        statement_starters = {
+            TokenType.CLASS, TokenType.FUNC, TokenType.RETURN, TokenType.BREAK,
+            TokenType.CONTINUE, TokenType.VAR, TokenType.TYPE, TokenType.SEQ,
+            TokenType.PAR, TokenType.PRINT, TokenType.SEND, TokenType.IF,
+            TokenType.WHILE, TokenType.DO, TokenType.FOR,
+        }
+        if self._peek().type in statement_starters:
+            return
+        while self._peek().type not in (
+            TokenType.END_OF_FILE, TokenType.RBRACE, TokenType.SEMICOLON,
+        ):
+            if self._peek().type in statement_starters:
+                return
+            self._advance()
+        if self._peek().type == TokenType.SEMICOLON:
+            self._advance()
+
+    def _parse_statement_recovering(self) -> ASTNode | None:
+        try:
+            return self._parse_statement()
+        except _ParseError:
+            self._synchronize()
+            return None
 
     def _parse_var_decl(
         self,
@@ -112,9 +163,9 @@ class Parser:
             )
         if isinstance(target, IndexExpr):
             return IndexAssign(target=target, value=val, line=target.line)
-        sys.exit(print(
-            f"[ERRO] Linha {target.line}: Atribuicao invalida", file=sys.stderr) or 1
-        )
+        token = self._tokens[max(0, self._pos - 1)]
+        self._syntax_error(token, "invalid assignment target")
+        raise _ParseError
 
     def _parse_print_stmt(self) -> ASTNode:
         line = self._peek().line
@@ -142,7 +193,9 @@ class Parser:
         statements: list[ASTNode] = []
         self._consume(TokenType.LBRACE, "Esperado '{' para iniciar bloco")
         while self._peek().type not in (TokenType.RBRACE, TokenType.END_OF_FILE):
-            statements.append(self._parse_statement())
+            statement = self._parse_statement_recovering()
+            if statement is not None:
+                statements.append(statement)
         self._consume(TokenType.RBRACE, "Esperado '}' para fechar bloco")
         return SeqBlock(statements=tuple(statements))
 
@@ -150,7 +203,9 @@ class Parser:
         statements: list[ASTNode] = []
         self._consume(TokenType.LBRACE, "Esperado '{' para iniciar bloco PAR")
         while self._peek().type not in (TokenType.RBRACE, TokenType.END_OF_FILE):
-            statements.append(self._parse_statement())
+            statement = self._parse_statement_recovering()
+            if statement is not None:
+                statements.append(statement)
         self._consume(TokenType.RBRACE, "Esperado '}' para fechar bloco PAR")
         return ParBlock(statements=tuple(statements))
 
@@ -268,13 +323,20 @@ class Parser:
 
         while self._peek().type not in (TokenType.RBRACE, TokenType.END_OF_FILE):
             if self._match(TokenType.VAR):
-                attrs.append(cast(VarDecl, self._parse_var_decl()))
+                try:
+                    attrs.append(cast(VarDecl, self._parse_var_decl()))
+                except _ParseError:
+                    self._synchronize()
             elif self._match(TokenType.FUNC):
-                methods.append(cast(FuncDecl, self._parse_func_decl()))
+                try:
+                    methods.append(cast(FuncDecl, self._parse_func_decl()))
+                except _ParseError:
+                    self._synchronize()
             else:
-                self._consume(
-                    TokenType.UNKNOWN, "Esperado 'var' ou 'func' na definicao da classe"
+                self._syntax_error(
+                    self._peek(), "expected 'var' or 'func' in class definition"
                 )
+                raise _ParseError
         self._consume(TokenType.RBRACE, "Esperado '}' no fim da classe")
 
         return ClassDecl(
@@ -358,14 +420,13 @@ class Parser:
             elif isinstance(expr, (MethodCall, FuncCallExpr)):
                 self._consume(TokenType.SEMICOLON, "Esperado ';'")
                 return expr
-            sys.exit(print(
-                f"[ERRO] Linha {expr.line}: Instrucao ou expressao isolada invalida",
-                file=sys.stderr) or 1
-            )
+            token = self._tokens[max(0, self._pos - 1)]
+            self._syntax_error(token, "invalid standalone expression")
+            raise _ParseError
 
         tok = self._peek()
-        sys.exit(print(
-            f"[ERRO SINTATICO] Linha {tok.line}: Instrucao nao reconhecida: {tok.lexeme!r}", file=sys.stderr) or 1)
+        self._syntax_error(tok, f"unrecognized statement {tok.lexeme!r}")
+        raise _ParseError
 
     def _parse_expression(self) -> ASTNode:
         return self._parse_or()
@@ -540,16 +601,12 @@ class Parser:
             node = self._parse_expression()
             self._consume(TokenType.RPAREN, "Esperado ')'")
         else:
-            sys.exit(print(
-                f"[ERRO SINTATICO] Linha {tok.line}: Expressao esperada",
-                file=sys.stderr) or 1
-            )
+            self._syntax_error(tok, "expected expression")
+            raise _ParseError
 
         if node is None:
-            sys.exit(print(
-                f"[ERRO SINTATICO] Linha {tok.line}: Falha ao processar expressão "
-                "primária", file=sys.stderr) or 1
-            )
+            self._syntax_error(tok, "failed to parse primary expression")
+            raise _ParseError
 
         while True:
             if self._match(TokenType.DOT):
@@ -588,7 +645,11 @@ class Parser:
     def parse(self) -> Program:
         statements: list[ASTNode] = []
         while self._peek().type != TokenType.END_OF_FILE:
-            stmt = self._parse_statement()
-            if stmt:
+            if self._peek().type == TokenType.RBRACE:
+                token = self._advance()
+                self._syntax_error(token, "unexpected '}'")
+                continue
+            stmt = self._parse_statement_recovering()
+            if stmt is not None:
                 statements.append(stmt)
         return Program(statements=tuple(statements))
