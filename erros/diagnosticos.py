@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Diagnostic:
+    """Erro ou aviso de uma fase do compilador."""
     phase: str
     message: str
     line: int | None = None
@@ -13,10 +14,10 @@ class Diagnostic:
     def __str__(self) -> str:
         location = ""
         if self.line is not None:
-            location = f" Linha {self.line}"
+            location = f" Line {self.line}"
             if self.column is not None:
-                location += f", coluna {self.column}"
-        return f"[ERRO {self.phase.upper()}]{location}: {self.message}"
+                location += f", column {self.column}"
+        return f"[ERROR {self.phase.upper()}]{location}: {self.message}"
 
 
 class DiagnosticBag:

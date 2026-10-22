@@ -1,0 +1,39 @@
+@startuml ast_declaracoes
+title MiniPar - AST: declaracoes, raiz e visitor
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+hide empty members
+
+class ASTNode <<dataclass, frozen>> {
+  +line : int = 1
+}
+class FuncDecl <<dataclass, frozen>> {
+  +name : str = ""
+  +params : tuple[str, ...]
+  +body : ASTNode | None
+}
+class ClassDecl <<dataclass, frozen>> {
+  +name : str = ""
+  +superclass : str | None
+  +attributes : tuple[VarDecl, ...]
+  +methods : tuple[FuncDecl, ...]
+}
+class Program <<dataclass, frozen>> {
+  +statements : tuple[ASTNode, ...]
+}
+class ASTVisitor {
+  +visit(node : ASTNode | None) : Any
+  +generic_visit(node : ASTNode) : None
+}
+
+ASTNode <|-- FuncDecl
+ASTNode <|-- ClassDecl
+ASTNode <|-- Program
+Program *-- "0..*" ASTNode : statements
+ClassDecl *-- "0..*" VarDecl : attributes
+ClassDecl *-- "0..*" FuncDecl : methods
+ASTVisitor ..> ASTNode : visita filhos em tuplas/listas
+@enduml
