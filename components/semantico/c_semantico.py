@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 
 from ..sintatico.ast import (
     Assignment,
@@ -41,12 +42,15 @@ from ..sintatico.ast import (
     WhileStmt,
 )
 from ..tabela_simbolos.c_tabela_simbolos import Symbol, TabelaSimbolos
+from erros.diagnosticos import Diagnostic, DiagnosticBag, Phase
 
 
 class SemanticAnalyzer:
-    def __init__(self) -> None:
+    def __init__(self, diagnostics: DiagnosticBag | None = None) -> None:
         self._symbol_table = TabelaSimbolos()
         self._has_errors = False
+        self._diagnostics = diagnostics
+        self._reported_diagnostics: list[Diagnostic] = []
         self._current_function: str | None = None
         self._current_class: str | None = None
         self._classes: dict[str, Symbol] = {}
@@ -63,24 +67,33 @@ class SemanticAnalyzer:
         return f" (Funcao: {self._current_function})" if self._current_function else ""
 
     def _define_symbol(
-        self, name: str, type_: str, line: int, params: list[str] | None = None
+        self, name: str, type_: str, line: int, params: tuple[str, ...] | None = None
     ) -> None:
-        if not self._symbol_table.define(Symbol(name, type_, params=params or [])):
-            print(
-                f"[ERRO SEMANTICO] Linha {line}{self._get_context()}: Variavel '{name}'"
-                " ja declarada.", file=sys.stderr
-            )
-            self._has_errors = True
+        if not self._symbol_table.define(Symbol(name, type_, params=params or ())):
+            self._report(line, f"Variavel '{name}' ja declarada.")
 
     def _lookup(self, name: str) -> Symbol | None:
         return self._symbol_table.lookup(name)
 
     def _report(self, line: int, message: str) -> None:
-        print(
-            f"[ERRO SEMANTICO] Linha {line}{self._get_context()}: {message}",
-            file=sys.stderr
-        )
+        contextual_message = f"{message}{self._get_context()}"
+        diagnostic = Diagnostic(Phase.SEMANTIC, contextual_message, line)
+        self._reported_diagnostics.append(diagnostic)
+        if self._diagnostics is not None:
+            self._diagnostics.report(diagnostic)
+        else:
+            print(
+                f"[ERRO SEMANTICO] Linha {line}: {contextual_message}",
+                file=sys.stderr,
+            )
         self._has_errors = True
+
+    @property
+    def diagnostics(self) -> Sequence[Diagnostic]:
+        return tuple(self._reported_diagnostics)
+
+    def set_diagnostic_collector(self, diagnostics: DiagnosticBag) -> None:
+        self._diagnostics = diagnostics
 
     def _infer_type(self, node: ASTNode | None) -> str:
         if node is None:
@@ -154,7 +167,7 @@ class SemanticAnalyzer:
                 )
             elif isinstance(stmt, ClassDecl):
                 attrs = {a.name: a.type for a in stmt.attributes}
-                methods = {m.name: m.params for m in stmt.methods}
+                methods = {m.name: tuple(m.params) for m in stmt.methods}
                 self._classes[stmt.name] = Symbol(
                     stmt.name, "CLASS", attributes=attrs, methods=methods
                 )

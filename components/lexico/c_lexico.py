@@ -1,14 +1,26 @@
 from __future__ import annotations
 
+from erros.diagnosticos import Diagnostic, DiagnosticBag, Phase
+
 from .token import KEYWORDS, Token, TokenType
 
 
 class Lexer:
-    def __init__(self, source_code: str) -> None:
+    def __init__(
+        self, source_code: str, diagnostics: DiagnosticBag | None = None
+    ) -> None:
         self._source = source_code
+        self._diagnostics = diagnostics if diagnostics is not None else DiagnosticBag()
         self._pos = 0
         self._line = 1
         self._col = 1
+
+    @property
+    def diagnostics(self) -> tuple[Diagnostic, ...]:
+        return self._diagnostics.diagnostics
+
+    def set_diagnostic_collector(self, diagnostics: DiagnosticBag) -> None:
+        self._diagnostics = diagnostics
 
     def _peek(self) -> str:
         if self._pos >= len(self._source): return "\0"
@@ -62,11 +74,23 @@ class Lexer:
                 while self._peek() not in ('"', "\0"):
                     if self._peek() == "\\":
                         self._advance()
+                        if self._peek() == "\0":
+                            text += "\\"
+                            break
                         escaped = self._advance()
                         escape_map = {"n": "\n", "t": "\t", '"': '"', "\\": "\\"}
                         text += escape_map.get(escaped, escaped)
                     else: text += self._advance()
-                if self._peek() == '"': self._advance()
+                if self._peek() == '"':
+                    self._advance()
+                elif self._diagnostics is not None:
+                    self._diagnostics.error(
+                        Phase.LEXICAL,
+                        "unterminated string literal",
+                        start_line,
+                        start_col,
+                        max(1, self._col - start_col),
+                    )
                 tokens.append(self._make_token(TokenType.STRING_LITERAL, text, start_line, start_col))
             else:
                 op = self._advance()
@@ -103,7 +127,15 @@ class Lexer:
                     else: tokens.append(self._make_token(TokenType.GT, ">", start_line, start_col))
                 elif op in single_map:
                     tokens.append(self._make_token(single_map[op], op, start_line, start_col))
-                else: tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
+                else:
+                    tokens.append(self._make_token(TokenType.UNKNOWN, op, start_line, start_col))
+                    if self._diagnostics is not None:
+                        self._diagnostics.error(
+                            Phase.LEXICAL,
+                            f"unexpected character {op!r}",
+                            start_line,
+                            start_col,
+                        )
 
         tokens.append(Token(TokenType.END_OF_FILE, "", self._line, self._col))
         return tokens

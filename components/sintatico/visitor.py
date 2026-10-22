@@ -20,7 +20,7 @@ class ASTVisitor:
             value = getattr(node, field.name)
             if isinstance(value, ASTNode):
                 self.visit(value)
-            elif isinstance(value, list):
+            elif isinstance(value, (list, tuple)):
                 for item in value:
                     if isinstance(item, ASTNode):
                         self.visit(item)

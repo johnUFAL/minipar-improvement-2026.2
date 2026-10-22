@@ -1,0 +1,119 @@
+@startuml componentes
+title MiniPar 2026.2 - Componentes implementados e contratos
+
+skinparam componentStyle uml2
+skinparam shadowing false
+skinparam defaultFontName Monospaced
+skinparam package {
+  BackgroundColor #FAFAFA
+  BorderColor #555555
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+}
+skinparam interface {
+  BackgroundColor #FFF3C4
+  BorderColor #8A6D00
+}
+left to right direction
+
+component "CompiladorMiniPar\n(components/compilador.py)" as Compilador #E8F0FE
+component "compile_file(...)\n(components/controle/c_controle.py)" as CompileFile
+
+package "Contratos ABC (components/interfaces.py)" {
+  interface IControle
+  interface ILexico
+  interface ISintatico
+  interface ISemantico
+  interface ITabelaSimbolos
+  interface IGeradorTAC
+  interface IGeradorCpp
+}
+
+package "Pipeline injetavel" {
+  component "CControle\ncompile(source, output_name)" as Controle
+  component "dependencias substituiveis\n(fakes nos testes)" as Injectable #FFF8DC
+}
+
+Controle - IControle : implementa
+Compilador ..> IControle : depende
+Controle ..> ILexico : injeta
+Controle ..> ISintatico : injeta
+Controle ..> ISemantico : injeta
+Controle ..> IGeradorTAC : injeta
+Controle ..> IGeradorCpp : injeta
+Controle ..> Injectable : recebe no construtor
+
+package "Implementacoes concretas usadas por compile_file(...)" {
+  component "Lexer\ntokenize()" as Lexer
+  component "Parser\nparse()" as Parser
+  component "SemanticAnalyzer\nanalyze()" as SemanticAnalyzer
+  component "TabelaSimbolos" as TabelaSimbolos
+  component "TACGenerator\ngenerate()" as TACGenerator
+  component "CppCodeGenerator\ngenerate()" as CppCodeGenerator
+  component "DriverGCC\ncompile()" as DriverGCC
+}
+
+CompileFile ..> Lexer : instancia
+CompileFile ..> Parser : instancia
+CompileFile ..> SemanticAnalyzer : instancia
+CompileFile ..> TACGenerator : instancia
+CompileFile ..> CppCodeGenerator : instancia
+artifact "Tokens" as Tokens
+artifact "AST (Program)" as ASTProgram
+Lexer ..> Tokens : produz
+Parser ..> Tokens : consome
+Parser ..> ASTProgram : produz
+SemanticAnalyzer ..> ASTProgram : consome
+SemanticAnalyzer ..> TabelaSimbolos
+TACGenerator ..> ASTProgram : consome
+CppCodeGenerator ..> ASTProgram : consome
+CppCodeGenerator --> DriverGCC : instancia
+
+artifact "Fonte MiniPar (.mp)" as Source
+artifact "TAC em texto (.tac)" as TAC
+artifact "Codigo C++ (.cpp)" as Cpp
+artifact "Executavel" as Executable
+
+Source --> CompileFile
+TACGenerator ..> TAC : grava
+CppCodeGenerator ..> Cpp : grava
+DriverGCC ..> Executable : compila e linka
+
+package "Runtime C++ (runtime/)" #F4ECF7 {
+  component "Runtime de canais\nMiniParChannel" as Channel
+  component "Paralelismo\nminipar_parallel" as Parallel
+  component "Helpers\nminipar_rt.hpp" as RuntimeHeader
+}
+
+DriverGCC ..> Channel : compila canal.cpp
+DriverGCC ..> Parallel : compila paralelo.cpp
+DriverGCC ..> RuntimeHeader : inclui
+Executable ..> Channel : usa
+Executable ..> Parallel : usa
+
+note right of Controle
+  CControle implementa IControle,
+  mas as classes concretas do pipeline
+  acima nao realizam ILexico, ISintatico,
+  ISemantico ou os demais contratos.
+  As duas arquiteturas coexistem no codigo.
+end note
+
+note bottom of SemanticAnalyzer
+  Reporta diagnosticos em stderr e devolve bool;
+  o DiagnosticBag existe, mas nao e ligado
+  a este fluxo concreto.
+end note
+
+legend bottom
+  Fluxo CLI: fonte -> Lexer -> Parser -> SemanticAnalyzer
+  -> TACGenerator e CppCodeGenerator -> DriverGCC.
+  O pipeline injetavel e uma API separada e testada com dublês.
+  Diagramas de classes: classes.puml, ast_expressoes.puml,
+  ast_acessos.puml, ast_dados_io.puml, ast_comandos.puml,
+  ast_fluxo.puml, ast_declaracoes.puml, tac_runtime.puml
+  e tac_planejado.puml.
+endlegend
+@enduml
