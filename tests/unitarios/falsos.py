@@ -36,7 +36,7 @@ class AlternateFakeLexer(FakeLexer):
 
     def initialize(self, source: str) -> None:
         self._tokens = [
-            Token(TokenType.NUMBER, part, 1, index + 1)
+            Token(TokenType.INT_LITERAL, part, 1, index + 1)
             for index, part in enumerate(source.split())
         ]
 

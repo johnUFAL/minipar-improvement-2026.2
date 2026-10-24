@@ -84,8 +84,8 @@ def compile_file(
 
     print("[Fase 1] Analise Lexica e Sintatica...")
     collector = diagnostics if diagnostics is not None else DiagnosticBag(source_code)
-    tokens = Lexer(source_code, collector).tokenize()
-    program = Parser(tokens, collector).parse()
+    lexer = Lexer(source_code, collector)
+    program = Parser(lexer, collector).parse()
 
     print("[Fase 2] Analise Semantica e Tabela de Simbolos...")
     SemanticAnalyzer(collector).analyze(program)

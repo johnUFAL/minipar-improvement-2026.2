@@ -13,12 +13,12 @@ from erros.diagnosticos import DiagnosticBag
 class CompilerDiagnosticsIntegrationTests(unittest.TestCase):
     def test_compiler_collects_lexical_syntax_and_semantic_errors(self) -> None:
         source = (
-            "var good = 0;\n"
-            "var broken = @;\n"
-            "print(2;\n"
-            "var good = 3;\n"
-            "print(missing);\n"
-            "}\n"
+            "SEQ\n"
+            "    good: int = 0\n"
+            "    broken = @\n"
+            "    print 2\n"
+            "    good: int = 3\n"
+            "    print(missing)\n"
         )
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "invalid.mp"
@@ -32,10 +32,10 @@ class CompilerDiagnosticsIntegrationTests(unittest.TestCase):
         self.assertGreaterEqual(len(diagnostics), 4)
         self.assertTrue(diagnostics.has_errors)
         rendered = diagnostics.format_text()
-        self.assertIn("erro léxico [2:14]", rendered)
+        self.assertIn("erro léxico [3:14]", rendered)
         self.assertIn("erro sintático", rendered)
-        self.assertIn("erro semântico [4]", rendered)
         self.assertIn("erro semântico [5]", rendered)
+        self.assertIn("erro semântico [6]", rendered)
         self.assertIn("^", rendered)
 
         serialized = diagnostics.to_dict()

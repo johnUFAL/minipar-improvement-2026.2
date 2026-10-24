@@ -42,7 +42,7 @@ class PipelineTests(unittest.TestCase):
         compiler, _ = build_pipeline(lexer)
         self.assertTrue(compiler.compile_text("1 2 3", "output"))
         lexer.initialize("7")
-        self.assertIs(lexer.next_token().type, TokenType.NUMBER)
+        self.assertIs(lexer.next_token().type, TokenType.INT_LITERAL)
 
     def test_interfaces_cannot_be_instantiated(self) -> None:
         with self.assertRaises(TypeError):

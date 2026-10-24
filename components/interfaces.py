@@ -15,15 +15,13 @@ class ILexico(ABC):
 
     @abstractmethod
     def next_token(self) -> Token:
-        """Devolve o próximo token
-        O parser puxa tokens por aqui, me vez de receber uma lista pronta.
-        """
+        """Devolve o próximo token sob demanda."""
 
 
 class ISintatico(ABC):
     @abstractmethod
     def parse(self, lexer: ILexico, semantic_analyzer: ISemantico) -> Program:
-        """Constrói a ASI puxando tokens de lexico e chamando semantico."""
+        """Constrói a AST consumindo tokens do léxico sob demanda."""
 
 
 class ISemantico(ABC):

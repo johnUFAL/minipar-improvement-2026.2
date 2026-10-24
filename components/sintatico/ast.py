@@ -134,6 +134,29 @@ class ClassDecl(ASTNode):
 
 
 @dataclass(frozen=True)
+class ChannelDecl(ASTNode):
+    name: str = ""
+    first_host: str = ""
+    second_host: str = ""
+    line: int = 1
+
+
+@dataclass(frozen=True)
+class ForkStmt(ASTNode):
+    task_name: str = ""
+    target_kind: str | None = None
+    target: ASTNode | None = None
+    body: ASTNode | None = None
+    line: int = 1
+
+
+@dataclass(frozen=True)
+class JoinStmt(ASTNode):
+    task_names: tuple[str, ...] = ()
+    line: int = 1
+
+
+@dataclass(frozen=True)
 class FuncDecl(ASTNode):
     name: str = ""
     params: tuple[str, ...] = ()

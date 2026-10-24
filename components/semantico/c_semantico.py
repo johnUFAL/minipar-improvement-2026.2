@@ -10,14 +10,17 @@ from ..sintatico.ast import (
     BoolExpr,
     BreakStmt,
     CChannelExpr,
+    ChannelDecl,
     ClassDecl,
     ContinueStmt,
     DoWhileStmt,
     ForStmt,
+    ForkStmt,
     FuncCallExpr,
     FuncDecl,
     IdentifierExpr,
     IfStmt,
+    JoinStmt,
     IndexAssign,
     IndexExpr,
     InputExpr,
@@ -193,7 +196,9 @@ class SemanticAnalyzer:
         elif isinstance(node, Assignment):
             sym = self._lookup(node.name)
             if sym is None:
-                self._report(node.line, f"Variavel '{node.name}' nao declarada.")
+                self._define_symbol(
+                    node.name, self._infer_type(node.value), node.line
+                )
 
             if node.value is not None:
                 self.validate_node(node.value)
@@ -253,6 +258,17 @@ class SemanticAnalyzer:
             for stmt in node.statements:
                 self.validate_node(stmt)
             self._exit_scope()
+        elif isinstance(node, ChannelDecl):
+            self._define_symbol(node.name, "c_channel", node.line)
+        elif isinstance(node, ForkStmt):
+            if node.target is not None:
+                self.validate_node(node.target)
+            self._define_symbol(node.task_name, "task", node.line)
+            self.validate_node(node.body)
+        elif isinstance(node, JoinStmt):
+            for task_name in node.task_names:
+                if self._lookup(task_name) is None:
+                    self._report(node.line, f"Tarefa '{task_name}' não declarada.")
         elif isinstance(node, IfStmt):
             self.validate_node(node.condition)
             self.validate_node(node.then_branch)

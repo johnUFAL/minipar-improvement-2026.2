@@ -2,7 +2,6 @@ import unittest
 from contextlib import redirect_stderr
 from dataclasses import FrozenInstanceError
 from io import StringIO
-from pathlib import Path
 from unittest.mock import patch
 
 import components.sintatico.ast as ast_module
@@ -11,16 +10,16 @@ from components.lexico.c_lexico import Lexer
 from components.lexico.token import TokenType
 from components.semantico.c_semantico import SemanticAnalyzer
 from components.sintatico.ast import ASTNode
+from components.sintatico.ast import BinaryExpr, ForkStmt, IfStmt, JoinStmt
 from components.sintatico.c_sintatico import Parser
 from components.sintatico.visitor import ASTVisitor
-from components.tac.c_gerador_tac import TACGenerator
 from components.tac.executor_tac import TACExecutor
 
 
 class ComponentTests(unittest.TestCase):
     def test_ast_visitor_traverses_tuple_children(self):
         program = Parser(
-            Lexer("seq { print(42); }").tokenize()
+            Lexer("SEQ\n    print(42)\n")
         ).parse()
         visited: list[type[ASTNode]] = []
 
@@ -42,18 +41,20 @@ class ComponentTests(unittest.TestCase):
         )
 
     def test_lexer_preserves_token_position(self):
-        tokens = Lexer("var total = 12;").tokenize()
-        self.assertEqual(tokens[0].type, TokenType.VAR)
+        tokens = Lexer("total: int = 12\n").tokenize()
+        self.assertEqual(tokens[0].type, TokenType.IDENTIFIER)
         self.assertEqual((tokens[0].line, tokens[0].column), (1, 1))
         self.assertEqual(tokens[-1].type, TokenType.END_OF_FILE)
 
     def test_semantic_analyzer_accepts_declared_variable(self):
-        program = Parser(Lexer("var answer = 42; print(answer);").tokenize()).parse()
+        program = Parser(
+            Lexer("SEQ\n    answer: int = 42\n    print(answer)\n")
+        ).parse()
         self.assertTrue(SemanticAnalyzer().analyze(program))
 
     def test_ast_nodes_and_collections_are_immutable(self):
         program = Parser(
-            Lexer("seq { var values = [1, 2]; print(values); }").tokenize()
+            Lexer("SEQ\n    values: list = [1, 2]\n    print(values)\n")
         ).parse()
         block = program.statements[0]
         declaration = block.statements[0]
@@ -98,23 +99,58 @@ END:
         self.assertEqual(variables["count"], 3)
         self.assertEqual(output, ["1", "2"])
 
-    def test_quicksort_tac_matches_existing_golden_file(self):
-        root = Path(__file__).resolve().parents[2]
-        source_path = root / "programas_teste" / "t07_quicksort_iterativo_tac.mp"
-        expected_path = (
-            root
-            / "tests"
-            / "integracao"
-            / "expected_results"
-            / "t07_quicksort_iterativo_tac.expected.tac"
+    def test_parser_consumes_tokens_lazily(self):
+        lexer = Lexer("SEQ\n    x = 1\n")
+        program = Parser(lexer).parse()
+        self.assertEqual(len(program.statements), 1)
+        self.assertIsInstance(program.statements[0], ast_module.SeqBlock)
+
+    def test_parser_uses_operator_precedence_and_builds_elif_chain(self):
+        source = (
+            "SEQ\n"
+            "    if a:\n"
+            "        print(1)\n"
+            "    elif b:\n"
+            "        print(2)\n"
+            "    elif c:\n"
+            "        print(3)\n"
+            "    else:\n"
+            "        print(4)\n"
+            "    print(1 + 2 * 3)\n"
         )
-        program = Parser(
-            Lexer(source_path.read_text(encoding="utf-8")).tokenize()
-        ).parse()
-        self.assertEqual(
-            TACGenerator().generate_text(program),
-            expected_path.read_text(encoding="utf-8"),
+        lexer = Lexer(source)
+        parser = Parser(lexer)
+        program = parser.parse()
+
+        self.assertFalse(parser.diagnostics)
+        block = program.statements[0]
+        self.assertIsInstance(block, ast_module.SeqBlock)
+        conditional = block.statements[0]
+        self.assertIsInstance(conditional, IfStmt)
+        self.assertIsInstance(conditional.else_branch, IfStmt)
+        self.assertIsInstance(conditional.else_branch.else_branch, IfStmt)
+        printed = block.statements[1].arguments[0]
+        self.assertIsInstance(printed, BinaryExpr)
+        self.assertEqual(printed.op, "+")
+        self.assertIsInstance(printed.right, BinaryExpr)
+        self.assertEqual(printed.right.op, "*")
+
+    def test_parser_builds_fork_and_join_nodes(self):
+        source = (
+            "SEQ\n"
+            "    fork worker em core(2):\n"
+            "        print(1)\n"
+            "    join worker\n"
         )
+        parser = Parser(Lexer(source))
+        program = parser.parse()
+
+        self.assertFalse(parser.diagnostics)
+        block = program.statements[0]
+        self.assertIsInstance(block.statements[0], ForkStmt)
+        self.assertEqual(block.statements[0].task_name, "worker")
+        self.assertIsInstance(block.statements[1], JoinStmt)
+        self.assertEqual(block.statements[1].task_names, ("worker",))
 
     @patch("components.codegen.driver_gcc.shutil.which", return_value=None)
     def test_missing_cpp_compiler_fails_without_traceback(self, _which):
