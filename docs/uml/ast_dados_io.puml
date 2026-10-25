@@ -9,6 +9,8 @@ hide empty members
 
 class ASTNode <<dataclass, frozen>> {
   +line : int = 1
+  +column : int = 1
+  +tipo_inferido : str | None = None
 }
 class CChannelExpr <<dataclass, frozen>> {
   +ip : ASTNode | None

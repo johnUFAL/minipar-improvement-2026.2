@@ -9,6 +9,8 @@ hide empty members
 
 class ASTNode <<dataclass, frozen>> {
   +line : int = 1
+  +column : int = 1
+  +tipo_inferido : str | None = None
 }
 
 class NumberExpr <<dataclass, frozen>> {
@@ -41,7 +43,7 @@ ASTNode <|-- BinaryExpr
 ASTNode <|-- UnaryExpr
 
 note bottom of ASTNode
-  Todos os nos herdam diretamente de ASTNode;
-  nao ha classes intermediarias Expr ou Stmt.
+  A AST nao tem classes intermediarias Expr ou Stmt;
+  AttributeDecl e MethodDecl especializam VarDecl e FuncDecl.
 end note
 @enduml

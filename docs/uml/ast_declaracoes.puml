@@ -9,17 +9,34 @@ hide empty members
 
 class ASTNode <<dataclass, frozen>> {
   +line : int = 1
+  +column : int = 1
+  +tipo_inferido : str | None = None
+  +definir_tipo_inferido(tipo : str) : None
+  +para_dict() : dict[str, object]
 }
 class FuncDecl <<dataclass, frozen>> {
   +name : str = ""
-  +params : tuple[str, ...]
+  +params : tuple[Parameter, ...]
   +body : ASTNode | None
+  +return_type : str | None
+}
+class MethodDecl <<dataclass, frozen>>
+class Parameter <<dataclass, frozen>> {
+  +name : str = ""
+  +type : str = "var"
+  +default_value : ASTNode | None
+}
+class AttributeDecl <<dataclass, frozen>>
+class VarDecl <<dataclass, frozen>> {
+  +name : str = ""
+  +type : str = "var"
+  +init_value : ASTNode | None
 }
 class ClassDecl <<dataclass, frozen>> {
   +name : str = ""
   +superclass : str | None
-  +attributes : tuple[VarDecl, ...]
-  +methods : tuple[FuncDecl, ...]
+  +attributes : tuple[AttributeDecl, ...]
+  +methods : tuple[MethodDecl, ...]
 }
 class Program <<dataclass, frozen>> {
   +statements : tuple[ASTNode, ...]
@@ -28,12 +45,21 @@ class ASTVisitor {
   +visit(node : ASTNode | None) : Any
   +generic_visit(node : ASTNode) : None
 }
+class ASTPrinter {
+  +format(node : ASTNode) : str
+}
 
 ASTNode <|-- FuncDecl
+FuncDecl <|-- MethodDecl
+ASTNode <|-- Parameter
+VarDecl <|-- AttributeDecl
+ASTNode <|-- VarDecl
 ASTNode <|-- ClassDecl
 ASTNode <|-- Program
 Program *-- "0..*" ASTNode : statements
-ClassDecl *-- "0..*" VarDecl : attributes
-ClassDecl *-- "0..*" FuncDecl : methods
+ClassDecl *-- "0..*" AttributeDecl : attributes
+ClassDecl *-- "0..*" MethodDecl : methods
+FuncDecl *-- "0..*" Parameter : params
 ASTVisitor ..> ASTNode : visita filhos em tuplas/listas
+ASTPrinter --|> ASTVisitor
 @enduml

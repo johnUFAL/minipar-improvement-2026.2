@@ -1,12 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
 class ASTNode:
     """Base de todos os nós da AST."""
     line: int = 1
+    column: int = field(default=1, kw_only=True)
+    tipo_inferido: str | None = field(
+        default=None, compare=False, repr=False, kw_only=True
+    )
+
+    def definir_tipo_inferido(self, tipo: str) -> None:
+        object.__setattr__(self, "tipo_inferido", tipo)
+
+    def para_dict(self) -> dict[str, object]:
+        from .visitor import para_dict
+
+        return para_dict(self)
 
 
 @dataclass(frozen=True)
@@ -128,8 +140,8 @@ class ContinueStmt(ASTNode):
 class ClassDecl(ASTNode):
     name: str = ""
     superclass: str | None = None
-    attributes: tuple[VarDecl, ...] = ()
-    methods: tuple[FuncDecl, ...] = ()
+    attributes: tuple[AttributeDecl, ...] = ()
+    methods: tuple[MethodDecl, ...] = ()
     line: int = 1
 
 
@@ -157,11 +169,30 @@ class JoinStmt(ASTNode):
 
 
 @dataclass(frozen=True)
+class Parameter(ASTNode):
+    name: str = ""
+    type: str = "var"
+    default_value: ASTNode | None = None
+    line: int = 1
+
+
+@dataclass(frozen=True)
 class FuncDecl(ASTNode):
     name: str = ""
-    params: tuple[str, ...] = ()
+    params: tuple[Parameter, ...] = ()
     body: ASTNode | None = None
+    return_type: str | None = None
     line: int = 1
+
+
+@dataclass(frozen=True)
+class AttributeDecl(VarDecl):
+    pass
+
+
+@dataclass(frozen=True)
+class MethodDecl(FuncDecl):
+    pass
 
 
 @dataclass(frozen=True)

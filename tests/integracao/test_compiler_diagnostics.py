@@ -34,8 +34,8 @@ class CompilerDiagnosticsIntegrationTests(unittest.TestCase):
         rendered = diagnostics.format_text()
         self.assertIn("erro léxico [3:14]", rendered)
         self.assertIn("erro sintático", rendered)
-        self.assertIn("erro semântico [5]", rendered)
-        self.assertIn("erro semântico [6]", rendered)
+        self.assertIn("erro semântico [5:5]", rendered)
+        self.assertIn("erro semântico [6:11]", rendered)
         self.assertIn("^", rendered)
 
         serialized = diagnostics.to_dict()
