@@ -25,6 +25,34 @@ class WebCompileTests(unittest.TestCase):
         self.temp_path.stop()
         self.temp_dir.cleanup()
 
+    def test_symbols_endpoint_returns_serializable_symbol_table(self):
+        response = self.client.post(
+            "/api/symbols",
+            json={
+                "code": (
+                    "SEQ\n"
+                    "    result: int = 42\n"
+                    "    print(result)\n"
+                )
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertTrue(result["success"])
+        exported_symbols = [
+            symbol
+            for scope in result["symbols"]["scopes"]
+            for symbol in scope["symbols"]
+        ]
+        self.assertTrue(any(symbol["name"] == "result" for symbol in exported_symbols))
+
+    def test_symbols_endpoint_rejects_missing_source(self):
+        response = self.client.post("/api/symbols", json={})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(response.get_json()["success"])
+
     @patch("interfaces.web.api.subprocess.run")
     def test_web_forwards_inputs_and_returns_program_output(self, run):
         run.side_effect = [

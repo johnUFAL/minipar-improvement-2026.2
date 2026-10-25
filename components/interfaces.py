@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from components.lexico.token import Token
 from components.sintatico.ast import ASTNode, Program
 from erros.diagnosticos import Diagnostic
+
+if TYPE_CHECKING:
+    from components.tabela_simbolos.c_tabela_simbolos import Symbol
 
 
 class ILexico(ABC):
@@ -36,8 +40,13 @@ class ISemantico(ABC):
 
 
 class ITabelaSimbolos(ABC):
+    @property
     @abstractmethod
-    def enter_scope(self) -> None:
+    def current_scope_path(self) -> str:
+        """Caminho estável do escopo ativo."""
+
+    @abstractmethod
+    def enter_scope(self, name: str | None = None, *, reuse: bool = False) -> None:
         """Abre um novo escopo."""
 
     @abstractmethod
@@ -45,12 +54,36 @@ class ITabelaSimbolos(ABC):
         """Fecha o escopo atual."""
 
     @abstractmethod
-    def define(self, name: str, symbol: object) -> bool:
+    def define(self, symbol: Symbol) -> bool:
         """Define no escopo atual. False se já exister nele."""
 
     @abstractmethod
-    def lookup(self, name: str) -> object | None:
-        """Procura um nó: chamado pelo parser durante a análise sintática."""
+    def lookup(self, name: str) -> Symbol | None:
+        """Procura no escopo atual e nos escopos pais."""
+
+    @abstractmethod
+    def lookup_local(self, name: str) -> Symbol | None:
+        """Procura somente no escopo atual."""
+
+    @abstractmethod
+    def register_class_scope(self, class_name: str, scope_path: str) -> None:
+        """Associa uma classe ao escopo persistente de seus membros."""
+
+    @abstractmethod
+    def lookup_member(self, class_name: str, name: str) -> Symbol | None:
+        """Procura um membro na classe e em suas superclasses."""
+
+    @abstractmethod
+    def lookup_method(self, class_name: str, name: str) -> Symbol | None:
+        """Procura um método na classe e em suas superclasses."""
+
+    @abstractmethod
+    def lookup_attribute(self, class_name: str, name: str) -> Symbol | None:
+        """Procura um atributo na classe e em suas superclasses."""
+
+    @abstractmethod
+    def export(self) -> dict[str, object]:
+        """Devolve uma representação serializável da tabela."""
 
 
 class IGeradorTAC(ABC):

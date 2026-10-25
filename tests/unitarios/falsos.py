@@ -12,6 +12,7 @@ from components.interfaces import (
 )
 from components.lexico.token import Token, TokenType
 from components.sintatico.ast import ASTNode, Program
+from components.tabela_simbolos import Symbol
 from erros.diagnosticos import Diagnostic
 
 
@@ -45,24 +46,48 @@ class FakeSymbolTable(ITabelaSimbolos):
     def __init__(self) -> None:
         self._scopes: list[dict[str, object]] = [{}]
 
-    def enter_scope(self) -> None:
+    @property
+    def current_scope_path(self) -> str:
+        return "fake"
+
+    def enter_scope(self, name: str | None = None, *, reuse: bool = False) -> None:
         self._scopes.append({})
 
     def exit_scope(self) -> None:
         if len(self._scopes) > 1:
             self._scopes.pop()
 
-    def define(self, name: str, symbol: object) -> bool:
-        if name in self._scopes[-1]:
+    def define(self, symbol: Symbol) -> bool:
+        if symbol.name in self._scopes[-1]:
             return False
-        self._scopes[-1][name] = symbol
+        self._scopes[-1][symbol.name] = symbol
         return True
 
-    def lookup(self, name: str) -> object | None:
+    def lookup(self, name: str) -> Symbol | None:
         for scope in reversed(self._scopes):
             if name in scope:
-                return scope[name]
+                symbol = scope[name]
+                return symbol if isinstance(symbol, Symbol) else None
         return None
+
+    def lookup_local(self, name: str) -> Symbol | None:
+        symbol = self._scopes[-1].get(name)
+        return symbol if isinstance(symbol, Symbol) else None
+
+    def register_class_scope(self, class_name: str, scope_path: str) -> None:
+        pass
+
+    def lookup_member(self, class_name: str, name: str) -> Symbol | None:
+        return None
+
+    def lookup_method(self, class_name: str, name: str) -> Symbol | None:
+        return None
+
+    def lookup_attribute(self, class_name: str, name: str) -> Symbol | None:
+        return None
+
+    def export(self) -> dict[str, object]:
+        return {"scopes": []}
 
 
 class FakeSemanticAnalyzer(ISemantico):
