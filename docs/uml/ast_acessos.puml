@@ -1,0 +1,42 @@
+@startuml ast_acessos
+title MiniPar - AST: chamadas e acessos
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+hide empty members
+
+class ASTNode <<dataclass, frozen>> {
+  +line : int = 1
+}
+class FuncCallExpr <<dataclass, frozen>> {
+  +name : str = ""
+  +arguments : tuple[ASTNode, ...]
+}
+class MethodCall <<dataclass, frozen>> {
+  +object : ASTNode | None
+  +method_name : str = ""
+  +arguments : tuple[ASTNode, ...]
+}
+class PropertyAccess <<dataclass, frozen>> {
+  +object : ASTNode | None
+  +property_name : str = ""
+}
+class NewExpr <<dataclass, frozen>> {
+  +class_name : str = ""
+  +arguments : tuple[ASTNode, ...]
+}
+class ThisExpr <<dataclass, frozen>>
+class IndexExpr <<dataclass, frozen>> {
+  +object : ASTNode | None
+  +index : ASTNode | None
+}
+
+ASTNode <|-- FuncCallExpr
+ASTNode <|-- MethodCall
+ASTNode <|-- PropertyAccess
+ASTNode <|-- NewExpr
+ASTNode <|-- ThisExpr
+ASTNode <|-- IndexExpr
+@enduml

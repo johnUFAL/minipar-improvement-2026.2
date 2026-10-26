@@ -1,0 +1,47 @@
+@startuml ast_expressoes
+title MiniPar - AST: valores e operadores
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+hide empty members
+
+class ASTNode <<dataclass, frozen>> {
+  +line : int = 1
+}
+
+class NumberExpr <<dataclass, frozen>> {
+  +value : str = ""
+}
+class StringExpr <<dataclass, frozen>> {
+  +value : str = ""
+}
+class BoolExpr <<dataclass, frozen>> {
+  +value : bool = false
+}
+class IdentifierExpr <<dataclass, frozen>> {
+  +name : str = ""
+}
+class BinaryExpr <<dataclass, frozen>> {
+  +op : str = ""
+  +left : ASTNode | None
+  +right : ASTNode | None
+}
+class UnaryExpr <<dataclass, frozen>> {
+  +op : str = ""
+  +operand : ASTNode | None
+}
+
+ASTNode <|-- NumberExpr
+ASTNode <|-- StringExpr
+ASTNode <|-- BoolExpr
+ASTNode <|-- IdentifierExpr
+ASTNode <|-- BinaryExpr
+ASTNode <|-- UnaryExpr
+
+note bottom of ASTNode
+  Todos os nos herdam diretamente de ASTNode;
+  nao ha classes intermediarias Expr ou Stmt.
+end note
+@enduml

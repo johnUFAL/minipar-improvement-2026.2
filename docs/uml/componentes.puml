@@ -1,5 +1,5 @@
 @startuml componentes
-title MiniPar 2026.2 - Diagrama de Componentes
+title MiniPar 2026.2 - Componentes implementados e contratos
 
 skinparam componentStyle uml2
 skinparam shadowing false
@@ -18,20 +18,10 @@ skinparam interface {
 }
 left to right direction
 
-' Notacao:
-'   Iface - Comp        = interface PROVIDA (lollipop)
-'   Comp ..> Iface      = interface REQUERIDA (socket / dependencia)
+component "CompiladorMiniPar\n(components/compilador.py)" as Compilador #E8F0FE
+component "compile_file(...)\n(components/controle/c_controle.py)" as CompileFile
 
-' ---------------------------------------------------------------
-' Cliente do compilador (fora do modelo de componentes do compilador)
-' ---------------------------------------------------------------
-component "CompiladorMiniPar\n(components/compilador.py)\nponto de entrada + leitura de arquivo" as Compilador #E8F0FE
-
-' ---------------------------------------------------------------
-' Compilador
-' ---------------------------------------------------------------
-package "Compilador MiniPar (components/)" {
-
+package "Contratos ABC (components/interfaces.py)" {
   interface IControle
   interface ILexico
   interface ISintatico
@@ -39,74 +29,91 @@ package "Compilador MiniPar (components/)" {
   interface ITabelaSimbolos
   interface IGeradorTAC
   interface IGeradorCpp
-
-  component "CControle\n(c_controle.py)" as Controle
-  component "CLexico\n(c_lexico.py)" as Lexico
-  component "CSintatico\n(c_sintatico.py)" as Sintatico
-  component "CSemantico\n(c_semantico.py)" as Semantico
-  component "CTabelaSimbolos\n(c_tabela_simbolos.py)" as TabelaSimbolos
-  component "CGeradorTAC\n(c_gerador_tac.py)\ncodigo de 3 enderecos" as GeradorTAC #D5F5E3
-
-  component "CGeradorCpp\n(c_gerador_cpp.py)\ncodigo C++20" as GeradorCpp #D5F5E3 {
-    component "Driver GCC\n(driver_gcc.py)" as DriverGCC
-  }
-
-  ' --- interfaces PROVIDAS ---
-  IControle       - Controle
-  ILexico         - Lexico
-  ISintatico      - Sintatico
-  ISemantico      - Semantico
-  ITabelaSimbolos - TabelaSimbolos
-  IGeradorTAC     - GeradorTAC
-  IGeradorCpp     - GeradorCpp
-
-  ' --- interfaces REQUERIDAS ---
-  Sintatico ..> ILexico         : requer
-  Sintatico ..> ISemantico      : requer
-  Semantico ..> ITabelaSimbolos : requer
-
-  Controle  ..> ILexico         : requer
-  Controle  ..> ISintatico      : requer
-  Controle  ..> ISemantico      : requer
-  Controle  ..> IGeradorTAC     : requer
-  Controle  ..> IGeradorCpp     : requer
-
-  ' Driver e detalhe interno do gerador C++ (sem interface propria em interfaces.py)
-  GeradorCpp --> DriverGCC : invoca g++
 }
 
-Compilador ..> IControle : requer
-
-' ---------------------------------------------------------------
-' Fora do compilador: runtime e rede, ligados ao binario gerado
-' ---------------------------------------------------------------
-package "Runtime C++ (runtime/) - fora do compilador" #F4ECF7 {
-  component "Paralelismo\n(paralelo.cpp)\nminipar_parallel -> std::thread" as RTParalelo
-  component "Rede / Canal TCP\n(canal.cpp)\nMiniParChannel: send/receive" as RTRede
-  component "minipar_rt.hpp\n(helpers: input, matrix, range...)" as RTHeader
+package "Pipeline injetavel" {
+  component "CControle\ncompile(source, output_name)" as Controle
+  component "dependencias substituiveis\n(fakes nos testes)" as Injectable #FFF8DC
 }
 
-DriverGCC ..> RTParalelo : compila e linka
-DriverGCC ..> RTRede     : compila e linka
-DriverGCC ..> RTHeader   : -I runtime/
+Controle - IControle : implementa
+Compilador ..> IControle : depende
+Controle ..> ILexico : injeta
+Controle ..> ISintatico : injeta
+Controle ..> ISemantico : injeta
+Controle ..> IGeradorTAC : injeta
+Controle ..> IGeradorCpp : injeta
+Controle ..> Injectable : recebe no construtor
 
-node "Outro computador\n(c_channel IP:porta)" as Remoto
-RTRede ..> Remoto : sockets TCP
+package "Implementacoes concretas usadas por compile_file(...)" {
+  component "Lexer\ntokenize()" as Lexer
+  component "Parser\nparse()" as Parser
+  component "SemanticAnalyzer\nanalyze()" as SemanticAnalyzer
+  component "TabelaSimbolos" as TabelaSimbolos
+  component "TACGenerator\ngenerate()" as TACGenerator
+  component "CppCodeGenerator\ngenerate()" as CppCodeGenerator
+  component "DriverGCC\ncompile()" as DriverGCC
+}
 
-legend right
-  <b>Fluxo de dados</b>
-  1. Fonte .mp -> (CompiladorMiniPar le o arquivo) -> texto
-  2. CLexico   -> <b>Tokens</b> (Token, imutavel) -> CSintatico
-  3. CSintatico -> <b>AST</b> (Program) -> CSemantico (+ Tabela de Simbolos)
-  4. AST validada -> CGeradorTAC -> <b>TAC</b> (arquivo .tac)
-  5. AST validada -> CGeradorCpp -> <b>codigo C++</b> (.cpp) -> Driver GCC -> binario
-  6. Binario + runtime -> execucao (threads locais / canais TCP)
-  Erros: Diagnostico(fase, mensagem, linha, coluna)
+CompileFile ..> Lexer : instancia
+CompileFile ..> Parser : instancia
+CompileFile ..> SemanticAnalyzer : instancia
+CompileFile ..> TACGenerator : instancia
+CompileFile ..> CppCodeGenerator : instancia
+artifact "Tokens" as Tokens
+artifact "AST (Program)" as ASTProgram
+Lexer ..> Tokens : produz
+Parser ..> Tokens : consome
+Parser ..> ASTProgram : produz
+SemanticAnalyzer ..> ASTProgram : consome
+SemanticAnalyzer ..> TabelaSimbolos
+TACGenerator ..> ASTProgram : consome
+CppCodeGenerator ..> ASTProgram : consome
+CppCodeGenerator --> DriverGCC : instancia
 
-  <b>Notacao</b>
-  Pirulito (-)  = interface provida
-  Seta tracejada = interface requerida
-  Verde = geradores exigidos pelo Anexo 1
-end legend
+artifact "Fonte MiniPar (.mp)" as Source
+artifact "TAC em texto (.tac)" as TAC
+artifact "Codigo C++ (.cpp)" as Cpp
+artifact "Executavel" as Executable
 
+Source --> CompileFile
+TACGenerator ..> TAC : grava
+CppCodeGenerator ..> Cpp : grava
+DriverGCC ..> Executable : compila e linka
+
+package "Runtime C++ (runtime/)" #F4ECF7 {
+  component "Runtime de canais\nMiniParChannel" as Channel
+  component "Paralelismo\nminipar_parallel" as Parallel
+  component "Helpers\nminipar_rt.hpp" as RuntimeHeader
+}
+
+DriverGCC ..> Channel : compila canal.cpp
+DriverGCC ..> Parallel : compila paralelo.cpp
+DriverGCC ..> RuntimeHeader : inclui
+Executable ..> Channel : usa
+Executable ..> Parallel : usa
+
+note right of Controle
+  CControle implementa IControle,
+  mas as classes concretas do pipeline
+  acima nao realizam ILexico, ISintatico,
+  ISemantico ou os demais contratos.
+  As duas arquiteturas coexistem no codigo.
+end note
+
+note bottom of SemanticAnalyzer
+  Reporta diagnosticos em stderr e devolve bool;
+  o DiagnosticBag existe, mas nao e ligado
+  a este fluxo concreto.
+end note
+
+legend bottom
+  Fluxo CLI: fonte -> Lexer -> Parser -> SemanticAnalyzer
+  -> TACGenerator e CppCodeGenerator -> DriverGCC.
+  O pipeline injetavel e uma API separada e testada com dublês.
+  Diagramas de classes: classes.puml, ast_expressoes.puml,
+  ast_acessos.puml, ast_dados_io.puml, ast_comandos.puml,
+  ast_fluxo.puml, ast_declaracoes.puml, tac_runtime.puml
+  e tac_planejado.puml.
+endlegend
 @enduml

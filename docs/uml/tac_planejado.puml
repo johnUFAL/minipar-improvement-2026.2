@@ -1,0 +1,67 @@
+@startuml tac_planejado
+title MiniPar - Modelo planejado de instrucoes TAC
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam class<<planejado>> {
+  BackgroundColor #FFF8DC
+  BorderColor #B8860B
+}
+hide empty members
+
+abstract class InstrucaoTAC <<planejado>> {
+  {abstract} +__str__() : str
+}
+class TACAtribuicao <<planejado>> {
+  +destino : str
+  +esquerda : str
+  +operador : str | None
+  +direita : str | None
+}
+class TACRotulo <<planejado>> {
+  +nome : str
+}
+class TACSalto <<planejado>> {
+  +rotulo : str
+}
+class TACSaltoCondicional <<planejado>> {
+  +condicao : str
+  +rotulo : str
+  +se_falso : bool
+}
+class TACParam <<planejado>> {
+  +valor : str
+}
+class TACChamada <<planejado>> {
+  +destino : str
+  +nome : str
+  +num_args : int
+}
+class TACRetorno <<planejado>> {
+  +valor : str | None
+}
+class TACPrint <<planejado>> {
+  +valor : str
+}
+class TACSend <<planejado>> {
+  +canal : str
+  +mensagem : str
+}
+
+InstrucaoTAC <|-- TACAtribuicao
+InstrucaoTAC <|-- TACRotulo
+InstrucaoTAC <|-- TACSalto
+InstrucaoTAC <|-- TACSaltoCondicional
+InstrucaoTAC <|-- TACParam
+InstrucaoTAC <|-- TACChamada
+InstrucaoTAC <|-- TACRetorno
+InstrucaoTAC <|-- TACPrint
+InstrucaoTAC <|-- TACSend
+
+note bottom of InstrucaoTAC
+  Proposta de modelagem; estas classes
+  ainda nao existem no codigo.
+  Hoje TACGenerator emite texto e TACExecutor
+  interpreta linhas de texto.
+end note
+@enduml

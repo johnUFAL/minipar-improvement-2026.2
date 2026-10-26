@@ -1,0 +1,50 @@
+@startuml ast_comandos
+title MiniPar - AST: comandos
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+hide empty members
+
+class ASTNode <<dataclass, frozen>> {
+  +line : int = 1
+}
+
+class VarDecl <<dataclass, frozen>> {
+  +name : str = ""
+  +init_value : ASTNode | None
+  +type : str = "var"
+}
+class Assignment <<dataclass, frozen>> {
+  +name : str = ""
+  +value : ASTNode | None
+}
+class PropertyAssign <<dataclass, frozen>> {
+  +object : ASTNode | None
+  +property_name : str = ""
+  +value : ASTNode | None
+}
+class IndexAssign <<dataclass, frozen>> {
+  +target : ASTNode | None
+  +value : ASTNode | None
+}
+class PrintStmt <<dataclass, frozen>> {
+  +arguments : tuple[ASTNode, ...]
+}
+class SendStmt <<dataclass, frozen>> {
+  +channel : ASTNode | None
+  +message : ASTNode | None
+}
+class ReturnStmt <<dataclass, frozen>> {
+  +value : ASTNode | None
+}
+
+ASTNode <|-- VarDecl
+ASTNode <|-- Assignment
+ASTNode <|-- PropertyAssign
+ASTNode <|-- IndexAssign
+ASTNode <|-- PrintStmt
+ASTNode <|-- SendStmt
+ASTNode <|-- ReturnStmt
+@enduml
