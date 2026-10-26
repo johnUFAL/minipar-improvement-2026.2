@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from components.lexico.token import Token
-from components.sintatico.ast import ASTNode, Program
+from components.sintatico.ast import Program
 from erros.diagnosticos import Diagnostic
 
 if TYPE_CHECKING:
@@ -24,14 +24,18 @@ class ILexico(ABC):
 
 class ISintatico(ABC):
     @abstractmethod
-    def parse(self, lexer: ILexico, semantic_analyzer: ISemantico) -> Program:
+    def parse(
+        self,
+        lexer: ILexico | None = None,
+        semantic_analyzer: ISemantico | None = None,
+    ) -> Program:
         """Constrói a AST consumindo tokens do léxico sob demanda."""
 
 
 class ISemantico(ABC):
     @abstractmethod
-    def verify(self, node: ASTNode) -> None:
-        """Valida um nó: chamado pelo parse durante a análise sentiática."""
+    def analyze(self, program: Program) -> bool:
+        """Valida a AST completa depois da análise sintática."""
 
     @property
     @abstractmethod
