@@ -1,0 +1,39 @@
+@startuml ast_dados_io
+title MiniPar - AST: dados, entrada e canais
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam packageStyle rectangle
+hide empty members
+
+class ASTNode <<dataclass, frozen>> {
+  +line : int = 1
+  +column : int = 1
+  +tipo_inferido : str | None = None
+}
+class CChannelExpr <<dataclass, frozen>> {
+  +ip : ASTNode | None
+  +port : ASTNode | None
+}
+class ReceiveExpr <<dataclass, frozen>> {
+  +channel : ASTNode | None
+}
+class InputExpr <<dataclass, frozen>> {
+  +prompt : ASTNode | None
+}
+class ListLiteral <<dataclass, frozen>> {
+  +elements : tuple[ASTNode, ...]
+}
+class MatrixCreateExpr <<dataclass, frozen>> {
+  +rows : ASTNode | None
+  +cols : ASTNode | None
+  +init_value : ASTNode | None
+}
+
+ASTNode <|-- CChannelExpr
+ASTNode <|-- ReceiveExpr
+ASTNode <|-- InputExpr
+ASTNode <|-- ListLiteral
+ASTNode <|-- MatrixCreateExpr
+@enduml

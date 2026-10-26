@@ -1,3 +1,21 @@
-from .diagnosticos import Diagnostic, DiagnosticBag
+from .diagnosticos import (
+    ColetorDiagnosticos,
+    Diagnostic,
+    DiagnosticBag,
+    Diagnostico,
+    Fase,
+    Phase,
+    Severity,
+    Severidade,
+)
 
-__all__ = ["Diagnostic", "DiagnosticBag"]
+__all__ = [
+    "ColetorDiagnosticos",
+    "Diagnostic",
+    "DiagnosticBag",
+    "Diagnostico",
+    "Fase",
+    "Phase",
+    "Severity",
+    "Severidade",
+]

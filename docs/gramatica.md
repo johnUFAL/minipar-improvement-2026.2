@@ -16,7 +16,7 @@ Cada decisão foi tomada uma vez, por escrito, porque léxico, parser, semântic
 | 2 | Tipos de valor: `bool`, `int`, `float`, `string`, `list` (mais classes do usuário) | **Aceita, com ajuste** | Testes 3–5 usam decimais (0.5, 0.01) e os Testes 4–7 usam listas. `float` e `list` entram como tipos nativos; matrizes são listas de listas. O enunciado lista `c_channel` como tipo, mas aqui o canal é uma **entidade nomeada** criada por `decl_canal`, não um valor: nenhuma expressão produz um canal, então um tipo `c_channel` ficaria sem uso (ver decisão 15). |
 | 3 | Sem list comprehension, tuplas, `zip`, `enumerate`, f-strings, `try/except`, ternário | **Aceita** | Cada um exigiria produções ou regras semânticas próprias. Sem eles o parser continua descendente recursivo, sem ambiguidade. Tudo é reescrito com `while`/`for`, concatenação e builtins (seção 5). |
 | 4 | Precedência: `or` < `and` < `not` < comparações < `+ -` < `* / %` < `-` unário < postfixo (`()`, `.`, `[]`) | **Aceita** | Segue a Observação 2 do enunciado. Um não-terminal por nível, associatividade à esquerda, e a árvore já sai com a precedência certa (útil para o TAC). |
-| 5 | E/S: `print(...)` e `input()`; `sys.stdin.readline()` **não** vira alias | **Alterada** | Alias exigiria o conceito de módulo (`sys.stdin`) só para um sinônimo. Os programas de teste do enunciado usam `sys.stdin.readline()` apenas em comentário. `input()` cobre o caso. Se o professor exigir o nome literal, é um builtin a mais, sem mudar a gramática. |
+| 5 | E/S: `print(...)` e `input()`; `sys.stdin.readline()` **não** vira alias | **Alterada** | `print` e `input` são palavras reservadas léxicas e builtins semânticos. Alias exigiria o conceito de módulo (`sys.stdin`) só para um sinônimo. Os programas de teste do enunciado usam `sys.stdin.readline()` apenas em comentário. `input()` cobre o caso. |
 | 6 | Concorrência: `SEQ`, `PAR`, `fork`/`join`, `c_channel` com `.send()`/`.receive()` | **Aceita, com ajuste** | `fork t em core(n):` e `fork t em host("pc2"):` tornam a alocação parte da sintaxe, como o enunciado pede. A cláusula `em` é opcional (sem ela, o runtime escolhe). O `join` aceita lista de tarefas. |
 
 **Decisões adicionais** (necessárias para fechar a gramática):
@@ -49,6 +49,7 @@ Indentação com 4 espaços por nível; tabulação é erro léxico (evita inden
 ```
 SEQ  PAR  fork  join  em  core  host  c_channel
 class  extends  new  self  def  return
+print  input
 if  elif  else  while  for  in  break  continue
 and  or  not  true  false
 bool  int  float  string  list  void

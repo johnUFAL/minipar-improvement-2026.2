@@ -5,6 +5,11 @@ import sys
 
 from flask import Flask, jsonify, render_template, request
 
+from components.lexico.c_lexico import Lexer
+from components.semantico.c_semantico import SemanticAnalyzer
+from components.sintatico.c_sintatico import Parser
+from erros.diagnosticos import DiagnosticBag
+
 from ..program_analyzer import get_program_spec
 from ..test_orchestrator import (
     _load_session,
@@ -123,6 +128,27 @@ def session_ready():
 def session_clear():
     clear_session()
     return jsonify({"success": True})
+
+
+@app.route('/api/symbols', methods=['POST'])
+def analyze_symbols():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("code"), str):
+        return jsonify({
+            "error": "O campo 'code' deve ser texto.", "success": False
+        }), 400
+
+    diagnostics = DiagnosticBag()
+    lexer = Lexer(data["code"], diagnostics)
+    parser = Parser(lexer, diagnostics)
+    program = parser.parse()
+    analyzer = SemanticAnalyzer(diagnostics)
+    analyzer.analyze(program)
+    return jsonify({
+        "success": not diagnostics.has_errors,
+        "symbols": analyzer.symbol_table.export(),
+        "diagnostics": [diagnostic.header for diagnostic in diagnostics.diagnostics],
+    })
 
 
 @app.route('/api/compile', methods=['POST'])

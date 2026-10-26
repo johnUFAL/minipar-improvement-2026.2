@@ -268,7 +268,9 @@ class CppCodeGenerator:
                     else:
                         cpp_code += f"    double {attr.name} = 0;\n"
                 for method in node.methods:
-                    params = ", ".join(f"auto {p}" for p in method.params)
+                    params = ", ".join(
+                        f"auto {parameter.name}" for parameter in method.params
+                    )
                     ret = self._return_type(method.body)
                     cpp_code += f"    {ret} {method.name}({params}) {{\n"
                     if isinstance(method.body, SeqBlock):
@@ -277,7 +279,9 @@ class CppCodeGenerator:
                     cpp_code += "    }\n"
                 cpp_code += "};\n\n"
             elif isinstance(node, FuncDecl):
-                params = ", ".join(f"auto {p}" for p in node.params)
+                params = ", ".join(
+                    f"auto {parameter.name}" for parameter in node.params
+                )
                 ret = self._return_type(node.body)
                 cpp_code += f"{ret} {node.name}({params}) {{\n"
                 if isinstance(node.body, SeqBlock):
