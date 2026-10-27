@@ -106,7 +106,7 @@ class ComponentTests(unittest.TestCase):
         self.assertEqual((literal.line, literal.column), (2, 19))
         self.assertEqual((printed_identifier.line, printed_identifier.column), (3, 11))
         self.assertTrue(SemanticAnalyzer().analyze(program))
-        self.assertEqual(literal.tipo_inferido, "number")
+        self.assertEqual(literal.tipo_inferido, "int")
         self.assertEqual(printed_identifier.tipo_inferido, "int")
         with self.assertRaises(FrozenInstanceError):
             literal.column = 3  # type: ignore[misc]

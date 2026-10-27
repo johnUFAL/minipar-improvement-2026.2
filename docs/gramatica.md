@@ -234,7 +234,16 @@ Escolhi isso em vez de duas produções por não precisar de lookahead ilimitado
 `print`, `input`, `len`, `range`, `str`, `int`, `float`, `exp`, `random`, `inf`, `clock`, `format_float(x, casas)`, `is_number(s)`.
 Métodos: lista → `append`, `pop`; string → `split`, `strip`; `c_channel` → `send`, `receive`.
 
-### 5.3 Construção usada em cada teste → produção
+### 5.3 Regras semânticas de tipos
+
+- Funções e classes são coletadas antes da validação dos corpos, permitindo recursão e chamadas a funções declaradas posteriormente.
+- Literais inteiros e decimais inferem, respectivamente, `int` e `float`; operações numéricas promovem o resultado para `float` quando algum operando é `float` (e `/` sempre produz `float`).
+- A conversão implícita `int` → `float` é permitida; `float` → `int` exige conversão explícita.
+- A primeira atribuição declara uma variável no escopo atual. Atribuições seguintes devem respeitar seu tipo.
+- Condições devem ser booleanas; operadores aritméticos, lógicos e comparações validam os tipos dos operandos.
+- Chamadas a funções e métodos verificam aridade e tipos dos argumentos. Funções com retorno declarado diferente de `void` devem retornar um valor compatível em todos os caminhos.
+
+### 5.4 Construção usada em cada teste → produção
 
 | Teste | Construção | Produção |
 |-------|-----------|----------|
@@ -285,7 +294,7 @@ Métodos: lista → `append`, `pop`; string → `split`, `strip`; `c_channel` �
 | **Testes adicionais** (repo) | `fork t em host("computador_2"):` | `alocacao` (`host`) |
 | | `PAR` com `send`/`receive` em 3 canais | `bloco_par`, `decl_canal` ×3 |
 
-### 5.4 Cobertura das Observações do enunciado
+### 5.5 Cobertura das Observações do enunciado
 
 | Observação | Onde |
 |-----------|------|

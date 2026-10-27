@@ -17,10 +17,14 @@ class Symbol:
     line: int = 1
     signature: tuple[str, ...] | None = None
     parent_class: str | None = None
+    parameter_types: tuple[str, ...] = ()
+    required_params: int | None = None
 
     def __post_init__(self) -> None:
         if self.signature is None and self.category in ("function", "method"):
             object.__setattr__(self, "signature", self.params)
+        if self.required_params is None and self.category in ("function", "method"):
+            object.__setattr__(self, "required_params", len(self.params))
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -32,6 +36,8 @@ class Symbol:
             "signature": list(self.signature) if self.signature is not None else None,
             "parent_class": self.parent_class,
             "params": list(self.params),
+            "parameter_types": list(self.parameter_types),
+            "required_params": self.required_params,
             "attributes": dict(self.attributes),
             "methods": {
                 name: list(params) for name, params in self.methods.items()
