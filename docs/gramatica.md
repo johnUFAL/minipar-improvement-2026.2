@@ -84,27 +84,30 @@ decl_canal     = "c_channel" IDENT IDENT IDENT NEWLINE ;
                  (* c_channel <nome> <comp1> <comp2> *)
 
 (* ── Funções ── *)
-decl_funcao    = "def" IDENT "(" [ params ] ")" [ "->" tipo_retorno ] ":" suite ;
+decl_funcao    = ("def" | "func") IDENT "(" [ params ] ")"
+                 [ "->" tipo_retorno ] suite ;
 params         = param { "," param } ;
 param          = IDENT [ ":" tipo ] [ "=" literal ] ;
 tipo           = "bool" | "int" | "float" | "string" | "list" | IDENT ;
 tipo_retorno   = tipo | "void" ;
 
 (* ── Classes ── *)
-decl_classe    = "class" IDENT [ "extends" IDENT ] ":"
-                 NEWLINE INDENT membro { membro } DEDENT ;
+decl_classe    = "class" IDENT [ "extends" IDENT ] suite_classe ;
+suite_classe   = ":" NEWLINE INDENT membro { membro } DEDENT
+               | "{" { membro } "}" ;
 membro         = decl_atributo | decl_metodo ;
-decl_atributo  = IDENT [ ":" tipo ] "=" expr NEWLINE ;
+decl_atributo  = [ "var" ] IDENT [ ":" tipo ] "=" expr fim_stmt ;
 decl_metodo    = decl_funcao ;       (* o método "init" é o construtor *)
 
 (* ── Blocos e concorrência ── *)
-suite          = NEWLINE INDENT stmt { stmt } DEDENT ;
-bloco_seq      = "SEQ" suite ;
-bloco_par      = "PAR" suite ;
-fork_stmt      = "fork" IDENT [ "em" alocacao ] ":" suite ;
+suite          = ":" NEWLINE INDENT stmt { stmt } DEDENT | "{" { stmt } "}" ;
+fim_stmt       = NEWLINE | ";" ;
+bloco_seq      = ("SEQ" | "seq") suite ;
+bloco_par      = ("PAR" | "par") suite ;
+fork_stmt      = "fork" IDENT [ "em" alocacao ] suite ;
 alocacao       = "core" "(" expr ")"
                | "host" "(" ( STRING | IDENT ) ")" ;
-join_stmt      = "join" IDENT { "," IDENT } NEWLINE ;
+join_stmt      = "join" IDENT { "," IDENT } fim_stmt ;
 
 (* ── Comandos ── *)
 stmt           = bloco_seq | bloco_par | fork_stmt | join_stmt
@@ -112,23 +115,24 @@ stmt           = bloco_seq | bloco_par | fork_stmt | join_stmt
                | return_stmt | break_stmt | continue_stmt
                | simples_stmt ;
 
-if_stmt        = "if" expr ":" suite
-                 { "elif" expr ":" suite }
-                 [ "else" ":" suite ] ;
-while_stmt     = "while" expr ":" suite ;
-for_stmt       = "for" IDENT "in" expr ":" suite ;
-return_stmt    = "return" [ expr ] NEWLINE ;
-break_stmt     = "break" NEWLINE ;
-continue_stmt  = "continue" NEWLINE ;
+if_stmt        = "if" expr suite
+                 { "elif" expr suite }
+                 [ "else" suite ] ;
+while_stmt     = "while" expr suite ;
+for_stmt       = "for" IDENT "in" expr suite ;
+return_stmt    = "return" [ expr ] fim_stmt ;
+break_stmt     = "break" fim_stmt ;
+continue_stmt  = "continue" fim_stmt ;
 
-simples_stmt   = expr [ ":" tipo "=" expr | op_atrib expr ] NEWLINE ;
+simples_stmt   = [ "var" ] IDENT [ ":" tipo ] "=" expr fim_stmt
+               | expr [ ":" tipo "=" expr | op_atrib expr ] fim_stmt ;
 op_atrib       = "=" | "+=" | "-=" | "*=" | "/=" ;
                  (* ver §4: o parser fatora o prefixo comum *)
 
 (* ── Expressões (menor → maior precedência) ── *)
 expr           = expr_or ;
-expr_or        = expr_and  { "or"  expr_and } ;
-expr_and       = expr_not  { "and" expr_not } ;
+expr_or        = expr_and  { ("or" | "||") expr_and } ;
+expr_and       = expr_not  { ("and" | "&&") expr_not } ;
 expr_not       = "not" expr_not | expr_comp ;
 expr_comp      = expr_arit [ op_rel expr_arit ] ;   (* sem encadeamento, decisão 16 *)
 op_rel         = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
@@ -137,7 +141,7 @@ expr_termo     = expr_unario { ( "*" | "/" | "%" ) expr_unario } ;
 expr_unario    = "-" expr_unario | expr_posfixo ;
 expr_posfixo   = primario { "." IDENT [ "(" [ args ] ")" ] | "[" expr "]" } ;
 
-primario       = INT | FLOAT | STRING | "true" | "false" | "self"
+primario       = INT | FLOAT | STRING | "true" | "false" | ("self" | "this")
                | IDENT [ "(" [ args ] ")" ]
                | "new" IDENT "(" [ args ] ")"
                | lista
@@ -165,6 +169,7 @@ x = calculadora.receive()                # forma alternativa, como expressão
 - `a < b < c` é erro sintático (decisão 16).
 - Parâmetros e variáveis não aceitam `void` (decisão 17).
 - A semântica de "argumentos preenchidos" em `receive(a, b, c)` é regra do semântico, não da gramática (§6).
+- `func`, `var`, `this`, `seq`/`par` minúsculos, chaves, `;`, `&&` e `||` são aliases de compatibilidade com os programas OO anteriores; `this` produz o mesmo nó AST que `self`, os operadores lógicos são normalizados para `and`/`or`, e `init` é o nome convencional do construtor.
 
 ---
 
@@ -174,8 +179,8 @@ A gramática é LL(1) com **uma** exceção (fatoração à esquerda em `simples
 
 | Ponto | Lookahead | Como se resolve |
 |-------|-----------|-----------------|
-| `programa`: declaração ou bloco raiz | `c_channel` / `def` / `class` vs `SEQ` / `PAR` | FIRST disjuntos |
-| `membro` | `IDENT` (atributo) vs `def` (método) | FIRST disjuntos |
+| `programa`: declaração ou bloco raiz | `c_channel` / `def` / `func` / `class` vs `SEQ` / `seq` / `PAR` / `par` | FIRST disjuntos |
+| `membro` | `IDENT` / `var` (atributo) vs `def` / `func` (método) | FIRST disjuntos |
 | `stmt` | palavra reservada vs `IDENT`/`self`/`new`/`(`/literal | FIRST dos comandos são palavras reservadas; o resto cai em `simples_stmt` |
 | `if`: `elif` / `else` | `elif`, `else` | Sem *dangling else*: a indentação fecha o bloco (`DEDENT` precede `elif`/`else`) |
 | `fork`: alocação opcional | `em` vs `:` | FIRST disjuntos |

@@ -21,6 +21,8 @@ _TWO_CHAR_OPS = {
     "*=": TokenType.STAR_ASSIGN,
     "/=": TokenType.SLASH_ASSIGN,
     "->": TokenType.ARROW,
+    "&&": TokenType.AND,
+    "||": TokenType.OR,
 }
 
 _ONE_CHAR_OPS = {
@@ -39,16 +41,15 @@ _ONE_CHAR_OPS = {
     ".": TokenType.DOT,
     ",": TokenType.COMMA,
     ":": TokenType.COLON,
+    "{": TokenType.LBRACE,
+    "}": TokenType.RBRACE,
 }
 
-_CLOSERS = {")": "(", "]": "["}
+_CLOSERS = {")": "(", "]": "[", "}": "{"}
 
 # Quem vem do 2026.1 recebe a dica da
 # forma nova em vez de um genérico "caractere inválido".
 _HINTS = {
-    "{": "blocos são delimitados por indentação",
-    "}": "blocos são delimitados por indentação",
-    ";": "instruções terminam em quebra de linha",
     "!": "use 'not' ou '!='",
     "&": "use 'and'",
     "|": "use 'or'",
@@ -260,8 +261,7 @@ class Lexer:
             self._scan_operator()
 
     def _scan_newline(self) -> None:
-        # Dentro de ( ) ou [ ] a quebra de linha é ignorada.
-        if not self._open:
+        if not self._inside_delimited_expression():
             if self._line_has_tokens:
                 self._emit(TokenType.NEWLINE, "", self._line, self._col)
             self._at_line_start = True
@@ -365,7 +365,13 @@ class Lexer:
         if two in _TWO_CHAR_OPS:
             self._advance()
             self._advance()
-            self._emit(_TWO_CHAR_OPS[two], two, line, col)
+            lexeme = {"&&": "and", "||": "or"}.get(two, two)
+            self._emit(_TWO_CHAR_OPS[two], lexeme, line, col)
+        elif ch == ";":
+            self._advance()
+            self._emit(TokenType.NEWLINE, "", line, col)
+            self._line_has_tokens = False
+            return
         elif ch in _ONE_CHAR_OPS:
             self._advance()
             self._emit(_ONE_CHAR_OPS[ch], ch, line, col)
@@ -380,7 +386,7 @@ class Lexer:
         self._line_has_tokens = True
 
     def _track_delimiter(self, ch: str, line: int, col: int) -> None:
-        if ch in ("(", "["):
+        if ch in ("(", "[", "{"):
             self._open.append((ch, line, col))
         elif ch in _CLOSERS:
             if not self._open:
@@ -394,6 +400,9 @@ class Lexer:
                     line,
                     col,
                 )
+
+    def _inside_delimited_expression(self) -> bool:
+        return any(opener in ("(", "[") for opener, _, _ in self._open)
 
     def _finish(self) -> None:
         # Fecha a última linha lógica e todos os blocos ainda abertos, para o

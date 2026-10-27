@@ -33,6 +33,7 @@ class TokenType(Enum):
     NEW = auto()
     SELF = auto()
     DEF = auto()
+    VAR = auto()
     RETURN = auto()
     PRINT = auto()
     INPUT = auto()
@@ -73,6 +74,8 @@ class TokenType(Enum):
     RPAREN = auto()
     LBRACKET = auto()
     RBRACKET = auto()
+    LBRACE = auto()
+    RBRACE = auto()
     DOT = auto()
     COMMA = auto()
     COLON = auto()
@@ -94,7 +97,10 @@ KEYWORDS: dict[str, TokenType] = {
     "extends": TokenType.EXTENDS,
     "new": TokenType.NEW,
     "self": TokenType.SELF,
+    "this": TokenType.SELF,
     "def": TokenType.DEF,
+    "func": TokenType.DEF,
+    "var": TokenType.VAR,
     "return": TokenType.RETURN,
     "print": TokenType.PRINT,
     "input": TokenType.INPUT,
