@@ -109,6 +109,9 @@ alocacao       = "core" "(" expr ")"
                | "host" "(" ( STRING | IDENT ) ")" ;
 join_stmt      = "join" IDENT { "," IDENT } fim_stmt ;
 
+(* Para blocos indentados, suite começa com ":" NEWLINE INDENT.
+   O destino core/host é preservado em ForkStmt.target_kind e target. *)
+
 (* ── Comandos ── *)
 stmt           = bloco_seq | bloco_par | fork_stmt | join_stmt
                | if_stmt | while_stmt | for_stmt
@@ -166,6 +169,8 @@ x = calculadora.receive()                # forma alternativa, como expressão
 
 - `suite` e `decl_classe` exigem pelo menos um elemento (decisão 18).
 - `decl_canal` só no topo (decisão 15).
+- `join` é reconhecido sintaticamente independentemente de existir um `fork`
+  correspondente; essa validação pertence à análise semântica.
 - `a < b < c` é erro sintático (decisão 16).
 - Parâmetros e variáveis não aceitam `void` (decisão 17).
 - A semântica de "argumentos preenchidos" em `receive(a, b, c)` é regra do semântico, não da gramática (§6).
