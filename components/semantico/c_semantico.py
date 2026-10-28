@@ -86,6 +86,7 @@ class SemanticAnalyzer:
         self._current_class: str | None = None
         self._current_return_type: str | None = None
         self._loop_depth = 0
+        self._class_declarations: dict[str, ClassDecl] = {}
 
     def _enter_scope(self) -> None: self._symbol_table.enter_scope()
 
@@ -132,6 +133,19 @@ class SemanticAnalyzer:
     def _class_symbol(self, name: str) -> Symbol | None:
         symbol = self._symbol_table.lookup(name)
         return symbol if symbol is not None and symbol.category == "class" else None
+
+    def _is_subclass(self, candidate: str, expected: str) -> bool:
+        visited: set[str] = set()
+        current = candidate
+        while current not in visited:
+            if current == expected:
+                return True
+            visited.add(current)
+            class_symbol = self._class_symbol(current)
+            if class_symbol is None or class_symbol.parent_class is None:
+                return False
+            current = class_symbol.parent_class
+        return False
 
     def _function_symbol(self, name: str) -> Symbol | None:
         symbol = self._symbol_table.lookup(name)
@@ -271,6 +285,8 @@ class SemanticAnalyzer:
             return True
         if declared == "float" and actual == "int":
             return True
+        if self._class_symbol(declared) and self._class_symbol(actual):
+            return self._is_subclass(actual, declared)
         return declared == actual
 
     @staticmethod
@@ -301,7 +317,7 @@ class SemanticAnalyzer:
 
     def _check_call_arguments(
         self,
-        node: FuncCallExpr | MethodCall,
+        node: FuncCallExpr | MethodCall | NewExpr,
         parameter_types: tuple[str, ...],
         required_params: int,
         name: str,
@@ -366,6 +382,7 @@ class SemanticAnalyzer:
 
     def _collect_declarations(self, program: Program) -> None:
         classes: list[ClassDecl] = []
+        self._class_declarations = {}
         for stmt in program.statements:
             if isinstance(stmt, FuncDecl):
                 self._define_symbol(
@@ -403,6 +420,7 @@ class SemanticAnalyzer:
                     )
                 else:
                     classes.append(stmt)
+                    self._class_declarations[stmt.name] = stmt
 
         for class_decl in classes:
             self._symbol_table.enter_scope(f"class:{class_decl.name}")
@@ -431,6 +449,77 @@ class SemanticAnalyzer:
                     ),
                 )
             self._symbol_table.exit_scope()
+
+        self._check_inheritance_cycles(classes)
+        self._check_method_overrides(classes)
+
+    def _check_inheritance_cycles(self, classes: list[ClassDecl]) -> None:
+        visited: set[str] = set()
+        active: list[str] = []
+
+        def visit(class_name: str) -> None:
+            if class_name in visited:
+                return
+            if class_name in active:
+                cycle_start = active.index(class_name)
+                cycle = active[cycle_start:] + [class_name]
+                declaration = self._class_declarations[class_name]
+                self._report(
+                    declaration.line,
+                    "Heranca circular detectada: " + " -> ".join(cycle) + ".",
+                    declaration.column,
+                )
+                return
+
+            active.append(class_name)
+            declaration = self._class_declarations[class_name]
+            parent = declaration.superclass
+            if parent in self._class_declarations:
+                visit(parent)
+            active.pop()
+            visited.add(class_name)
+
+        for declaration in classes:
+            visit(declaration.name)
+
+    def _check_method_overrides(self, classes: list[ClassDecl]) -> None:
+        for declaration in classes:
+            parent = declaration.superclass
+            if parent is None:
+                continue
+            for method in declaration.methods:
+                inherited = self._symbol_table.lookup_method(parent, method.name)
+                if inherited is None:
+                    continue
+                parameter_types = self._parameter_types(method)
+                required_params = sum(
+                    parameter.default_value is None for parameter in method.params
+                )
+                parameters_match = (
+                    len(parameter_types) == len(inherited.parameter_types)
+                    and required_params == (inherited.required_params or 0)
+                    and all(
+                        declared == inherited_type
+                        or "unknown" in (declared, inherited_type)
+                        or "var" in (declared, inherited_type)
+                        for declared, inherited_type in zip(
+                            parameter_types, inherited.parameter_types
+                        )
+                    )
+                )
+                return_type = method.return_type or "unknown"
+                return_matches = (
+                    return_type == inherited.type
+                    or return_type in ("unknown", "var")
+                    or inherited.type in ("unknown", "var")
+                )
+                if not parameters_match or not return_matches:
+                    self._report(
+                        method.line,
+                        f"Assinatura incompativel ao sobrescrever o metodo "
+                        f"'{method.name}' de '{parent}'.",
+                        method.column,
+                    )
 
     def validate_node(self, node: ASTNode | None) -> None:
         if node is None:
@@ -842,7 +931,8 @@ class SemanticAnalyzer:
                     node.column,
                 )
         elif isinstance(node, NewExpr):
-            if self._class_symbol(node.class_name) is None:
+            class_symbol = self._class_symbol(node.class_name)
+            if class_symbol is None:
                 self._report(
                     node.line,
                     f"Classe '{node.class_name}' nao declarada.",
@@ -850,8 +940,45 @@ class SemanticAnalyzer:
                 )
             for arg in node.arguments:
                 self.validate_node(arg)
+            if class_symbol is not None:
+                declaration = self._class_declarations.get(node.class_name)
+                constructor = (
+                    next(
+                        (
+                            method
+                            for method in declaration.methods
+                            if method.name == "init"
+                        ),
+                        None,
+                    )
+                    if declaration is not None
+                    else None
+                )
+                if constructor is None:
+                    if node.arguments:
+                        self._report(
+                            node.line,
+                            f"Construtor de '{node.class_name}' nao aceita "
+                            f"argumentos; recebeu {len(node.arguments)}.",
+                            node.column,
+                        )
+                else:
+                    self._check_call_arguments(
+                        node,
+                        self._parameter_types(constructor),
+                        sum(
+                            parameter.default_value is None
+                            for parameter in constructor.params
+                        ),
+                        f"{node.class_name}.init",
+                    )
         elif isinstance(node, ThisExpr):
-            pass
+            if self._current_class is None or self._current_function is None:
+                self._report(
+                    node.line,
+                    "'self' so pode ser usado dentro de metodos.",
+                    node.column,
+                )
         elif isinstance(node, InputExpr):
             if node.prompt is not None:
                 self.validate_node(node.prompt)
