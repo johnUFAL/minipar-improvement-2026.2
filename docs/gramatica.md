@@ -242,6 +242,9 @@ Métodos: lista → `append`, `pop`; string → `split`, `strip`; `c_channel` �
 - A primeira atribuição declara uma variável no escopo atual. Atribuições seguintes devem respeitar seu tipo.
 - Condições devem ser booleanas; operadores aritméticos, lógicos e comparações validam os tipos dos operandos.
 - Chamadas a funções e métodos verificam aridade e tipos dos argumentos. Funções com retorno declarado diferente de `void` devem retornar um valor compatível em todos os caminhos.
+- Cada ramo de `PAR` e corpo de `fork` tem escopo próprio e não pode escrever em variáveis declaradas fora dele; atribuições locais continuam permitidas.
+- `send` e `receive` (incluindo as chamadas de compatibilidade como funções) exigem uma variável declarada por `c_channel`. Chamadas no mesmo canal devem manter aridade e tipos compatíveis; `receive()` equivale ao recebimento de um único valor `string`.
+- Cada `join` deve corresponder a um `fork` anterior no mesmo bloco, e todo `fork` deve ser unido antes do fim desse bloco. Os dois computadores de um canal devem ser distintos.
 
 ### 5.4 Construção usada em cada teste → produção
 
