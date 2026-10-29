@@ -9,17 +9,20 @@ from ..sintatico.ast import (
     BoolExpr,
     BreakStmt,
     CChannelExpr,
+    ChannelDecl,
     ClassDecl,
     ContinueStmt,
     DoWhileStmt,
     ForStmt,
     FuncCallExpr,
     FuncDecl,
+    ForkStmt,
     IdentifierExpr,
     IfStmt,
     IndexAssign,
     IndexExpr,
     InputExpr,
+    JoinStmt,
     ListLiteral,
     MatrixCreateExpr,
     MethodCall,
@@ -53,6 +56,10 @@ class TACGenerator:
         self.continue_stack: list[str] = []
         self.variable_types: dict[str, str] = {}
         self.functions: dict[str, FuncDecl] = {}
+        self.classes: dict[str, ClassDecl] = {}
+        self.class_fields: dict[str, dict[str, tuple[int, str, ASTNode | None]]] = {}
+        self.class_methods: dict[str, dict[str, tuple[str, FuncDecl]]] = {}
+        self.current_class: str | None = None
 
     def _temp(self, type_: str | None = None) -> str:
         name = f"t{self.temp_count}"
@@ -80,8 +87,20 @@ class TACGenerator:
             return "bool"
         if isinstance(node, ListLiteral):
             return "list"
+        if isinstance(node, NewExpr):
+            return node.class_name
         if isinstance(node, IdentifierExpr):
             return self.variable_types.get(node.name)
+        if isinstance(node, PropertyAccess):
+            class_name = self._class_of(node.object)
+            field = self._field(class_name, node.property_name)
+            return field[1] if field else None
+        if isinstance(node, MethodCall):
+            class_name = self._class_of(node.object)
+            method = self._method(class_name, node.method_name)
+            if method:
+                declaration = method[1]
+                return declaration.return_type
         if isinstance(node, UnaryExpr):
             return "bool" if node.op in ("!", "not") else self._type_of(node.operand)
         if isinstance(node, BinaryExpr):
@@ -94,12 +113,81 @@ class TACGenerator:
                 return "float"
             if left == right == "int":
                 return "int"
-        if isinstance(node, (FuncCallExpr, MethodCall)):
-            if isinstance(node, FuncCallExpr) and node.name in self.functions:
+        if isinstance(node, FuncCallExpr):
+            if node.name in self.functions:
                 return self.functions[node.name].return_type
         if isinstance(node, InputExpr):
             return "string"
         return None
+
+    def _class_of(self, node: ASTNode | None) -> str | None:
+        if isinstance(node, ThisExpr):
+            return self.current_class
+        if isinstance(node, IdentifierExpr):
+            return self.variable_types.get(node.name)
+        if isinstance(node, NewExpr):
+            return node.class_name
+        if isinstance(node, PropertyAccess):
+            return self._type_of(node)
+        if isinstance(node, (FuncCallExpr, MethodCall)):
+            return self._type_of(node)
+        return None
+
+    def _field(
+        self, class_name: str | None, field_name: str
+    ) -> tuple[int, str, ASTNode | None] | None:
+        if class_name is None:
+            return None
+        return self.class_fields.get(class_name, {}).get(field_name)
+
+    def _method(
+        self, class_name: str | None, method_name: str
+    ) -> tuple[str, FuncDecl] | None:
+        if class_name is None:
+            return None
+        return self.class_methods.get(class_name, {}).get(method_name)
+
+    def _build_class_layouts(self, declarations: list[ClassDecl]) -> None:
+        self.classes = {declaration.name: declaration for declaration in declarations}
+        self.class_fields = {}
+        self.class_methods = {}
+        building: set[str] = set()
+
+        def build(class_name: str) -> None:
+            if class_name in self.class_fields:
+                return
+            if class_name in building:
+                raise ValueError(f"Ciclo de heranca TAC em '{class_name}'")
+            declaration = self.classes[class_name]
+            building.add(class_name)
+            fields: dict[str, tuple[int, str, ASTNode | None]] = {}
+            methods: dict[str, tuple[str, FuncDecl]] = {}
+            if declaration.superclass:
+                if declaration.superclass not in self.classes:
+                    raise ValueError(
+                        f"Classe base TAC nao definida: {declaration.superclass}"
+                    )
+                build(declaration.superclass)
+                fields.update(self.class_fields[declaration.superclass])
+                methods.update(self.class_methods[declaration.superclass])
+            for attribute in declaration.attributes:
+                offset = len(fields)
+                field_type = attribute.type
+                if field_type == "var":
+                    field_type = self._type_of(attribute.init_value) or field_type
+                fields[attribute.name] = (
+                    offset,
+                    field_type,
+                    attribute.init_value,
+                )
+            for method in declaration.methods:
+                methods[method.name] = (class_name, method)
+            self.class_fields[class_name] = fields
+            self.class_methods[class_name] = methods
+            building.remove(class_name)
+
+        for class_name in self.classes:
+            build(class_name)
 
     def _new_temp(self, node: ASTNode | None, expression: str) -> str:
         target = self._temp(self._type_of(node))
@@ -124,7 +212,7 @@ class TACGenerator:
         if isinstance(node, IdentifierExpr):
             return node.name
         if isinstance(node, ThisExpr):
-            return "this"
+            return "self"
         if isinstance(node, UnaryExpr):
             value = self._expr(node.operand)
             operator = "not " if node.op in ("!", "not") else node.op
@@ -149,36 +237,121 @@ class TACGenerator:
             array, index = self._expr(node.object), self._expr(node.index)
             return self._new_temp(node, f"{array}[{index}]")
         if isinstance(node, PropertyAccess):
-            return self._new_temp(
-                node, f"{self._expr(node.object)}.{node.property_name}"
-            )
-        if isinstance(node, FuncCallExpr):
-            function = self.functions.get(node.name)
-            arguments: list[ASTNode | None] = list(node.arguments)
-            if function:
-                arguments.extend(
-                    parameter.default_value
-                    for parameter in function.params[len(arguments):]
+            class_name = self._class_of(node.object)
+            field = self._field(class_name, node.property_name)
+            if field is None:
+                raise ValueError(
+                    f"Campo TAC nao definido: {class_name}.{node.property_name}"
                 )
-            for argument in arguments:
+            target = self._temp(self._type_of(node))
+            self._emit(
+                f"{target} = getfield {self._expr(node.object)}, {field[0]}"
+            )
+            return target.split(":", 1)[0]
+        if isinstance(node, FuncCallExpr):
+            if node.name == "receive":
+                if len(node.arguments) != 1:
+                    raise ValueError("receive TAC espera exatamente um canal")
+                target = self._temp(self._type_of(node))
+                self._emit(f"{target} = recv {self._expr(node.arguments[0])}")
+                return target.split(":", 1)[0]
+            if node.name == "send":
+                if len(node.arguments) != 2:
+                    raise ValueError("send TAC espera canal e mensagem")
+                self._emit(
+                    f"send {self._expr(node.arguments[0])}, "
+                    f"{self._expr(node.arguments[1])}"
+                )
+                return "0"
+            if node.name == "to_number":
+                if len(node.arguments) != 1:
+                    raise ValueError("to_number TAC espera exatamente um argumento")
+                return self._new_temp(
+                    node, f"to_number({self._expr(node.arguments[0])})"
+                )
+            function = self.functions.get(node.name)
+            function_arguments: list[ASTNode | None] = list(node.arguments)
+            if function:
+                function_arguments.extend(
+                    parameter.default_value
+                    for parameter in function.params[len(function_arguments):]
+                )
+            for argument in function_arguments:
                 self._emit(f"param {self._expr(argument)}")
             return self._new_temp(
-                node, f"call {node.name}, {len(arguments)}"
+                node, f"call {node.name}, {len(function_arguments)}"
             )
         if isinstance(node, MethodCall):
-            for argument in node.arguments:
+            if node.method_name in ("send", "receive"):
+                receiver = self._expr(node.object)
+                if node.method_name == "send":
+                    for argument in node.arguments:
+                        self._emit(f"send {receiver}, {self._expr(argument)}")
+                    return "0"
+                target = self._temp(self._type_of(node))
+                self._emit(f"{target} = recv {receiver}")
+                return target.split(":", 1)[0]
+            class_name = self._class_of(node.object)
+            method = self._method(class_name, node.method_name)
+            if method is None:
+                raise ValueError(
+                    f"Metodo TAC nao definido: {class_name}.{node.method_name}"
+                )
+            owner, declaration = method
+            receiver = self._expr(node.object)
+            method_arguments: list[ASTNode | None] = list(node.arguments)
+            method_arguments.extend(
+                parameter.default_value
+                for parameter in declaration.params[len(method_arguments):]
+            )
+            self._emit(f"param {receiver}")
+            for argument in method_arguments:
                 self._emit(f"param {self._expr(argument)}")
-            target = f"{self._expr(node.object)}.{node.method_name}"
-            return self._new_temp(node, f"call {target}, {len(node.arguments)}")
+            return self._new_temp(
+                node,
+                f"call {owner}_{node.method_name}, {len(method_arguments) + 1}",
+            )
         if isinstance(node, NewExpr):
-            args = ", ".join(self._expr(arg) for arg in node.arguments)
-            return self._new_temp(node, f"new {node.class_name}({args})")
+            if node.class_name not in self.class_fields:
+                raise ValueError(f"Classe TAC nao definida: {node.class_name}")
+            object_name = self._temp(node.class_name)
+            self._emit(f"{object_name} = alloc {len(self.class_fields[node.class_name])}")
+            object_value = object_name.split(":", 1)[0]
+            for _, (offset, _, default_value) in enumerate(
+                self.class_fields[node.class_name].values()
+            ):
+                if default_value is not None:
+                    self._emit(
+                        f"setfield {object_value}, {offset}, "
+                        f"{self._expr(default_value)}"
+                    )
+            initializer = self._method(node.class_name, "init")
+            if initializer is not None:
+                owner, declaration = initializer
+                constructor_arguments: list[ASTNode | None] = list(node.arguments)
+                constructor_arguments.extend(
+                    parameter.default_value
+                    for parameter in declaration.params[len(constructor_arguments):]
+                )
+                self._emit(f"param {object_value}")
+                for argument in constructor_arguments:
+                    self._emit(f"param {self._expr(argument)}")
+                self._emit(
+                    f"call {owner}_init, {len(constructor_arguments) + 1}"
+                )
+            elif node.arguments:
+                raise ValueError(
+                    f"Construtor TAC de '{node.class_name}' nao aceita argumentos"
+                )
+            return object_value
         if isinstance(node, CChannelExpr):
             return self._new_temp(
                 node, f"c_channel({self._expr(node.ip)}, {self._expr(node.port)})"
             )
         if isinstance(node, ReceiveExpr):
-            return self._new_temp(node, f"receive {self._expr(node.channel)}")
+            target = self._temp(self._type_of(node))
+            self._emit(f"{target} = recv {self._expr(node.channel)}")
+            return target.split(":", 1)[0]
         if isinstance(node, InputExpr):
             prompt = self._expr(node.prompt) if node.prompt else ""
             return self._new_temp(node, f"input({prompt})")
@@ -213,6 +386,31 @@ class TACGenerator:
         if inferred:
             self.variable_types[name] = inferred
 
+    def _emit_function(
+        self,
+        declaration: FuncDecl,
+        name: str,
+        class_name: str | None = None,
+    ) -> None:
+        parameters = (["self"] if class_name else []) + [
+            parameter.name for parameter in declaration.params
+        ]
+        self._emit(f"func {name}({', '.join(parameters)}):")
+        previous_types = self.variable_types
+        previous_class = self.current_class
+        self.variable_types = {
+            parameter.name: parameter.type
+            for parameter in declaration.params
+            if parameter.type != "var"
+        }
+        if class_name:
+            self.variable_types["self"] = class_name
+        self.current_class = class_name
+        self._stmt(declaration.body)
+        self._emit("endfunc")
+        self.variable_types = previous_types
+        self.current_class = previous_class
+
     def _stmt(self, node: ASTNode | None) -> None:
         if node is None:
             return
@@ -223,8 +421,14 @@ class TACGenerator:
             self._assign_type(node.name, node.value)
             self._emit(f"{node.name} = {self._expr(node.value)}")
         elif isinstance(node, PropertyAssign):
+            class_name = self._class_of(node.object)
+            field = self._field(class_name, node.property_name)
+            if field is None:
+                raise ValueError(
+                    f"Campo TAC nao definido: {class_name}.{node.property_name}"
+                )
             self._emit(
-                f"{self._expr(node.object)}.{node.property_name} = "
+                f"setfield {self._expr(node.object)}, {field[0]}, "
                 f"{self._expr(node.value)}"
             )
         elif isinstance(node, IndexAssign):
@@ -239,7 +443,51 @@ class TACGenerator:
                 self._emit(f"print {self._expr(argument)}")
         elif isinstance(node, SendStmt):
             self._emit(f"send {self._expr(node.channel)}, {self._expr(node.message)}")
-        elif isinstance(node, (SeqBlock, ParBlock)):
+        elif isinstance(node, ChannelDecl):
+            self._emit(
+                f"{node.name} = c_channel({node.first_host!r}, "
+                f"{node.second_host!r})"
+            )
+        elif isinstance(node, ParBlock):
+            parallel_id = self._label("PAR")
+            end = self._label("PAREND")
+            task_names = [
+                f"__{parallel_id}_branch_{index}"
+                for index in range(len(node.statements))
+            ]
+            branch_labels = [
+                self._label(f"{parallel_id}_BRANCH")
+                for _ in node.statements
+            ]
+            self._emit(f"par_begin {len(node.statements)}")
+            for task_name, branch_label in zip(task_names, branch_labels):
+                self._emit(f"fork {task_name}, simulated, 0, {branch_label}")
+            self._emit(f"join {', '.join(task_names)}")
+            self._emit(f"goto {end}")
+            for statement, task_name, branch_label in zip(
+                node.statements, task_names, branch_labels
+            ):
+                self._emit(f"{branch_label}:")
+                self._stmt(statement)
+                self._emit(f"join {task_name}")
+            self._emit(f"{end}:")
+            self._emit("par_end")
+        elif isinstance(node, ForkStmt):
+            branch_label = self._label("FORK")
+            end = self._label("ENDFORK")
+            target = self._expr(node.target) if node.target else "0"
+            target_kind = node.target_kind or "core"
+            self._emit(
+                f"fork {node.task_name}, {target_kind}, {target}, {branch_label}"
+            )
+            self._emit(f"goto {end}")
+            self._emit(f"{branch_label}:")
+            self._stmt(node.body)
+            self._emit(f"join {node.task_name}")
+            self._emit(f"{end}:")
+        elif isinstance(node, JoinStmt):
+            self._emit(f"join {', '.join(node.task_names)}")
+        elif isinstance(node, SeqBlock):
             for statement in node.statements:
                 self._stmt(statement)
         elif isinstance(node, IfStmt):
@@ -336,16 +584,11 @@ class TACGenerator:
             self._expr(node)
         elif isinstance(node, ClassDecl):
             for method in node.methods:
-                self._stmt(method)
+                self._emit_function(
+                    method, f"{node.name}_{method.name}", node.name
+                )
         elif isinstance(node, FuncDecl):
-            self._emit(
-                f"func {node.name}({', '.join(p.name for p in node.params)}):"
-            )
-            old_types = self.variable_types
-            self.variable_types = {p.name: p.type for p in node.params if p.type != "var"}
-            self._stmt(node.body)
-            self._emit("endfunc")
-            self.variable_types = old_types
+            self._emit_function(node, node.name)
         else:
             raise NotImplementedError(
                 f"Instrucao sem lowering TAC: {type(node).__name__}"
@@ -363,13 +606,18 @@ class TACGenerator:
             for statement in program.statements
             if isinstance(statement, FuncDecl)
         }
+        class_declarations = [
+            statement for statement in program.statements
+            if isinstance(statement, ClassDecl)
+        ]
+        self._build_class_layouts(class_declarations)
         functions = [
             statement for statement in program.statements
-            if isinstance(statement, FuncDecl)
+            if isinstance(statement, (FuncDecl, ClassDecl))
         ]
         main_statements = [
             statement for statement in program.statements
-            if not isinstance(statement, FuncDecl)
+            if not isinstance(statement, (FuncDecl, ClassDecl))
         ]
         if functions:
             self._emit("goto MAIN")

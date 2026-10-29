@@ -85,10 +85,16 @@ pytest
 3. Geração de TAC: `components/tac/`.
 4. Geração C++ e compilação/linkedição via `g++`: `components/codegen/` e `runtime/`.
 
-O fluxo principal executa o binário C++ gerado; o TAC também pode ser executado
-diretamente para expressões, desvios, atribuições simples e `print`. O executor TAC
-não cobre ainda chamadas de função, canais, atribuições indexadas ou todos os
-recursos da linguagem.
+O fluxo principal executa o binário C++ gerado. O TAC também pode ser executado
+diretamente para funções, classes (incluindo herança), atribuições indexadas,
+`PAR`/`FORK`/`JOIN` e canais. Na execução simulada de TAC, os ramos são
+intercalados sequencialmente e os canais usam filas FIFO em memória; essa
+simulação não representa paralelismo real nem comunicação entre máquinas.
+
+O lowering de objetos usa `alloc`, `getfield` e `setfield`; chamadas de método
+viram funções com o objeto como primeiro argumento. Blocos paralelos delimitam
+ramos com `par_begin`/`par_end`, enquanto `send`/`recv` representam operações
+de canal no TAC.
 
 ## Sintaxe MiniPar
 
