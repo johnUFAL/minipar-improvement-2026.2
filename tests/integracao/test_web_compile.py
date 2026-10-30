@@ -110,6 +110,46 @@ class WebCompileTests(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertIn("Binário esperado não foi criado", result["stderr"])
 
+    @patch("interfaces.web.api.subprocess.run")
+    def test_web_returns_original_and_optimized_tac_when_requested(self, run):
+        run.return_value = CompletedProcess(
+            args=[], returncode=1, stdout="", stderr="compilation failed"
+        )
+        tac_path = Path(api.OUTPUT_DIR) / "comparison.tac"
+        tac_path.write_text(
+            "t0 = 2 + 3\nt1 = t0\nprint t1\n", encoding="utf-8"
+        )
+
+        response = self.client.post(
+            "/api/compile",
+            json={
+                "code": "print(5);",
+                "filename": "comparison.mp",
+                "optimize_tac": True,
+            },
+        )
+
+        result = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(result["tac"], "t0 = 2 + 3\nt1 = t0\nprint t1\n")
+        self.assertEqual(result["tac_optimized"], "print 5\n")
+        self.assertEqual(
+            result["tac_instruction_counts"], {"original": 3, "optimized": 1}
+        )
+
+    def test_web_rejects_non_boolean_tac_optimization_flag(self):
+        response = self.client.post(
+            "/api/compile",
+            json={
+                "code": "print(5);",
+                "filename": "comparison.mp",
+                "optimize_tac": "yes",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("optimize_tac", response.get_json()["error"])
+
 
 if __name__ == "__main__":
     unittest.main()

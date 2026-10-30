@@ -98,6 +98,17 @@ body {
     gap: 10px;
 }
 
+.optimize-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-main);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.optimize-toggle input { accent-color: var(--accent); }
+
 .actions .btn {
     padding: 6px 14px;
     border: none;
@@ -160,6 +171,24 @@ body {
 
 .tab-content { display: none; flex: 1; overflow: hidden; min-height: 0; }
 .tab-content.active { display: flex; }
+
+.tac-comparison { flex-direction: row; }
+.tac-comparison-pane {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+}
+.tac-comparison-pane:last-child { border-right: 0; }
+.tac-comparison-pane .pane-header {
+    justify-content: space-between;
+}
+#tac-original-count, #tac-optimized-count {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+}
 
 /* ── CodeMirror ── */
 .CodeMirror {

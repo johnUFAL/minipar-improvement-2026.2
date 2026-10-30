@@ -8,6 +8,7 @@ from flask import Flask, jsonify, render_template, request
 from components.lexico.c_lexico import Lexer
 from components.semantico.c_semantico import SemanticAnalyzer
 from components.sintatico.c_sintatico import Parser
+from components.tac import TACOptimizer
 from erros.diagnosticos import DiagnosticBag
 
 from ..program_analyzer import get_program_spec
@@ -162,6 +163,7 @@ def compile_code():
     code = data.get('code')
     filename = data.get('filename', 'ide_temp.mp')
     user_inputs = data.get('inputs', [])
+    optimize_tac = data.get('optimize_tac', False)
 
     if not isinstance(code, str) or not isinstance(filename, str):
         return jsonify({
@@ -170,6 +172,10 @@ def compile_code():
     if not isinstance(user_inputs, list):
         return jsonify({
             "error": "O campo 'inputs' deve ser uma lista.", "success": False
+        }), 400
+    if not isinstance(optimize_tac, bool):
+        return jsonify({
+            "error": "O campo 'optimize_tac' deve ser booleano.", "success": False
         }), 400
     if os.path.basename(filename) != filename:
         return jsonify({"error": "Nome de arquivo inválido.", "success": False}), 400
@@ -257,12 +263,18 @@ def compile_code():
         if os.path.exists(tac_file):
             with open(tac_file, 'r', encoding='utf-8') as f:
                 tac_code = f.read()
+        optimized_tac = TACOptimizer().optimize(tac_code) if optimize_tac else ""
 
         return jsonify({
             "stdout": full_output if success else "",
             "stderr": full_output if not success else "",
             "cpp": cpp_code,
             "tac": tac_code,
+            "tac_optimized": optimized_tac,
+            "tac_instruction_counts": {
+                "original": TACOptimizer.instruction_count(tac_code),
+                "optimized": TACOptimizer.instruction_count(optimized_tac),
+            } if optimize_tac else None,
             "success": success
         })
 
