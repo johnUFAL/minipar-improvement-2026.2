@@ -23,6 +23,10 @@
                     <span id="current-file">ide_temp.minipar</span>
                 </div>
                 <div class="actions">
+                    <label class="optimize-toggle">
+                        <input id="toggle-optimize-tac" type="checkbox">
+                        Otimizar TAC
+                    </label>
                     <button id="btn-run" class="btn primary">▶ Compile &amp; Run</button>
                     <button id="btn-clear" class="btn secondary">Clear</button>
                 </div>
@@ -38,12 +42,23 @@
                     <div class="pane-tabs">
                         <button class="tab active" data-target="out-cpp">C++ Output</button>
                         <button class="tab" data-target="out-tac">TAC Output</button>
+                        <button class="tab" data-target="out-tac-comparison">Comparação TAC</button>
                     </div>
                     <div class="tab-content active" id="out-cpp">
                         <textarea id="editor-cpp"></textarea>
                     </div>
                     <div class="tab-content" id="out-tac">
                         <textarea id="editor-tac"></textarea>
+                    </div>
+                    <div class="tab-content tac-comparison" id="out-tac-comparison">
+                        <div class="tac-comparison-pane">
+                            <div class="pane-header">Original <span id="tac-original-count"></span></div>
+                            <textarea id="editor-tac-original"></textarea>
+                        </div>
+                        <div class="tac-comparison-pane">
+                            <div class="pane-header">Otimizado <span id="tac-optimized-count"></span></div>
+                            <textarea id="editor-tac-optimized"></textarea>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -20,11 +20,21 @@ document.addEventListener("DOMContentLoaded", () => {
         readOnly: true
     });
 
+    const editorTacOriginal = CodeMirror.fromTextArea(
+        document.getElementById("editor-tac-original"),
+        { mode: "clike", theme: "dracula", lineNumbers: true, readOnly: true }
+    );
+    const editorTacOptimized = CodeMirror.fromTextArea(
+        document.getElementById("editor-tac-optimized"),
+        { mode: "clike", theme: "dracula", lineNumbers: true, readOnly: true }
+    );
+
     const testList         = document.getElementById("test-list");
     const currentFileLabel = document.getElementById("current-file");
     const terminalOutput   = document.getElementById("terminal-output");
     const btnRun           = document.getElementById("btn-run");
     const btnClear         = document.getElementById("btn-clear");
+    const optimizeTacToggle = document.getElementById("toggle-optimize-tac");
     const tabs             = document.querySelectorAll(".tab");
 
     let currentTestSpec = null;
@@ -115,7 +125,15 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById(tab.dataset.target).classList.add("active");
             editorCpp.refresh();
             editorTac.refresh();
+            editorTacOriginal.refresh();
+            editorTacOptimized.refresh();
         });
+    });
+
+    optimizeTacToggle.addEventListener("change", () => {
+        const target = optimizeTacToggle.checked ? "out-tac-comparison" : "out-tac";
+        const tab = document.querySelector(`.tab[data-target="${target}"]`);
+        if (tab) tab.click();
     });
 
     // Verifica sessão multi-terminal ativa ao carregar a IDE
@@ -205,6 +223,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 editorMinipar.setValue(data.code);
                 editorCpp.setValue("");
                 editorTac.setValue("");
+                editorTacOriginal.setValue("");
+                editorTacOptimized.setValue("");
+                document.getElementById("tac-original-count").textContent = "";
+                document.getElementById("tac-optimized-count").textContent = "";
 
                 let info = "Arquivo carregado. Clique em 'Compile & Run'.";
                 if (spec) {
@@ -303,14 +325,35 @@ document.addEventListener("DOMContentLoaded", () => {
             const res = await fetch("/api/compile", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ code, filename, inputs })
+                body: JSON.stringify({
+                    code,
+                    filename,
+                    inputs,
+                    optimize_tac: optimizeTacToggle.checked
+                })
             });
             const data = await res.json();
 
-            if (data.cpp) editorCpp.setValue(data.cpp);
-            if (data.tac) editorTac.setValue(data.tac);
+            editorCpp.setValue(data.cpp || "");
+            editorTac.setValue(data.tac || "");
+            editorTacOriginal.setValue(data.tac || "");
+            editorTacOptimized.setValue(data.tac_optimized || "");
+            if (data.tac_instruction_counts) {
+                document.getElementById("tac-original-count").textContent =
+                    `${data.tac_instruction_counts.original} instruções`;
+                document.getElementById("tac-optimized-count").textContent =
+                    `${data.tac_instruction_counts.optimized} instruções`;
+            } else {
+                document.getElementById("tac-original-count").textContent = "";
+                document.getElementById("tac-optimized-count").textContent = "";
+            }
 
-            setTimeout(() => { editorCpp.refresh(); editorTac.refresh(); }, 50);
+            setTimeout(() => {
+                editorCpp.refresh();
+                editorTac.refresh();
+                editorTacOriginal.refresh();
+                editorTacOptimized.refresh();
+            }, 50);
 
             if (data.success) {
                 terminalOutput.textContent = data.stdout || "Compilação concluída com sucesso!";
@@ -361,6 +404,10 @@ document.addEventListener("DOMContentLoaded", () => {
         editorMinipar.setValue("");
         editorCpp.setValue("");
         editorTac.setValue("");
+        editorTacOriginal.setValue("");
+        editorTacOptimized.setValue("");
+        document.getElementById("tac-original-count").textContent = "";
+        document.getElementById("tac-optimized-count").textContent = "";
         currentFileLabel.textContent = "ide_temp.minipar";
         currentTestSpec = null;
         document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));

@@ -27,7 +27,7 @@ components/
   sintatico/       c_sintatico.py, ast.py, visitor.py
   semantico/       c_semantico.py
   tabela_simbolos/ c_tabela_simbolos.py
-  tac/             c_gerador_tac.py
+  tac/             c_gerador_tac.py, executor_tac.py, otimizador_tac.py
   codegen/         c_gerador_cpp.py, driver_gcc.py
   controle/        c_controle.py
 erros/             diagnosticos.py
@@ -52,7 +52,7 @@ de iniciar o compilador MiniPar.
 Instale as dependências com:
 
 ```bash
-pip install -e ".[dev]"
+uv sync --extra dev
 ```
 
 ## Uso
@@ -70,19 +70,28 @@ python main.py programas_teste/t03_neuronio.mp
 ```
 
 O compilador grava os arquivos `.tac`, `.cpp` e o executável em `output/`. No menu, a opção web inicia a IDE em `http://127.0.0.1:5000`.
+Na IDE web, marque **Otimizar TAC** para comparar o TAC original e o otimizado
+lado a lado. Essa opção afeta apenas a visualização didática do TAC; a geração
+e execução do binário C++ permanecem inalteradas.
 
 Para executar os testes unitários:
 
 ```bash
-pytest
+uv run pytest -v
 ```
 *(O pytest executa os TestCase existentes, então nada precisa ser reescrito.)*
+
+Para verificar os tipos:
+
+```bash
+uv run mypy
+```
 
 ## Fases
 
 1. Análise léxica e sintática: `components/lexico/` e `components/sintatico/`.
 2. Análise semântica e tabela de símbolos: `components/semantico/` e `components/tabela_simbolos/`.
-3. Geração de TAC: `components/tac/`.
+3. Geração e otimização opcional de TAC: `components/tac/`.
 4. Geração C++ e compilação/linkedição via `g++`: `components/codegen/` e `runtime/`.
 
 O fluxo principal executa o binário C++ gerado. O TAC também pode ser executado
