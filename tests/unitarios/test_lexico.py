@@ -174,6 +174,20 @@ class OperatorAndKeywordTests(unittest.TestCase):
              T.LBRACKET, T.RBRACKET, T.DOT, T.COMMA, T.COLON],
         )
 
+    def test_logical_operator_aliases_are_normalized(self):
+        tokens, bag = lex("true && false || true\n")
+        self.assertFalse(bag.has_errors)
+        self.assertEqual(
+            [(token.type, token.lexeme) for token in tokens[:5]],
+            [
+                (T.BOOL_LITERAL, "true"),
+                (T.AND, "and"),
+                (T.BOOL_LITERAL, "false"),
+                (T.OR, "or"),
+                (T.BOOL_LITERAL, "true"),
+            ],
+        )
+
     def test_keywords(self):
         src = ("SEQ PAR fork join em core host c_channel class extends new self "
                "def return print input if elif else while for in break continue "
@@ -198,11 +212,28 @@ class ErrorRecoveryTests(unittest.TestCase):
         self.assertEqual([t.lexeme for t in tokens if t.type is T.IDENTIFIER], ["a", "b", "c"])
         self.assertEqual(sum(t.type is T.UNKNOWN for t in tokens), 2)
 
-    def test_hints_for_2026_1_syntax(self):
-        for ch, hint in [("{", "indentação"), (";", "quebra de linha"),
-                         ("!", "not"), ("&", "and"), ("|", "or")]:
+    def test_hints_for_unsupported_operators(self):
+        for ch, hint in [("!", "not"), ("&", "and"), ("|", "or")]:
             with self.subTest(ch=ch):
                 self.assertIn(hint, errors(f"a {ch} b\n")[0])
+
+    def test_brace_blocks_and_semicolon_statement_terminators(self):
+        tokens, bag = lex("seq { x = 1; }\n")
+        self.assertFalse(bag.has_errors)
+        self.assertEqual(
+            [token.type for token in tokens],
+            [
+                T.IDENTIFIER,
+                T.LBRACE,
+                T.IDENTIFIER,
+                T.ASSIGN,
+                T.INT_LITERAL,
+                T.NEWLINE,
+                T.RBRACE,
+                T.NEWLINE,
+                T.END_OF_FILE,
+            ],
+        )
 
     def test_accented_identifier_is_rejected(self):
         self.assertEqual(len(errors("ação = 1\n")), 1)
