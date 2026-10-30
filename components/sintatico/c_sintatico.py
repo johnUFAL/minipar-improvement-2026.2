@@ -13,6 +13,7 @@ from .ast import (
     BinaryExpr,
     BoolExpr,
     BreakStmt,
+    CChannelExpr,
     ChannelDecl,
     ClassDecl,
     ContinueStmt,
@@ -760,6 +761,22 @@ class Parser:
 
     def _primary(self) -> ASTNode:
         token = self._peek()
+        if self._match(TokenType.C_CHANNEL):
+            arguments = self._arguments_in_parens()
+            if len(arguments) != 2:
+                self._diagnostics.error(
+                    Phase.SYNTAX,
+                    "c_channel espera endereco e porta",
+                    token.line,
+                    token.column,
+                )
+                raise _ParseError
+            return CChannelExpr(
+                ip=arguments[0],
+                port=arguments[1],
+                line=token.line,
+                column=token.column,
+            )
         if self._match(TokenType.INT_LITERAL, TokenType.FLOAT_LITERAL):
             return NumberExpr(
                 value=token.lexeme, line=token.line, column=token.column
