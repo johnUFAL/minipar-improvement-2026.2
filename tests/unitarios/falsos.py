@@ -95,8 +95,9 @@ class FakeSemanticAnalyzer(ISemantico):
         self._symbol_table = symbol_table
         self.verified_nodes = 0
 
-    def verify(self, node: ASTNode) -> None:
-        self.verified_nodes += 1
+    def analyze(self, program: Program) -> bool:
+        self.verified_nodes += len(program.statements)
+        return True
 
     @property
     def diagnostics(self) -> Sequence[Diagnostic]:
@@ -104,13 +105,19 @@ class FakeSemanticAnalyzer(ISemantico):
 
 
 class FakeParser(ISintatico):
-    def parse(self, lexer: ILexico, semantic_analyzer: ISemantico) -> Program:
+    def parse(
+        self,
+        lexer: ILexico | None = None,
+        semantic_analyzer: ISemantico | None = None,
+    ) -> Program:
+        if lexer is None or semantic_analyzer is None:
+            raise ValueError("FakeParser requer léxico e analisador semântico")
         statements: list[ASTNode] = []
         while lexer.next_token().type is not TokenType.END_OF_FILE:
-            node = ASTNode()
-            semantic_analyzer.verify(node)
-            statements.append(node)
-        return Program(statements=tuple(statements))
+            statements.append(ASTNode())
+        program = Program(statements=tuple(statements))
+        semantic_analyzer.analyze(program)
+        return program
 
 
 class FakeTACGenerator(IGeradorTAC):

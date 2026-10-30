@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal, Protocol, overload
+from typing import TYPE_CHECKING, Literal, Protocol, overload
 
 from erros.diagnosticos import Diagnostic, DiagnosticBag, Phase
 
@@ -45,6 +45,9 @@ from .ast import (
     ForkStmt,
     JoinStmt,
 )
+
+if TYPE_CHECKING:
+    from ..interfaces import ISemantico
 
 
 class _TokenSource(Protocol):
@@ -751,7 +754,7 @@ class Parser:
     def parse(
         self,
         lexer: _TokenSource | None = None,
-        semantic_analyzer: object | None = None,
+        semantic_analyzer: ISemantico | None = None,
     ) -> Program:
         if lexer is not None:
             self._lexer = lexer
@@ -787,4 +790,7 @@ class Parser:
         while self._match(TokenType.NEWLINE):
             pass
         self._consume(TokenType.END_OF_FILE, "Conteúdo após o bloco raiz")
-        return Program(statements=tuple(statements))
+        program = Program(statements=tuple(statements))
+        if semantic_analyzer is not None and not self._diagnostics.has_errors:
+            semantic_analyzer.analyze(program)
+        return program
