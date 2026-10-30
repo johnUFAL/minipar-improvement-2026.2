@@ -63,7 +63,13 @@ class CppCodeGenerator:
         if isinstance(node, IdentifierExpr): return node.name
         if isinstance(node, UnaryExpr): return f"({node.op}{self._translate_expression(node.operand)})"
         if isinstance(node, BinaryExpr):
-            return f"({self._translate_expression(node.left)} {node.op} {self._translate_expression(node.right)})"
+            left = self._translate_expression(node.left)
+            right = self._translate_expression(node.right)
+            if node.op == "+" and node.tipo_inferido == "string":
+                return f"__minipar_concat({left}, {right})"
+            if node.op == "/":
+                return f"__minipar_divide({left}, {right})"
+            return f"({left} {node.op} {right})"
         
         if isinstance(node, NewExpr):
             args = ", ".join(self._translate_expression(a) for a in node.arguments)
@@ -87,12 +93,30 @@ class CppCodeGenerator:
                 return f"std::exp({args})"
             if node.name == "random":
                 return "random_val()"
+            if node.name == "random_uniforme":
+                return f"random_uniforme({args})"
+            if node.name in ("agora", "clock"):
+                return "agora()"
             if node.name == "len":
-                return f"{self._translate_expression(node.arguments[0])}.size()"
+                return f"__minipar_len({args})"
+            if node.name == "sum":
+                return f"__minipar_sum({args})"
+            if node.name == "max":
+                return f"__minipar_max({args})"
             if node.name == "range":
                 return f"__minipar_range({args})"
             if node.name == "to_number":
-                return f"std::stod({args})"
+                return f"__minipar_to_float({args})"
+            if node.name == "int":
+                return f"__minipar_to_int({args})"
+            if node.name == "float":
+                return f"__minipar_to_float({args})"
+            if node.name == "str":
+                return f"__to_string({args})"
+            if node.name == "println":
+                return f"minipar_println({args})"
+            if node.name == "format_float":
+                return f"__minipar_format_float({args})"
             if node.name == "parse_ints":
                 return f"__parse_ints({args})"
             return f"{node.name}({args})"
@@ -119,7 +143,7 @@ class CppCodeGenerator:
         if isinstance(node, IndexExpr):
             obj = self._translate_expression(node.object)
             idx = self._translate_expression(node.index)
-            return f"{obj}[{idx}]"
+            return f"__minipar_array_at({obj}, {idx})"
 
         return "0"
 
@@ -192,12 +216,8 @@ class CppCodeGenerator:
             return f"{indent}{chan}->sendData(__to_string({msg}));\n"
 
         if isinstance(node, PrintStmt):
-            parts = []
-            for i, arg in enumerate(node.arguments):
-                if i > 0:
-                    parts.append(' << " "')
-                parts.append(f" << {self._translate_expression(arg)}")
-            return f"{indent}std::cout{ ''.join(parts) } << std::endl;\n"
+            args = ", ".join(self._translate_expression(arg) for arg in node.arguments)
+            return f"{indent}minipar_print({args});\n"
         
         if isinstance(node, SeqBlock):
             lines = [f"{indent}{{\n"]
@@ -289,13 +309,28 @@ class CppCodeGenerator:
                 else: cpp_code += self._translate_statement(node.body, "    ")
                 cpp_code += "}\n\n"
 
-        cpp_code += "int main() {\n    #ifdef _WIN32\n        WSADATA wsa;\n        WSAStartup(MAKEWORD(2,2), &wsa);\n    #endif\n\n"
+        cpp_code += (
+            "int main() {\n"
+            "    minipar_init_console();\n"
+            "    #ifdef _WIN32\n"
+            "    WSADATA wsa;\n"
+            "    WSAStartup(MAKEWORD(2,2), &wsa);\n"
+            "    #endif\n"
+            "    try {\n"
+        )
         for node in program.statements:
             if not isinstance(node, (ClassDecl, FuncDecl)):
                 if isinstance(node, SeqBlock):
-                    for stmt in node.statements: cpp_code += self._translate_statement(stmt, "    ")
-                else: cpp_code += self._translate_statement(node, "    ")
-        cpp_code += "\n    return 0;\n}\n"
+                    for stmt in node.statements: cpp_code += self._translate_statement(stmt, "        ")
+                else: cpp_code += self._translate_statement(node, "        ")
+        cpp_code += (
+            "    } catch (const std::exception& error) {\n"
+            "        std::cerr << \"Erro de execucao: \" << error.what() << std::endl;\n"
+            "        return 1;\n"
+            "    }\n"
+            "    return 0;\n"
+            "}\n"
+        )
 
         output_dir = Path(__file__).resolve().parents[2] / "output"
         output_dir.mkdir(parents=True, exist_ok=True)

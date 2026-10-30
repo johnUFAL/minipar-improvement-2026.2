@@ -15,6 +15,7 @@ from components.sintatico.ast import (
     IndexAssign,
     IndexExpr,
     NumberExpr,
+    PrintStmt,
     Program,
     SeqBlock,
     UnaryExpr,
@@ -44,6 +45,24 @@ class RecordingSemanticAnalyzer(ISemantico):
 
 
 class ExpressionParserTests(unittest.TestCase):
+    def test_numeric_type_conversions_parse_as_builtin_calls(self) -> None:
+        program, diagnostics = parse(
+            'SEQ\n'
+            '    print(int("42"))\n'
+            '    print(float("1.5"))\n'
+        )
+
+        self.assertFalse(diagnostics.has_errors, diagnostics.format_text())
+        root = program.statements[0]
+        assert isinstance(root, SeqBlock)
+        integer_print, float_print = root.statements
+        assert isinstance(integer_print, PrintStmt)
+        assert isinstance(float_print, PrintStmt)
+        assert isinstance(integer_print.arguments[0], FuncCallExpr)
+        assert isinstance(float_print.arguments[0], FuncCallExpr)
+        self.assertEqual(integer_print.arguments[0].name, "int")
+        self.assertEqual(float_print.arguments[0].name, "float")
+
     def test_multiplication_has_higher_precedence_than_addition(self) -> None:
         program, diagnostics = parse("SEQ\n    result = 2 + 3 * 4\n")
 

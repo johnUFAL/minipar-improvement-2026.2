@@ -317,7 +317,18 @@ class SemanticAnalyzer:
                 return function.type
             if node.name == "c_channel":
                 return "c_channel"
-            if node.name in ("random", "exp", "float", "to_number", "clock", "inf"):
+            if node.name in (
+                "random", "exp", "float", "to_number", "clock", "inf",
+                "random_uniforme", "agora", "sum",
+            ):
+                return "float"
+            if node.name == "max":
+                if len(node.arguments) == 2:
+                    argument_types = tuple(
+                        self._infer_type(argument) for argument in node.arguments
+                    )
+                    if argument_types == ("int", "int"):
+                        return "int"
                 return "float"
             if node.name == "receive":
                 return "string"
@@ -417,6 +428,10 @@ class SemanticAnalyzer:
         signatures: dict[str, tuple[tuple[str, ...], int]] = {
             "exp": (("float",), 1),
             "random": ((), 0),
+            "random_uniforme": (("float", "float"), 2),
+            "agora": ((), 0),
+            "max": (("var", "var"), 1),
+            "sum": (("var",), 1),
             "range": (("int", "int", "int"), 1),
             "len": (("var",), 1),
             "to_number": (("string",), 1),
@@ -1007,7 +1022,9 @@ class SemanticAnalyzer:
         elif isinstance(node, FuncCallExpr):
             function = self._function_symbol(node.name)
             if function is None and node.name not in (
-                "exp", "random", "range", "len", "to_number", "parse_ints",
+                "exp", "random", "random_uniforme", "agora", "max", "sum",
+                "println",
+                "range", "len", "to_number", "parse_ints",
                 "str", "int", "float", "inf", "clock", "format_float",
                 "is_number", "receive", "send", "c_channel",
             ):
@@ -1059,7 +1076,9 @@ class SemanticAnalyzer:
                     node.name,
                 )
             elif node.name in (
-                "exp", "random", "range", "len", "to_number", "parse_ints",
+                "exp", "random", "random_uniforme", "agora", "max", "sum",
+                "println",
+                "range", "len", "to_number", "parse_ints",
                 "str", "int", "float", "inf", "clock", "format_float",
                 "is_number", "receive", "send", "c_channel",
             ):

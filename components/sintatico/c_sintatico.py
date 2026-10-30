@@ -806,7 +806,12 @@ class Parser:
                 line=token.line,
                 column=token.column,
             )
-        if self._match(TokenType.IDENTIFIER):
+        if self._match(TokenType.IDENTIFIER) or (
+            token.type is TokenType.TYPE
+            and token.lexeme in ("int", "float")
+        ):
+            if token.type is TokenType.TYPE:
+                self._advance()
             if self._match(TokenType.LPAREN):
                 call_args: list[ASTNode] = []
                 if self._peek().type is not TokenType.RPAREN:
