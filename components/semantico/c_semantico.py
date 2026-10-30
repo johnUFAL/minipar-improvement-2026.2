@@ -87,6 +87,12 @@ class SemanticAnalyzer:
         self._current_return_type: str | None = None
         self._loop_depth = 0
         self._class_declarations: dict[str, ClassDecl] = {}
+        self._concurrent_scope_paths: list[str] = []
+        self._fork_scopes: list[dict[str, ForkStmt]] = []
+        self._channel_calls: dict[
+            str,
+            dict[str, list[tuple[tuple[str, ...], MethodCall | FuncCallExpr]]],
+        ] = {}
 
     def _enter_scope(self) -> None: self._symbol_table.enter_scope()
 
@@ -125,6 +131,59 @@ class SemanticAnalyzer:
 
     def _lookup(self, name: str) -> Symbol | None:
         return self._symbol_table.lookup(name)
+
+    def _concurrent_write_is_external(self, symbol: Symbol) -> bool:
+        return any(
+            symbol.scope != scope_path
+            and not symbol.scope.startswith(f"{scope_path}/")
+            for scope_path in self._concurrent_scope_paths
+        )
+
+    def _check_concurrent_write(
+        self, name: str, line: int, column: int | None
+    ) -> None:
+        symbol = self._lookup(name)
+        if (
+            symbol is not None
+            and symbol.category not in ("channel", "function", "class", "task")
+            and self._concurrent_write_is_external(symbol)
+        ):
+            self._report(
+                line,
+                f"Ramo concorrente nao pode escrever na variavel externa "
+                f"'{name}'.",
+                column,
+            )
+
+    def _check_write_target(self, target: ASTNode | None) -> None:
+        while isinstance(target, (PropertyAccess, IndexExpr)):
+            target = target.object
+        if isinstance(target, IdentifierExpr):
+            self._check_concurrent_write(
+                target.name, target.line, target.column
+            )
+
+    def _record_channel_call(
+        self,
+        channel_name: str,
+        direction: str,
+        signature: tuple[str, ...],
+        call: MethodCall | FuncCallExpr,
+    ) -> None:
+        self._channel_calls.setdefault(
+            channel_name, {"send": [], "receive": []}
+        )[direction].append((signature, call))
+
+    def _finish_fork_scope(self) -> None:
+        if not self._fork_scopes:
+            return
+        scope = self._fork_scopes.pop()
+        for task_name, fork in scope.items():
+            self._report(
+                fork.line,
+                f"Fork '{task_name}' nao possui join neste escopo.",
+                fork.column,
+            )
 
     @property
     def symbol_table(self) -> ITabelaSimbolos:
@@ -384,7 +443,15 @@ class SemanticAnalyzer:
         classes: list[ClassDecl] = []
         self._class_declarations = {}
         for stmt in program.statements:
-            if isinstance(stmt, FuncDecl):
+            if isinstance(stmt, ChannelDecl):
+                self._define_symbol(
+                    stmt.name,
+                    "c_channel",
+                    stmt.line,
+                    "channel",
+                    column=stmt.column,
+                )
+            elif isinstance(stmt, FuncDecl):
                 self._define_symbol(
                     stmt.name,
                     stmt.return_type or "unknown",
@@ -546,6 +613,7 @@ class SemanticAnalyzer:
 
         elif isinstance(node, Assignment):
             sym = self._lookup(node.name)
+            self._check_concurrent_write(node.name, node.line, node.column)
             if sym is None:
                 self._define_symbol(
                     node.name,
@@ -588,6 +656,7 @@ class SemanticAnalyzer:
             self.validate_node(node.object)
             self.validate_node(node.index)
         elif isinstance(node, IndexAssign):
+            self._check_write_target(node.target)
             self.validate_node(node.target)
             self.validate_node(node.value)
         elif isinstance(node, IdentifierExpr):
@@ -667,34 +736,70 @@ class SemanticAnalyzer:
                     f"Operador unario '{node.op}' incompativel com {operand_type}.",
                     node.column,
                 )
-        elif isinstance(node, (SeqBlock, ParBlock)):
+        elif isinstance(node, SeqBlock):
             self._enter_scope()
+            self._fork_scopes.append({})
             for stmt in node.statements:
                 self.validate_node(stmt)
+            self._finish_fork_scope()
+            self._exit_scope()
+        elif isinstance(node, ParBlock):
+            self._enter_scope()
+            for stmt in node.statements:
+                self._enter_scope()
+                self._concurrent_scope_paths.append(
+                    self._symbol_table.current_scope_path
+                )
+                self._fork_scopes.append({})
+                self.validate_node(stmt)
+                self._finish_fork_scope()
+                self._concurrent_scope_paths.pop()
+                self._exit_scope()
             self._exit_scope()
         elif isinstance(node, ChannelDecl):
-            self._define_symbol(
-                node.name,
-                "c_channel",
-                node.line,
-                "channel",
-                column=node.column,
-            )
+            if node.first_host == node.second_host:
+                self._report(
+                    node.line,
+                    f"Canal '{node.name}' deve ligar computadores distintos.",
+                    node.column,
+                )
         elif isinstance(node, ForkStmt):
             if node.target is not None:
                 self.validate_node(node.target)
+            if not self._fork_scopes:
+                self._fork_scopes.append({})
+            current_forks = self._fork_scopes[-1]
+            if node.task_name in current_forks:
+                self._report(
+                    node.line,
+                    f"Fork '{node.task_name}' duplicado neste escopo.",
+                    node.column,
+                )
+            else:
+                current_forks[node.task_name] = node
             self._define_symbol(
                 node.task_name, "task", node.line, "task", column=node.column
             )
+            self._enter_scope()
+            self._concurrent_scope_paths.append(
+                self._symbol_table.current_scope_path
+            )
+            self._fork_scopes.append({})
             self.validate_node(node.body)
+            self._finish_fork_scope()
+            self._concurrent_scope_paths.pop()
+            self._exit_scope()
         elif isinstance(node, JoinStmt):
             for task_name in node.task_names:
-                if self._lookup(task_name) is None:
+                if not self._fork_scopes or task_name not in self._fork_scopes[-1]:
                     self._report(
                         node.line,
-                        f"Tarefa '{task_name}' não declarada.",
+                        f"Join '{task_name}' nao referencia um fork anterior "
+                        "neste escopo.",
                         node.column,
                     )
+                else:
+                    del self._fork_scopes[-1][task_name]
         elif isinstance(node, IfStmt):
             self.validate_node(node.condition)
             self._check_condition(node.condition)
@@ -852,6 +957,37 @@ class SemanticAnalyzer:
             inherited_method = self._symbol_table.lookup_method(
                 obj_type, node.method_name
             )
+            if node.method_name in ("send", "receive"):
+                if not isinstance(node.object, IdentifierExpr):
+                    self._report(
+                        node.line,
+                        f"'{node.method_name}' so pode ser usado em variavel "
+                        "declarada como c_channel.",
+                        node.column,
+                    )
+                else:
+                    channel_symbol = self._lookup(node.object.name)
+                    if (
+                        channel_symbol is None
+                        or channel_symbol.category != "channel"
+                    ):
+                        self._report(
+                            node.line,
+                            f"'{node.method_name}' so pode ser usado em variavel "
+                            "declarada como c_channel.",
+                            node.column,
+                        )
+                    elif node.method_name == "receive" and not node.arguments:
+                        self._record_channel_call(
+                            node.object.name, "receive", ("string",), node
+                        )
+                    else:
+                        signature = tuple(
+                            self._infer_type(argument) for argument in node.arguments
+                        )
+                        self._record_channel_call(
+                            node.object.name, node.method_name, signature, node
+                        )
             if self._class_symbol(obj_type) and inherited_method is None:
                 self._report(
                     node.line,
@@ -880,6 +1016,39 @@ class SemanticAnalyzer:
                     f"Funcao '{node.name}' nao declarada.",
                     node.column,
                 )
+            if node.name in ("send", "receive"):
+                channel_arg = node.arguments[0] if node.arguments else None
+                if not isinstance(channel_arg, IdentifierExpr):
+                    self._report(
+                        node.line,
+                        f"'{node.name}' exige como primeiro argumento uma "
+                        "variavel declarada como c_channel.",
+                        node.column,
+                    )
+                else:
+                    channel_symbol = self._lookup(channel_arg.name)
+                    if (
+                        channel_symbol is None
+                        or channel_symbol.category != "channel"
+                    ):
+                        self._report(
+                            node.line,
+                            f"'{node.name}' exige como primeiro argumento uma "
+                            "variavel declarada como c_channel.",
+                            node.column,
+                        )
+                    elif node.name == "receive":
+                        self._record_channel_call(
+                            channel_arg.name, "receive", ("string",), node
+                        )
+                    else:
+                        signature = tuple(
+                            self._infer_type(argument)
+                            for argument in node.arguments[1:]
+                        )
+                        self._record_channel_call(
+                            channel_arg.name, "send", signature, node
+                        )
             for arg in node.arguments:
                 self.validate_node(arg)
             if function is not None:
@@ -908,6 +1077,7 @@ class SemanticAnalyzer:
                     node.column,
                 )
         elif isinstance(node, PropertyAssign):
+            self._check_write_target(node.object)
             self.validate_node(node.object)
             self.validate_node(node.value)
             obj_type = self._infer_type(node.object)
@@ -984,7 +1154,41 @@ class SemanticAnalyzer:
                 self.validate_node(node.prompt)
 
     def analyze(self, program: Program) -> bool:
+        self._concurrent_scope_paths.clear()
+        self._fork_scopes.clear()
+        self._channel_calls.clear()
         self._collect_declarations(program)
         for stmt in program.statements:
             self.validate_node(stmt)
+        self._validate_channel_signatures()
         return not self._has_errors
+
+    def _validate_channel_signatures(self) -> None:
+        for channel_name, directions in self._channel_calls.items():
+            sends = directions["send"]
+            receives = directions["receive"]
+            signatures = sends + receives
+            for index, (signature, call) in enumerate(signatures):
+                for other_signature, other_call in signatures[index + 1:]:
+                    if len(signature) != len(other_signature):
+                        self._report(
+                            other_call.line,
+                            f"Aridade inconsistente no canal '{channel_name}': "
+                            f"{len(signature)} e {len(other_signature)}.",
+                            other_call.column,
+                        )
+                        continue
+                    for argument_index, (first_type, second_type) in enumerate(
+                        zip(signature, other_signature), start=1
+                    ):
+                        if not (
+                            self._types_compatible(first_type, second_type)
+                            or self._types_compatible(second_type, first_type)
+                        ):
+                            self._report(
+                                other_call.line,
+                                f"Tipo inconsistente no argumento "
+                                f"{argument_index} do canal '{channel_name}': "
+                                f"{first_type} e {second_type}.",
+                                other_call.column,
+                            )
