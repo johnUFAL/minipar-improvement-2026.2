@@ -84,6 +84,7 @@ class SemanticAnalyzer:
         self._reported_diagnostics: list[Diagnostic] = []
         self._current_function: str | None = None
         self._current_class: str | None = None
+        self._current_return_type: str | None = None
         self._loop_depth = 0
 
     def _enter_scope(self) -> None: self._symbol_table.enter_scope()
@@ -102,6 +103,8 @@ class SemanticAnalyzer:
         category: str = "variable",
         params: tuple[str, ...] | None = None,
         column: int | None = None,
+        parameter_types: tuple[str, ...] = (),
+        required_params: int | None = None,
     ) -> None:
         symbol = Symbol(
             name,
@@ -109,6 +112,8 @@ class SemanticAnalyzer:
             params=params or (),
             category=category,
             line=line,
+            parameter_types=parameter_types,
+            required_params=required_params,
         )
         if not self._symbol_table.define(symbol):
             self._report(
@@ -166,7 +171,7 @@ class SemanticAnalyzer:
         if node is None:
             return "unknown"
         if isinstance(node, NumberExpr):
-            return "number"
+            return "float" if "." in node.value else "int"
         if isinstance(node, StringExpr):
             return "string"
         if isinstance(node, BoolExpr):
@@ -189,11 +194,7 @@ class SemanticAnalyzer:
             sym = self._lookup(node.name)
             return sym.type if sym else "unknown"
         if isinstance(node, UnaryExpr):
-            return (
-                "bool"
-                if node.op in ("!", "not")
-                else self._infer_type(node.operand)
-            )
+            return "bool" if node.op in ("!", "not") else self._infer_type(node.operand)
         if isinstance(node, BinaryExpr):
             lt, rt = self._infer_type(node.left), self._infer_type(node.right)
             if node.op in (
@@ -209,11 +210,13 @@ class SemanticAnalyzer:
                 "||",
             ):
                 return "bool"
-            if node.op == "+" and (lt == "string" or rt == "string"):
+            if node.op == "+" and lt == rt == "string":
                 return "string"
-            if node.op == "+" and (lt == "list" or rt == "list"):
+            if node.op == "+" and lt == rt == "list":
                 return "list"
-            return "number"
+            if lt in ("int", "float") and rt in ("int", "float"):
+                return "float" if "float" in (lt, rt) or node.op == "/" else "int"
+            return "unknown"
         if isinstance(node, PropertyAccess):
             obj_type = self._infer_type(node.object)
             attribute = self._symbol_table.lookup_attribute(
@@ -223,25 +226,143 @@ class SemanticAnalyzer:
                 return attribute.type
             return "unknown"
         if isinstance(node, MethodCall):
-            return "unknown"
+            object_type = self._infer_type(node.object)
+            method = self._symbol_table.lookup_method(object_type, node.method_name)
+            if method is not None:
+                return method.type
+            return {
+                ("string", "split"): "list",
+                ("string", "strip"): "string",
+                ("list", "append"): "void",
+                ("list", "pop"): "unknown",
+                ("c_channel", "send"): "void",
+                ("c_channel", "receive"): "string",
+            }.get((object_type, node.method_name), "unknown")
         if isinstance(node, FuncCallExpr):
-            if node.name in ("random", "exp"):
-                return "number"
-            if node.name in ("range", "parse_ints"):
+            function = self._function_symbol(node.name)
+            if function is not None:
+                return function.type
+            if node.name == "c_channel":
+                return "c_channel"
+            if node.name in ("random", "exp", "float", "to_number", "clock", "inf"):
+                return "float"
+            if node.name == "receive":
+                return "string"
+            if node.name == "send":
+                return "void"
+            if node.name in ("int", "len", "parse_ints", "str", "format_float"):
+                return "string" if node.name in ("str", "format_float") else (
+                    "list" if node.name == "parse_ints" else "int"
+                )
+            if node.name in ("range",):
                 return "list"
+            if node.name in ("is_number",):
+                return "bool"
             return "unknown"
         if isinstance(node, IndexExpr):
+            object_type = self._infer_type(node.object)
+            if object_type == "string":
+                return "string"
             return "unknown"
         return "unknown"
 
     def _types_compatible(self, declared: str, actual: str) -> bool:
-        if declared in ("var", "unknown") or actual == "unknown":
+        if declared in ("var", "unknown") or actual in ("var", "unknown"):
             return True
-        if declared == "int" and actual == "number":
-            return True
-        if declared == "number" and actual == "int":
+        if declared == "float" and actual == "int":
             return True
         return declared == actual
+
+    @staticmethod
+    def _is_numeric(type_: str) -> bool:
+        return type_ in ("int", "float", "var", "unknown")
+
+    def _check_condition(self, node: ASTNode | None) -> None:
+        condition_type = self._infer_type(node)
+        if condition_type not in ("bool", "unknown", "var"):
+            self._report(
+                node.line if node is not None else 1,
+                f"Condicao deve ser bool, recebeu {condition_type}.",
+                node.column if node is not None else None,
+            )
+
+    def _always_returns(self, node: ASTNode | None) -> bool:
+        if isinstance(node, ReturnStmt):
+            return True
+        if isinstance(node, SeqBlock):
+            return any(self._always_returns(statement) for statement in node.statements)
+        if isinstance(node, IfStmt):
+            return (
+                node.else_branch is not None
+                and self._always_returns(node.then_branch)
+                and self._always_returns(node.else_branch)
+            )
+        return False
+
+    def _check_call_arguments(
+        self,
+        node: FuncCallExpr | MethodCall,
+        parameter_types: tuple[str, ...],
+        required_params: int,
+        name: str,
+    ) -> None:
+        count = len(node.arguments)
+        if count < required_params or count > len(parameter_types):
+            expected = (
+                f"{required_params} a {len(parameter_types)}"
+                if required_params != len(parameter_types)
+                else str(len(parameter_types))
+            )
+            self._report(
+                node.line,
+                f"'{name}' espera {expected} argumento(s), recebeu {count}.",
+                node.column,
+            )
+        for index, (argument, expected_type) in enumerate(
+            zip(node.arguments, parameter_types)
+        ):
+            actual_type = self._infer_type(argument)
+            if not self._types_compatible(expected_type, actual_type):
+                self._report(
+                    argument.line,
+                    f"Tipo incompativel no argumento {index + 1} de '{name}': "
+                    f"esperado {expected_type}, recebido {actual_type}.",
+                    argument.column,
+                )
+
+    def _parameter_types(self, function: FuncDecl) -> tuple[str, ...]:
+        return tuple(
+            param.type
+            if param.type != "var" or param.default_value is None
+            else self._infer_type(param.default_value)
+            for param in function.params
+        )
+
+    def _check_builtin_call(self, node: FuncCallExpr) -> None:
+        signatures: dict[str, tuple[tuple[str, ...], int]] = {
+            "exp": (("float",), 1),
+            "random": ((), 0),
+            "range": (("int", "int", "int"), 1),
+            "len": (("var",), 1),
+            "to_number": (("string",), 1),
+            "parse_ints": (("string",), 1),
+            "str": (("var",), 1),
+            "int": (("var",), 1),
+            "float": (("var",), 1),
+            "inf": ((), 0),
+            "clock": ((), 0),
+            "format_float": (("float", "int"), 2),
+            "is_number": (("string",), 1),
+            "receive": (("c_channel",), 1),
+            "send": (("c_channel",) + ("var",) * 7, 2),
+            "c_channel": (("string", "int"), 2),
+        }
+        signature = signatures.get(node.name)
+        if signature is not None:
+            parameter_types, required_params = signature
+            self._check_call_arguments(
+                node, parameter_types, required_params, node.name
+            )
 
     def _collect_declarations(self, program: Program) -> None:
         classes: list[ClassDecl] = []
@@ -249,11 +370,15 @@ class SemanticAnalyzer:
             if isinstance(stmt, FuncDecl):
                 self._define_symbol(
                     stmt.name,
-                    "function",
+                    stmt.return_type or "unknown",
                     stmt.line,
                     category="function",
                     params=tuple(param.name for param in stmt.params),
                     column=stmt.column,
+                    parameter_types=self._parameter_types(stmt),
+                    required_params=sum(
+                        param.default_value is None for param in stmt.params
+                    ),
                 )
             elif isinstance(stmt, ClassDecl):
                 attrs = {a.name: a.type for a in stmt.attributes}
@@ -295,11 +420,15 @@ class SemanticAnalyzer:
             for method in class_decl.methods:
                 self._define_symbol(
                     method.name,
-                    "unknown",
+                    method.return_type or "unknown",
                     method.line,
                     category="method",
                     params=tuple(param.name for param in method.params),
                     column=method.column,
+                    parameter_types=self._parameter_types(method),
+                    required_params=sum(
+                        param.default_value is None for param in method.params
+                    ),
                 )
             self._symbol_table.exit_scope()
 
@@ -382,20 +511,73 @@ class SemanticAnalyzer:
         elif isinstance(node, BinaryExpr):
             self.validate_node(node.left)
             self.validate_node(node.right)
+            left_type = self._infer_type(node.left)
+            right_type = self._infer_type(node.right)
             if node.op in ("+", "-", "*", "/", "%"):
-                lt, rt = self._infer_type(node.left), self._infer_type(node.right)
-                if node.op != "+" and (
-                    lt not in ("number", "int", "var", "unknown") or rt not in (
-                        "number", "int", "var", "unknown"
+                valid = (
+                    self._is_numeric(left_type) and self._is_numeric(right_type)
+                ) or left_type in ("var", "unknown") or right_type in (
+                    "var", "unknown"
+                )
+                if node.op == "+":
+                    valid = valid or (
+                        left_type == right_type and left_type in ("string", "list")
                     )
+                if not valid:
+                    self._report(
+                        node.line,
+                        f"Operandos incompativeis para '{node.op}': "
+                        f"{left_type} e {right_type}.",
+                        node.column,
+                    )
+            elif node.op in ("and", "or", "&&", "||"):
+                if left_type not in ("bool", "var", "unknown") or right_type not in (
+                    "bool", "var", "unknown"
                 ):
                     self._report(
                         node.line,
-                        f"Operador '{node.op}' exige operandos numericos.",
+                        f"Operador '{node.op}' exige operandos bool.",
                         node.column,
                     )
+            elif node.op in ("<", ">", "<=", ">="):
+                compatible = (
+                    self._is_numeric(left_type) and self._is_numeric(right_type)
+                ) or (
+                    left_type == right_type and left_type in ("string", "var", "unknown")
+                ) or left_type in ("var", "unknown") or right_type in (
+                    "var", "unknown"
+                )
+                if not compatible:
+                    self._report(
+                        node.line,
+                        f"Operandos incompativeis para comparacao: "
+                        f"{left_type} e {right_type}.",
+                        node.column,
+                    )
+            elif node.op in ("==", "!=") and not (
+                self._types_compatible(left_type, right_type)
+                or self._types_compatible(right_type, left_type)
+            ):
+                self._report(
+                    node.line,
+                    f"Operandos incompativeis para '{node.op}': "
+                    f"{left_type} e {right_type}.",
+                    node.column,
+                )
         elif isinstance(node, UnaryExpr):
             self.validate_node(node.operand)
+            operand_type = self._infer_type(node.operand)
+            expected = (
+                ("bool", "var", "unknown")
+                if node.op in ("!", "not")
+                else ("int", "float", "var", "unknown")
+            )
+            if operand_type not in expected:
+                self._report(
+                    node.line,
+                    f"Operador unario '{node.op}' incompativel com {operand_type}.",
+                    node.column,
+                )
         elif isinstance(node, (SeqBlock, ParBlock)):
             self._enter_scope()
             for stmt in node.statements:
@@ -426,11 +608,13 @@ class SemanticAnalyzer:
                     )
         elif isinstance(node, IfStmt):
             self.validate_node(node.condition)
+            self._check_condition(node.condition)
             self.validate_node(node.then_branch)
             if node.else_branch is not None:
                 self.validate_node(node.else_branch)
         elif isinstance(node, WhileStmt):
             self.validate_node(node.condition)
+            self._check_condition(node.condition)
             self._loop_depth += 1
             self.validate_node(node.body)
             self._loop_depth -= 1
@@ -439,6 +623,7 @@ class SemanticAnalyzer:
             self.validate_node(node.body)
             self._loop_depth -= 1
             self.validate_node(node.condition)
+            self._check_condition(node.condition)
         elif isinstance(node, ForStmt):
             self._enter_scope()
             if node.iterator_name:
@@ -452,6 +637,7 @@ class SemanticAnalyzer:
                     self.validate_node(node.initializer)
                 if node.condition is not None:
                     self.validate_node(node.condition)
+                    self._check_condition(node.condition)
                 if node.increment is not None:
                     self.validate_node(node.increment)
             self._loop_depth += 1
@@ -499,22 +685,79 @@ class SemanticAnalyzer:
             )
             self._symbol_table.enter_scope(scope_name)
             old_function = self._current_function
+            old_return_type = self._current_return_type
             self._current_function = node.name
+            self._current_return_type = node.return_type
             for parameter in node.params:
+                parameter_type = parameter.type
+                if parameter_type == "var" and parameter.default_value is not None:
+                    parameter_type = self._infer_type(parameter.default_value)
                 self._define_symbol(
                     parameter.name,
-                    parameter.type,
+                    parameter_type,
                     parameter.line,
                     "parameter",
                     column=parameter.column,
                 )
+                if parameter.default_value is not None:
+                    self.validate_node(parameter.default_value)
+                    default_type = self._infer_type(parameter.default_value)
+                    if not self._types_compatible(parameter_type, default_type):
+                        self._report(
+                            parameter.line,
+                            f"Valor padrao incompativel para '{parameter.name}': "
+                            f"esperado {parameter_type}, recebido {default_type}.",
+                            parameter.column,
+                        )
             if node.body is not None:
                 self.validate_node(node.body)
+            if (
+                node.return_type not in (None, "void")
+                and not self._always_returns(node.body)
+            ):
+                self._report(
+                    node.line,
+                    f"Funcao '{node.name}' pode terminar sem retornar "
+                    f"{node.return_type}.",
+                    node.column,
+                )
             self._current_function = old_function
+            self._current_return_type = old_return_type
             self._exit_scope()
         elif isinstance(node, ReturnStmt):
+            if self._current_function is None:
+                self._report(
+                    node.line,
+                    "'return' usado fora de funcao.",
+                    node.column,
+                )
             if node.value is not None:
                 self.validate_node(node.value)
+            actual_type = self._infer_type(node.value)
+            expected_type = self._current_return_type
+            if expected_type == "void" and node.value is not None:
+                self._report(
+                    node.line,
+                    f"Funcao '{self._current_function}' declarada void nao pode "
+                    "retornar valor.",
+                    node.column,
+                )
+            elif expected_type not in (None, "void") and node.value is None:
+                self._report(
+                    node.line,
+                    f"Funcao '{self._current_function}' deve retornar "
+                    f"{expected_type}.",
+                    node.column,
+                )
+            elif expected_type not in (None, "void") and not self._types_compatible(
+                expected_type, actual_type
+            ):
+                self._report(
+                    node.line,
+                    f"Tipo de retorno incompativel: esperado {expected_type}, "
+                    f"recebido {actual_type}.",
+                    node.column,
+                )
         elif isinstance(node, MethodCall):
             obj_type = self._infer_type(node.object)
             inherited_method = self._symbol_table.lookup_method(
@@ -526,39 +769,43 @@ class SemanticAnalyzer:
                     f"Metodo '{node.method_name}' nao declarado em '{obj_type}'.",
                     node.column,
                 )
-            elif inherited_method is not None and len(
-                inherited_method.params
-            ) != len(node.arguments):
-                self._report(
-                    node.line,
-                    f"Metodo '{node.method_name}' espera "
-                    f"{len(inherited_method.params)} "
-                    f"argumento(s), recebeu {len(node.arguments)}.",
-                    node.column,
-                )
-
             self.validate_node(node.object)
             for arg in node.arguments:
                 self.validate_node(arg)
+            if inherited_method is not None:
+                self._check_call_arguments(
+                    node,
+                    inherited_method.parameter_types,
+                    inherited_method.required_params or 0,
+                    node.method_name,
+                )
         elif isinstance(node, FuncCallExpr):
             function = self._function_symbol(node.name)
             if function is None and node.name not in (
-                "exp", "random", "range", "len", "to_number", "parse_ints"
+                "exp", "random", "range", "len", "to_number", "parse_ints",
+                "str", "int", "float", "inf", "clock", "format_float",
+                "is_number", "receive", "send", "c_channel",
             ):
                 self._report(
                     node.line,
                     f"Funcao '{node.name}' nao declarada.",
                     node.column,
                 )
-            elif function is not None and len(function.params) != len(node.arguments):
-                self._report(
-                    node.line,
-                    f"Funcao '{node.name}' espera {len(function.params)} "
-                    f"argumento(s), recebeu {len(node.arguments)}.",
-                    node.column,
-                )
             for arg in node.arguments:
                 self.validate_node(arg)
+            if function is not None:
+                self._check_call_arguments(
+                    node,
+                    function.parameter_types,
+                    function.required_params or 0,
+                    node.name,
+                )
+            elif node.name in (
+                "exp", "random", "range", "len", "to_number", "parse_ints",
+                "str", "int", "float", "inf", "clock", "format_float",
+                "is_number", "receive", "send", "c_channel",
+            ):
+                self._check_builtin_call(node)
         elif isinstance(node, PropertyAccess):
             self.validate_node(node.object)
             obj_type = self._infer_type(node.object)
@@ -582,6 +829,16 @@ class SemanticAnalyzer:
                 self._report(
                     node.line,
                     f"Atributo '{node.property_name}' nao declarado em '{obj_type}'.",
+                    node.column,
+                )
+            elif attribute is not None and not self._types_compatible(
+                attribute.type, self._infer_type(node.value)
+            ):
+                self._report(
+                    node.line,
+                    f"Tipo incompativel em atribuicao de '{node.property_name}': "
+                    f"esperado {attribute.type}, recebido "
+                    f"{self._infer_type(node.value)}.",
                     node.column,
                 )
         elif isinstance(node, NewExpr):
