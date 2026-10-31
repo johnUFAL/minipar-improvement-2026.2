@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import fields, is_dataclass
 from pathlib import Path
 
@@ -584,8 +585,8 @@ class TACGenerator:
             self._emit(f"send {self._expr(node.channel)}, {self._expr(node.message)}")
         elif isinstance(node, ChannelDecl):
             self._emit(
-                f"{node.name} = c_channel({node.first_host!r}, "
-                f"{node.second_host!r})"
+                f"{node.name} = c_channel({json.dumps(node.first_host)}, "
+                f"{json.dumps(node.second_host)})"
             )
         elif isinstance(node, ParBlock):
             parallel_id = self._label("PAR")

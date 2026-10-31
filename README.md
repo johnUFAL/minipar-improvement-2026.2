@@ -112,6 +112,41 @@ viram funções com o objeto como primeiro argumento. Blocos paralelos delimitam
 ramos com `par_begin`/`par_end`, enquanto `send`/`recv` representam operações
 de canal no TAC.
 
+### Canais TCP no runtime C++
+
+O runtime oferece comunicação TCP tipada entre processos. Configure um canal
+em cada processo: o servidor chama `ouvir(porta)` e o cliente
+`conectar(host, porta)`. O timeout de conexão e de E/S é de 5 segundos por
+padrão e pode ser alterado com `setTimeout`.
+
+```cpp
+MiniParChannel canal;
+canal.setTimeout(std::chrono::seconds(10));
+
+// Servidor:
+canal.ouvir(5101);
+auto [operacao, valor, ativo] =
+    canal.receber<std::string, double, bool>();
+
+// Cliente (em outro processo):
+canal.conectar("127.0.0.1", 5101);
+canal.enviar(std::string("somar"), 2.5, true);
+```
+
+Uma chamada `enviar` cria um frame contendo a quantidade de campos, o tipo,
+o tamanho e os bytes de cada valor. Inteiros usam 64 bits, `float`/`double`
+via IEEE-754 de 64 bits, bool um byte e strings os bytes UTF-8; números e
+tamanhos são transmitidos em big-endian. `receber<T...>()` valida tipos e
+quantidade de campos e retorna o valor (um tipo) ou uma tupla (vários tipos).
+Falhas de rede e timeout geram `std::runtime_error`, capturado pelo `main`
+gerado pelo compilador.
+
+`sendData`/`receiveData` permanecem disponíveis como adaptadores para uma
+mensagem de string. A declaração MiniPar `c_channel nome computador1
+computador2` continua aceita por compatibilidade, mas não escolhe papel nem
+porta; a configuração TCP ainda deve ser feita pela API C++ acima. A execução
+simulada de TAC continua usando filas em memória.
+
 ## Sintaxe MiniPar
 
 ```minipar

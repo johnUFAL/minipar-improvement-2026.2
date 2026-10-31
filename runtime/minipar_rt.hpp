@@ -2,9 +2,11 @@
 
 #include <chrono>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -17,6 +19,7 @@
 #include <string>
 #include <thread>
 #include <type_traits>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -31,6 +34,136 @@
 #include <unistd.h>
 #define CLOSE_SOCK close
 #endif
+
+#ifdef _WIN32
+using MiniParNativeSocket = SOCKET;
+#else
+using MiniParNativeSocket = int;
+#endif
+
+namespace minipar_channel_detail {
+
+enum class Type : std::uint8_t {
+    integer = 1,
+    floating = 2,
+    string = 3,
+    boolean = 4,
+};
+
+struct Field {
+    Type type;
+    std::vector<std::uint8_t> bytes;
+};
+
+inline void append_u32(std::vector<std::uint8_t>& output, std::uint32_t value) {
+    output.push_back(static_cast<std::uint8_t>(value >> 24));
+    output.push_back(static_cast<std::uint8_t>(value >> 16));
+    output.push_back(static_cast<std::uint8_t>(value >> 8));
+    output.push_back(static_cast<std::uint8_t>(value));
+}
+
+inline void append_u64(std::vector<std::uint8_t>& output, std::uint64_t value) {
+    for (int shift = 56; shift >= 0; shift -= 8) {
+        output.push_back(static_cast<std::uint8_t>(value >> shift));
+    }
+}
+
+inline std::uint64_t read_u64(const std::vector<std::uint8_t>& bytes) {
+    std::uint64_t value = 0;
+    for (std::uint8_t byte : bytes) {
+        value = (value << 8) | byte;
+    }
+    return value;
+}
+
+inline Field encode(bool value) {
+    return {Type::boolean, {static_cast<std::uint8_t>(value ? 1 : 0)}};
+}
+
+template<typename T, std::enable_if_t<
+    std::is_integral_v<T> && !std::is_same_v<std::decay_t<T>, bool>, int> = 0>
+Field encode(T value) {
+    if constexpr (std::is_unsigned_v<T>) {
+        if (value > static_cast<T>(std::numeric_limits<std::int64_t>::max())) {
+            throw std::out_of_range("Inteiro fora do intervalo suportado pelo canal.");
+        }
+    }
+    const auto signed_value = static_cast<std::int64_t>(value);
+    std::vector<std::uint8_t> bytes;
+    append_u64(bytes, static_cast<std::uint64_t>(signed_value));
+    return {Type::integer, std::move(bytes)};
+}
+
+template<typename T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
+Field encode(T value) {
+    const double wire_value = static_cast<double>(value);
+    std::uint64_t bits = 0;
+    static_assert(sizeof(bits) == sizeof(wire_value), "double deve ter 64 bits");
+    std::memcpy(&bits, &wire_value, sizeof(bits));
+    std::vector<std::uint8_t> bytes;
+    append_u64(bytes, bits);
+    return {Type::floating, std::move(bytes)};
+}
+
+inline Field encode(const std::string& value) {
+    return {
+        Type::string,
+        std::vector<std::uint8_t>(value.begin(), value.end()),
+    };
+}
+
+inline Field encode(const char* value) {
+    if (value == nullptr) {
+        throw std::invalid_argument("Nao e possivel enviar uma string nula.");
+    }
+    return encode(std::string(value));
+}
+
+template<typename T>
+T decode(const Field& field) {
+    if constexpr (std::is_same_v<T, std::string>) {
+        if (field.type != Type::string) {
+            throw std::runtime_error("Tipo recebido pelo canal nao corresponde a string.");
+        }
+        return std::string(field.bytes.begin(), field.bytes.end());
+    } else if constexpr (std::is_same_v<T, bool>) {
+        if (field.type != Type::boolean || field.bytes.size() != 1 ||
+            field.bytes[0] > 1) {
+            throw std::runtime_error("Campo bool invalido recebido pelo canal.");
+        }
+        return field.bytes[0] == 1;
+    } else if constexpr (std::is_integral_v<T>) {
+        if (field.type != Type::integer || field.bytes.size() != 8) {
+            throw std::runtime_error("Tipo recebido pelo canal nao corresponde a int.");
+        }
+        const auto bits = read_u64(field.bytes);
+        std::int64_t value = 0;
+        std::memcpy(&value, &bits, sizeof(value));
+        if constexpr (std::is_unsigned_v<T>) {
+            if (value < 0 ||
+                static_cast<std::uint64_t>(value) >
+                    static_cast<std::uint64_t>(std::numeric_limits<T>::max())) {
+                throw std::out_of_range("Inteiro recebido fora do intervalo do tipo destino.");
+            }
+        } else if (value < static_cast<std::int64_t>(std::numeric_limits<T>::lowest()) ||
+                   value > static_cast<std::int64_t>(std::numeric_limits<T>::max())) {
+            throw std::out_of_range("Inteiro recebido fora do intervalo do tipo destino.");
+        }
+        return static_cast<T>(value);
+    } else if constexpr (std::is_floating_point_v<T>) {
+        if (field.type != Type::floating || field.bytes.size() != 8) {
+            throw std::runtime_error("Tipo recebido pelo canal nao corresponde a float.");
+        }
+        const std::uint64_t bits = read_u64(field.bytes);
+        double value = 0;
+        std::memcpy(&value, &bits, sizeof(value));
+        return static_cast<T>(value);
+    } else {
+        static_assert(!sizeof(T), "Tipo nao suportado pelo canal MiniPar.");
+    }
+}
+
+}  // namespace minipar_channel_detail
 
 template<typename T>
 std::ostream& operator<<(std::ostream& stream, const std::vector<T>& values);
@@ -324,12 +457,66 @@ auto __make_matrix(int rows, int cols, T initial_value) {
 
 class MiniParChannel {
 public:
-    std::string ip;
-    int port;
+    MiniParChannel();
+    MiniParChannel(std::string host, int port);
+    MiniParChannel(std::string first_host, std::string second_host);
+    ~MiniParChannel();
+    MiniParChannel(const MiniParChannel&) = delete;
+    MiniParChannel& operator=(const MiniParChannel&) = delete;
 
-    MiniParChannel(std::string ip, int port);
+    void ouvir(int port);
+    void conectar(const std::string& host, int port);
+    void setTimeout(std::chrono::milliseconds timeout);
+    void close() noexcept;
+
+    template<typename... Values>
+    void enviar(const Values&... values) {
+        static_assert(sizeof...(Values) > 0, "Uma mensagem deve conter campos.");
+        std::vector<minipar_channel_detail::Field> fields;
+        fields.reserve(sizeof...(Values));
+        (fields.push_back(minipar_channel_detail::encode(values)), ...);
+        sendFrame(fields);
+    }
+
+    template<typename... Types>
+    auto receber() {
+        static_assert(sizeof...(Types) > 0, "Informe os tipos esperados.");
+        const auto fields = receiveFrame();
+        if (fields.size() != sizeof...(Types)) {
+            throw std::runtime_error("Numero de campos recebido pelo canal inesperado.");
+        }
+        return receiveValues<Types...>(fields, std::index_sequence_for<Types...>{});
+    }
+
     void sendData(std::string message);
     std::string receiveData();
+
+private:
+    static constexpr std::size_t max_field_size = 16 * 1024 * 1024;
+    static constexpr std::size_t max_frame_size = 64 * 1024 * 1024;
+    static constexpr std::uint32_t max_field_count = 1024;
+    MiniParNativeSocket socket_;
+    std::chrono::milliseconds timeout_{5000};
+    std::mutex send_mutex_;
+    std::mutex receive_mutex_;
+
+    void sendFrame(const std::vector<minipar_channel_detail::Field>& fields);
+    std::vector<minipar_channel_detail::Field> receiveFrame();
+
+    template<typename... Types, std::size_t... Indices>
+    static auto receiveValues(
+        const std::vector<minipar_channel_detail::Field>& fields,
+        std::index_sequence<Indices...>
+    ) {
+        if constexpr (sizeof...(Types) == 1) {
+            using Value = std::tuple_element_t<0, std::tuple<Types...>>;
+            return minipar_channel_detail::decode<Value>(fields[0]);
+        } else {
+            return std::make_tuple(
+                minipar_channel_detail::decode<Types>(fields[Indices])...
+            );
+        }
+    }
 };
 
 void minipar_parallel(const std::vector<std::function<void()>>& tasks);
