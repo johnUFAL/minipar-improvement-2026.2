@@ -613,10 +613,6 @@ class CppCodeGenerator:
         cpp.extend([
             "int main() {",
             "    minipar_init_console();",
-            "    #ifdef _WIN32",
-            "    WSADATA wsa{};",
-            "    WSAStartup(MAKEWORD(2, 2), &wsa);",
-            "    #endif",
             "    try {",
         ])
         body, _ = cls._render_body(main_lines, [], function_map, classes)

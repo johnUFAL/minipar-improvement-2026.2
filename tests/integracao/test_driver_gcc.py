@@ -22,6 +22,28 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class DriverGCCIntegrationTests(unittest.TestCase):
+    @unittest.skipUnless(
+        shutil.which(os.environ.get("CXX", "g++").strip('"')),
+        "g++ is required for native channel code generation",
+    )
+    def test_declared_channel_generates_compilable_cpp(self) -> None:
+        source = 'c_channel dados pc1 pc2\nSEQ\n    print("ok")\n'
+        program = Parser(Lexer(source)).parse()
+        analyzer = SemanticAnalyzer()
+        self.assertTrue(analyzer.analyze(program), analyzer.diagnostics)
+        tac = TACGenerator().generate_text(program)
+        generated_cpp = CppCodeGenerator._generate_cpp(tac)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cpp_path = Path(temp_dir) / "channel.cpp"
+            cpp_path.write_text(generated_cpp, encoding="utf-8")
+            executable = Path(temp_dir) / "channel"
+            self.assertTrue(
+                driver_gcc.DriverGCC().compile(
+                    cpp_path, executable, optimization_level="O0"
+                )
+            )
+
     def test_compiler_diagnostics_map_generated_cpp_to_minipar_line(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             cpp_path = Path(temp_dir) / "broken.cpp"
