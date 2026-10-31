@@ -27,12 +27,12 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
-#define CLOSE_SOCK closesocket
+#define CLOSE_SOCK ::closesocket
 #else
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#define CLOSE_SOCK close
+#define CLOSE_SOCK ::close
 #endif
 
 #ifdef _WIN32
