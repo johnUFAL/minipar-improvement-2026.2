@@ -49,6 +49,13 @@ No Windows, instale uma distribuição GCC/MinGW-w64 e adicione a pasta `bin`
 ao `PATH`. Se o compilador tiver outro nome ou caminho, configure `CXX` antes
 de iniciar o compilador MiniPar.
 
+A compilação C++ usa `-std=c++17` e `-O2` por padrão. O driver também aceita
+`O0`, `O1` e `O3` para escolher outro nível de otimização. Em Linux, o link usa
+`-pthread`; no Windows, usa `-lws2_32` e gera um executável `.exe`. Os métodos
+`DriverGCC.compilar(cpp_path, saida, nivel_otimizacao="O2")` e
+`DriverGCC.executar(saida)` permitem compilar e executar diretamente; a
+execução retorna o `stdout` e o código de saída do processo.
+
 Instale as dependências com:
 
 ```bash

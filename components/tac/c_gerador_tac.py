@@ -79,7 +79,7 @@ class TACGenerator:
     def _type_of(self, node: ASTNode | None) -> str | None:
         if node is None:
             return None
-        if node.tipo_inferido:
+        if node.tipo_inferido and node.tipo_inferido not in ("unknown", "var"):
             return node.tipo_inferido
         if isinstance(node, NumberExpr):
             return "float" if "." in node.value else "int"
