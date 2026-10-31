@@ -18,7 +18,7 @@ class DriverGCC:
         if compiler_path is None:
             print(
                 f"[ERRO] Compilador C++ '{compiler}' nao encontrado. "
-                "Instale um compilador C++20 e adicione-o ao PATH, "
+                "Instale um compilador C++17 e adicione-o ao PATH, "
                 "ou defina a variavel de ambiente CXX.",
                 file=sys.stderr,
             )
@@ -26,7 +26,8 @@ class DriverGCC:
 
         command = [
             compiler_path,
-            "-std=c++20",
+            "-std=c++17",
+            "-Wall",
             "-O3",
             str(source),
             str(runtime_dir / "canal.cpp"),

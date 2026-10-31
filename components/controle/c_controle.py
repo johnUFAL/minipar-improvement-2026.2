@@ -55,8 +55,9 @@ class CControle(IControle):
         if self.diagnostics.has_errors:
             print(self.diagnostics.format_text(), file=sys.stderr)
             return False
-        self._tac_generator.generate(program, output_name)
-        success = self._cpp_generator.generate(program, output_name)
+        tac_path = self._tac_generator.generate(program, output_name)
+        tac = Path(tac_path).read_text(encoding="utf-8")
+        success = self._cpp_generator.generate(tac, output_name)
         if not success:
             self.diagnostics.error(Phase.GENERATION, "C++ code generation failed")
             print(self.diagnostics.format_text(), file=sys.stderr)
@@ -98,7 +99,9 @@ def compile_file(
     print(f"[TAC] Arquivo gerado: {tac_path}")
 
     print("[Fase 4] Transpilacao e Chamada do GCC (-O3)...")
-    success = CppCodeGenerator().generate(program, output_name)
+    success = CppCodeGenerator().generate(
+        Path(tac_path).read_text(encoding="utf-8"), output_name
+    )
     if not success:
         collector.error(Phase.GENERATION, "C++ code generation failed")
         print(collector.format_text(), file=sys.stderr)

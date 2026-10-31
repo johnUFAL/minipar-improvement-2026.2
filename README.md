@@ -1,8 +1,8 @@
 # Compilador MiniPar
 
-Compilador MiniPar em Python, com geração de TAC e transpilação para C++20. A IDE web permite editar, compilar e executar os programas. O runtime C++ é compilado e linkado junto com cada programa gerado.
+Compilador MiniPar em Python, com geração de TAC e transpilação para C++17. A IDE web permite editar, compilar e executar os programas. O runtime C++ é compilado e linkado junto com cada programa gerado.
 
-**Pipeline:** fonte `.mp` → Lexer → Parser (AST) → Semântico/Tabela de Símbolos → TAC → C++20 → `g++` → binário
+**Pipeline:** fonte `.mp` → Lexer → Parser (AST) → Semântico/Tabela de Símbolos → TAC → C++17 → `g++` → binário
 
 Desenvolvido por:
 
@@ -42,7 +42,7 @@ tests/             unitarios/, integracao/, programas/
 ## Requisitos
 
 - Python 3.11+
-- `g++` com suporte a C++20
+- `g++` com suporte a C++17
 - Flask para a IDE Web
 
 No Windows, instale uma distribuição GCC/MinGW-w64 e adicione a pasta `bin`

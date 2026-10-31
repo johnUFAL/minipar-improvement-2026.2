@@ -136,8 +136,7 @@ inline int __minipar_to_int(const char* value) {
     return __minipar_to_int(std::string(value));
 }
 
-template<typename T>
-    requires std::is_arithmetic_v<T>
+template<typename T, std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
 int __minipar_to_int(T value) {
     const auto numeric = static_cast<long double>(value);
     if (!std::isfinite(numeric) ||
@@ -161,8 +160,7 @@ inline double __minipar_to_float(const char* value) {
     return __minipar_to_float(std::string(value));
 }
 
-template<typename T>
-    requires std::is_arithmetic_v<T>
+template<typename T, std::enable_if_t<std::is_arithmetic_v<T>, int> = 0>
 double __minipar_to_float(T value) {
     return static_cast<double>(value);
 }
@@ -228,14 +226,41 @@ decltype(auto) __minipar_array_at(Container& values, Index index) {
         invalid = index < 0;
     }
 
-    if (invalid || index >= values.size()) {
+    if (invalid) {
         std::cerr << "Erro de execucao: indice " << index
                   << " fora dos limites (tamanho " << values.size() << ")."
                   << std::endl;
         std::exit(EXIT_FAILURE);
     }
     const auto converted = static_cast<std::size_t>(index);
+    if (converted >= values.size()) {
+        std::cerr << "Erro de execucao: indice " << index
+                  << " fora dos limites (tamanho " << values.size() << ")."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
     return values[converted];
+}
+
+template<typename Container, typename Index, typename Value>
+void __minipar_array_set(Container& values, Index index, Value&& value) {
+    bool invalid = false;
+    if constexpr (std::is_floating_point_v<Index>) {
+        invalid = !std::isfinite(index) || std::floor(index) != index || index < 0;
+    } else if constexpr (std::is_signed_v<Index>) {
+        invalid = index < 0;
+    }
+
+    if (invalid) {
+        std::cerr << "Erro de execucao: indice " << index
+                  << " invalido para atribuicao em array." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    const auto converted = static_cast<std::size_t>(index);
+    if (converted >= values.size()) {
+        values.resize(converted + 1);
+    }
+    values[converted] = std::forward<Value>(value);
 }
 
 inline std::vector<double> __parse_ints(const std::string& text) {

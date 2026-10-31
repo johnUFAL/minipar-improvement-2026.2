@@ -1,343 +1,644 @@
 from __future__ import annotations
 
+import ast
+import re
+from dataclasses import dataclass
 from pathlib import Path
 
-from ..sintatico.ast import (
-    Assignment,
-    ASTNode,
-    BinaryExpr,
-    BoolExpr,
-    BreakStmt,
-    CChannelExpr,
-    ClassDecl,
-    ContinueStmt,
-    DoWhileStmt,
-    ForStmt,
-    FuncCallExpr,
-    FuncDecl,
-    IdentifierExpr,
-    IfStmt,
-    IndexAssign,
-    IndexExpr,
-    InputExpr,
-    ListLiteral,
-    MatrixCreateExpr,
-    MethodCall,
-    NewExpr,
-    NumberExpr,
-    ParBlock,
-    PrintStmt,
-    Program,
-    PropertyAccess,
-    PropertyAssign,
-    ReceiveExpr,
-    ReturnStmt,
-    SendStmt,
-    SeqBlock,
-    StringExpr,
-    ThisExpr,
-    UnaryExpr,
-    VarDecl,
-    WhileStmt,
-)
 from .driver_gcc import DriverGCC
 
 
+_FUNCTION = re.compile(
+    r"func\s+([A-Za-z_]\w*)\((.*?)\)(?:\s*->\s*([\w<>*]+))?:"
+)
+_ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(?::([\w<>*]+))?\s*=\s*(.+)")
+_ARRAY_ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)\[(.+)\]\s*=\s*(.+)")
+
+
+@dataclass
+class _Function:
+    name: str
+    parameters: list[tuple[str, str]]
+    return_type: str | None
+    lines: list[tuple[str, int | None]]
+
+
 class CppCodeGenerator:
+    """Translates textual TAC into C++ without consulting the source AST."""
+
     @staticmethod
-    def _escape_string(value: str) -> str:
-        res = []
-        for ch in value:
-            if ch == "\n": res.append("\\n")
-            elif ch == "\t": res.append("\\t")
-            elif ch == '"': res.append('\\"')
-            elif ch == "\\": res.append("\\\\")
-            else: res.append(ch)
-        return "".join(res)
+    def _split(text: str) -> list[str]:
+        values: list[str] = []
+        start = depth = 0
+        quote: str | None = None
+        escaped = False
+        for index, character in enumerate(text):
+            if escaped:
+                escaped = False
+            elif quote and character == "\\":
+                escaped = True
+            elif quote and character == quote:
+                quote = None
+            elif not quote and character in ("'", '"'):
+                quote = character
+            elif not quote and character in "([{":
+                depth += 1
+            elif not quote and character in ")]}":
+                depth -= 1
+            elif not quote and depth == 0 and character == ",":
+                values.append(text[start:index].strip())
+                start = index + 1
+        values.append(text[start:].strip())
+        return [value for value in values if value]
 
-    def _translate_expression(self, node: ASTNode | None) -> str:
-        if node is None: return "0"
-        if isinstance(node, NumberExpr): return node.value
-        if isinstance(node, StringExpr): return f'"{self._escape_string(node.value)}"'
-        if isinstance(node, BoolExpr): return "true" if node.value else "false"
-        if isinstance(node, IdentifierExpr): return node.name
-        if isinstance(node, UnaryExpr): return f"({node.op}{self._translate_expression(node.operand)})"
-        if isinstance(node, BinaryExpr):
-            left = self._translate_expression(node.left)
-            right = self._translate_expression(node.right)
-            if node.op == "+" and node.tipo_inferido == "string":
-                return f"__minipar_concat({left}, {right})"
-            if node.op == "/":
-                return f"__minipar_divide({left}, {right})"
-            return f"({left} {node.op} {right})"
-        
-        if isinstance(node, NewExpr):
-            args = ", ".join(self._translate_expression(a) for a in node.arguments)
-            return f"std::make_shared<{node.class_name}>({args})"
-        if isinstance(node, ThisExpr): return "this"
-        if isinstance(node, PropertyAccess):
-            if node.property_name == "size": return f"{self._translate_expression(node.object)}.size()"
-            return f"{self._translate_expression(node.object)}->{node.property_name}"
-        
-        if isinstance(node, MethodCall):
-            args = ", ".join(self._translate_expression(a) for a in node.arguments)
-            m_name = node.method_name
-            if m_name in ("append", "push_back"): return f"{self._translate_expression(node.object)}.push_back({args})"
-            if m_name == "pop": return f"__array_pop({self._translate_expression(node.object)})"
-            if m_name == "size": return f"{self._translate_expression(node.object)}.size()"
-            return f"{self._translate_expression(node.object)}->{m_name}({args})"
-        
-        if isinstance(node, FuncCallExpr):
-            args = ", ".join(self._translate_expression(a) for a in node.arguments)
-            if node.name == "exp":
-                return f"std::exp({args})"
-            if node.name == "random":
-                return "random_val()"
-            if node.name == "random_uniforme":
-                return f"random_uniforme({args})"
-            if node.name in ("agora", "clock"):
-                return "agora()"
-            if node.name == "len":
-                return f"__minipar_len({args})"
-            if node.name == "sum":
-                return f"__minipar_sum({args})"
-            if node.name == "max":
-                return f"__minipar_max({args})"
-            if node.name == "range":
-                return f"__minipar_range({args})"
-            if node.name == "to_number":
-                return f"__minipar_to_float({args})"
-            if node.name == "int":
-                return f"__minipar_to_int({args})"
-            if node.name == "float":
-                return f"__minipar_to_float({args})"
-            if node.name == "str":
-                return f"__to_string({args})"
-            if node.name == "println":
-                return f"minipar_println({args})"
-            if node.name == "format_float":
-                return f"__minipar_format_float({args})"
-            if node.name == "parse_ints":
-                return f"__parse_ints({args})"
-            return f"{node.name}({args})"
+    @staticmethod
+    def _cpp_type(type_name: str | None) -> str:
+        if not type_name:
+            return "std::int64_t"
+        aliases = {
+            "int": "std::int64_t",
+            "integer": "std::int64_t",
+            "int64": "std::int64_t",
+            "int64_t": "std::int64_t",
+            "float": "double",
+            "double": "double",
+            "bool": "bool",
+            "string": "std::string",
+            "void": "void",
+            "c_channel": "std::shared_ptr<MiniParChannel>",
+            "channel": "std::shared_ptr<MiniParChannel>",
+            "Canal*": "std::shared_ptr<MiniParChannel>",
+            "canal*": "std::shared_ptr<MiniParChannel>",
+            "list": "std::vector<std::int64_t>",
+            "matrix": "std::vector<std::vector<double>>",
+        }
+        if type_name.startswith("list<") and type_name.endswith(">"):
+            element = CppCodeGenerator._cpp_type(type_name[5:-1])
+            return f"std::vector<{element}>"
+        return aliases.get(type_name, f"std::shared_ptr<{type_name}>")
 
-        if isinstance(node, CChannelExpr):
-            ip = self._translate_expression(node.ip)
-            port = self._translate_expression(node.port)
-            return f"std::make_shared<MiniParChannel>({ip}, {port})"
-        if isinstance(node, ReceiveExpr):
-            return f"{self._translate_expression(node.channel)}->receiveData()"
-        if isinstance(node, InputExpr):
-            if node.prompt:
-                return f"input({self._translate_expression(node.prompt)})"
-            return "input()"
+    @staticmethod
+    def _literal_type(expression: str) -> str | None:
+        text = expression.strip()
+        if text in ("true", "false"):
+            return "bool"
+        if text.startswith(("'", '"')):
+            return "string"
+        if re.fullmatch(r"[+-]?\d+", text):
+            return "int"
+        if re.fullmatch(r"[+-]?(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?", text):
+            return "float"
+        return None
 
-        if isinstance(node, ListLiteral):
-            elems = ", ".join(self._translate_expression(e) for e in node.elements)
-            return f"std::vector<double>{{{elems}}}"
-        if isinstance(node, MatrixCreateExpr):
-            r = self._translate_expression(node.rows)
-            c = self._translate_expression(node.cols)
-            v = self._translate_expression(node.init_value)
-            return f"__make_matrix({r}, {c}, {v})"
-        if isinstance(node, IndexExpr):
-            obj = self._translate_expression(node.object)
-            idx = self._translate_expression(node.index)
-            return f"__minipar_array_at({obj}, {idx})"
+    @staticmethod
+    def _expression(expression: str, result_type: str | None = None) -> str:
+        text = expression.strip()
+        if text.startswith("'") or text.startswith('"'):
+            try:
+                value = ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                value = text[1:-1]
+            if isinstance(value, str):
+                return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
+        if text.startswith("[") and text.endswith("]"):
+            elements = CppCodeGenerator._split(text[1:-1])
+            values = ", ".join(CppCodeGenerator._expression(item) for item in elements)
+            element_type = "double" if any("." in item for item in elements) else "std::int64_t"
+            return f"std::vector<{element_type}>{{{values}}}"
+        binary = re.fullmatch(r"(.+?)\s+([+\-*/%])\s+(.+)", text)
+        if binary:
+            left, operator, right = binary.groups()
+            left_cpp = CppCodeGenerator._expression(left)
+            right_cpp = CppCodeGenerator._expression(right)
+            if operator == "+" and result_type == "string":
+                return f"__minipar_concat({left_cpp}, {right_cpp})"
+            if operator == "/":
+                return f"__minipar_divide({left_cpp}, {right_cpp})"
+            return f"({left_cpp} {operator} {right_cpp})"
+        text = re.sub(r"\btrue\b", "true", text)
+        text = re.sub(r"\bfalse\b", "false", text)
+        text = re.sub(r"\band\b", "&&", text)
+        text = re.sub(r"\bor\b", "||", text)
+        text = re.sub(r"\bnot\b", "!", text)
+        text = re.sub(r"(?<![=!<>])=(?!=)", "==", text) if "if " in text else text
+        text = re.sub(r"\blen\(", "__minipar_len(", text)
+        text = re.sub(r"\bto_number\(", "__minipar_to_float(", text)
+        text = re.sub(r"\binput\(", "input(", text)
+        text = re.sub(r"\bc_channel\(", "std::make_shared<MiniParChannel>(", text)
+        text = re.sub(r"\bmatrix\(", "__make_matrix(", text)
+        text = re.sub(r"\b([A-Za-z_]\w*)\[([^\[\]]+)\]", r"__minipar_array_at(\1, \2)", text)
+        return text
 
-        return "0"
+    @staticmethod
+    def _rename_identifiers(text: str, names: dict[str, str]) -> str:
+        result: list[str] = []
+        index = 0
+        quote: str | None = None
+        escaped = False
+        while index < len(text):
+            character = text[index]
+            if quote:
+                result.append(character)
+                if escaped:
+                    escaped = False
+                elif character == "\\":
+                    escaped = True
+                elif character == quote:
+                    quote = None
+                index += 1
+                continue
+            if character in ("'", '"'):
+                quote = character
+                result.append(character)
+                index += 1
+                continue
+            identifier = re.match(r"[A-Za-z_]\w*", text[index:])
+            if identifier:
+                word = identifier.group()
+                result.append(names.get(word, word))
+                index += len(word)
+            else:
+                result.append(character)
+                index += 1
+        return "".join(result)
 
-    def _has_value_return(self, node: ASTNode | None) -> bool:
-        if node is None: return False
-        if isinstance(node, ReturnStmt): return node.value is not None
-        if isinstance(node, (SeqBlock, ParBlock)):
-            return any(self._has_value_return(stmt) for stmt in node.statements)
-        if isinstance(node, IfStmt):
-            return self._has_value_return(node.then_branch) or self._has_value_return(node.else_branch)
-        if isinstance(node, (WhileStmt, DoWhileStmt, ForStmt)):
-            return self._has_value_return(node.body)
-        return False
+    @staticmethod
+    def _parse(tac: str) -> tuple[list[_Function], list[tuple[str, int | None]], dict[str, list[str]]]:
+        functions: list[_Function] = []
+        main: list[tuple[str, int | None]] = []
+        classes: dict[str, list[str]] = {}
+        current_function: _Function | None = None
+        source_line: int | None = None
+        in_main = False
 
-    def _uses_float_return(self, node: ASTNode | None) -> bool:
-        """Detecta aritmética de ponto flutuante no corpo da função."""
-        if node is None:
-            return False
-        if isinstance(node, BinaryExpr):
-            if node.op == "/":
-                return True
-            return self._uses_float_return(node.left) or self._uses_float_return(node.right)
-        if isinstance(node, NumberExpr):
-            return "." in node.value
-        if isinstance(node, (SeqBlock, ParBlock)):
-            return any(self._uses_float_return(stmt) for stmt in node.statements)
-        if isinstance(node, IfStmt):
-            return self._uses_float_return(node.then_branch) or self._uses_float_return(node.else_branch)
-        if isinstance(node, (WhileStmt, DoWhileStmt, ForStmt)):
-            return self._uses_float_return(node.body)
-        if isinstance(node, ReturnStmt):
-            return self._uses_float_return(node.value)
-        return False
-
-    def _return_type(self, body: ASTNode | None) -> str:
-        if not self._has_value_return(body):
-            return "void"
-        # auto falha no g++ quando há return double e return 0 (int) na mesma função
-        if self._uses_float_return(body):
-            return "double"
-        return "auto"
-
-    def _translate_statement(self, node: ASTNode | None, indent: str = "") -> str:
-        if node is None: return ""
-        if isinstance(node, VarDecl):
-            expr = self._translate_expression(node.init_value) if node.init_value else "0"
-            return f"{indent}auto {node.name} = {expr};\n"
-        if isinstance(node, Assignment):
-            return f"{indent}{node.name} = {self._translate_expression(node.value)};\n"
-        if isinstance(node, PropertyAssign):
-            obj = self._translate_expression(node.object)
-            return f"{indent}{obj}->{node.property_name} = {self._translate_expression(node.value)};\n"
-        if isinstance(node, IndexAssign):
-            tgt = self._translate_expression(node.target)
-            return f"{indent}{tgt} = {self._translate_expression(node.value)};\n"
-        
-        if isinstance(node, (MethodCall, FuncCallExpr)):
-            return f"{indent}{self._translate_expression(node)};\n"
-        if isinstance(node, ReturnStmt):
-            val = self._translate_expression(node.value) if node.value else ""
-            return f"{indent}return {val};\n"
-        if isinstance(node, BreakStmt):
-            return f"{indent}break;\n"
-        if isinstance(node, ContinueStmt):
-            return f"{indent}continue;\n"
-        
-        if isinstance(node, SendStmt):
-            chan = self._translate_expression(node.channel)
-            msg = self._translate_expression(node.message)
-            return f"{indent}{chan}->sendData(__to_string({msg}));\n"
-
-        if isinstance(node, PrintStmt):
-            args = ", ".join(self._translate_expression(arg) for arg in node.arguments)
-            return f"{indent}minipar_print({args});\n"
-        
-        if isinstance(node, SeqBlock):
-            lines = [f"{indent}{{\n"]
-            for stmt in node.statements: lines.append(self._translate_statement(stmt, indent + "    "))
-            lines.append(f"{indent}}}\n")
-            return "".join(lines)
-        if isinstance(node, ParBlock):
-            lines = [f"{indent}{{\n", f"{indent}    std::vector<std::function<void()>> __m_tasks;\n"]
-            for stmt in node.statements:
-                lines.append(f"{indent}    __m_tasks.emplace_back([&]() {{\n{self._translate_statement(stmt, indent + '        ')}{indent}    }});\n")
-            lines.append(f"{indent}    minipar_parallel(__m_tasks);\n{indent}}}\n")
-            return "".join(lines)
-        if isinstance(node, WhileStmt):
-            res = f"{indent}while ({self._translate_expression(node.condition)})\n"
-            res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ")
-            return res
-        if isinstance(node, DoWhileStmt):
-            res = f"{indent}do\n"
-            res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ").rstrip()
-            res += f"\n{indent}while ({self._translate_expression(node.condition)});\n"
-            return res
-        if isinstance(node, ForStmt):
-            if node.iterator_name and node.iterable:
-                res = f"{indent}for (auto {node.iterator_name} : {self._translate_expression(node.iterable)})\n"
-                res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ")
-                return res
-            init = self._translate_for_part(node.initializer)
-            cond = self._translate_expression(node.condition) if node.condition else "true"
-            inc = self._translate_for_part(node.increment)
-            res = f"{indent}for ({init}; {cond}; {inc})\n"
-            res += self._translate_statement(node.body, indent if isinstance(node.body, (SeqBlock, ParBlock)) else indent + "    ")
-            return res
-        if isinstance(node, IfStmt):
-            res = f"{indent}if ({self._translate_expression(node.condition)})\n"
-            res += self._translate_statement(node.then_branch, indent if isinstance(node.then_branch, (SeqBlock, ParBlock)) else indent + "    ")
-            if node.else_branch:
-                res = res.rstrip() + f"\n{indent}else\n"
-                if isinstance(node.else_branch, IfStmt):
-                    res = res.rstrip() + " " + self._translate_statement(node.else_branch, indent).lstrip()
-                else:
-                    res += self._translate_statement(node.else_branch, indent if isinstance(node.else_branch, (SeqBlock, ParBlock)) else indent + "    ")
-            return res
-        return ""
-
-    def _translate_for_part(self, node: ASTNode | None) -> str:
-        if node is None: return ""
-        if isinstance(node, VarDecl):
-            expr = self._translate_expression(node.init_value) if node.init_value else "0"
-            return f"auto {node.name} = {expr}"
-        if isinstance(node, Assignment):
-            return f"{node.name} = {self._translate_expression(node.value)}"
-        if isinstance(node, PropertyAssign):
-            return f"{self._translate_expression(node.object)}->{node.property_name} = {self._translate_expression(node.value)}"
-        if isinstance(node, IndexAssign):
-            return f"{self._translate_expression(node.target)} = {self._translate_expression(node.value)}"
-        return self._translate_expression(node)
-
-    def generate(self, program: Program, output_name: str) -> bool:
-        cpp_code = '#include "minipar_rt.hpp"\n\n'
-        
-        for node in program.statements:
-            if isinstance(node, ClassDecl):
-                cpp_code += f"class {node.name}" + (f" : public {node.superclass}" if node.superclass else "") + " {\npublic:\n"
-                for attr in node.attributes:
-                    if attr.init_value:
-                        init = self._translate_expression(attr.init_value)
-                        cpp_code += f"    decltype({init}) {attr.name} = {init};\n"
-                    else:
-                        cpp_code += f"    double {attr.name} = 0;\n"
-                for method in node.methods:
-                    params = ", ".join(
-                        f"auto {parameter.name}" for parameter in method.params
+        for raw_line in tac.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("#"):
+                source_match = re.fullmatch(r"#\s*source:\s*(\d+)", line)
+                if source_match:
+                    source_line = int(source_match.group(1))
+                class_match = re.fullmatch(r"#\s*class\s+([A-Za-z_]\w*):\s*(.*)", line)
+                if class_match:
+                    classes[class_match.group(1)] = (
+                        CppCodeGenerator._split(class_match.group(2))
                     )
-                    ret = self._return_type(method.body)
-                    cpp_code += f"    {ret} {method.name}({params}) {{\n"
-                    if isinstance(method.body, SeqBlock):
-                        for stmt in method.body.statements: cpp_code += self._translate_statement(stmt, "        ")
-                    else: cpp_code += self._translate_statement(method.body, "        ")
-                    cpp_code += "    }\n"
-                cpp_code += "};\n\n"
-            elif isinstance(node, FuncDecl):
-                params = ", ".join(
-                    f"auto {parameter.name}" for parameter in node.params
+                continue
+            header = _FUNCTION.fullmatch(line)
+            if header:
+                name, parameter_text, return_type = header.groups()
+                parameters = []
+                for parameter in CppCodeGenerator._split(parameter_text):
+                    pieces = parameter.split(":", 1)
+                    parameters.append((pieces[0].strip(), pieces[1].strip() if len(pieces) > 1 else ""))
+                current_function = _Function(name, parameters, return_type, [])
+                functions.append(current_function)
+                source_line = None
+                continue
+            if line == "endfunc":
+                current_function = None
+                source_line = None
+                continue
+            if line == "MAIN:":
+                in_main = True
+                source_line = None
+                continue
+            if current_function is not None:
+                current_function.lines.append((line, source_line))
+            elif in_main or not functions:
+                if line != "goto MAIN":
+                    main.append((line, source_line))
+        return functions, main, classes
+
+    @classmethod
+    def _infer_types(
+        cls, lines: list[tuple[str, int | None]], parameters: list[tuple[str, str]],
+        functions: dict[str, _Function], classes: dict[str, list[str]],
+    ) -> tuple[dict[str, str], list[tuple[str, str]], str]:
+        types = {name: type_name for name, type_name in parameters if type_name}
+        for line, _ in lines:
+            assignment = _ASSIGNMENT.fullmatch(line)
+            if assignment and assignment.group(2):
+                types[assignment.group(1)] = assignment.group(2)
+
+        def expression_type(expression: str) -> str | None:
+            expression = expression.strip()
+            if expression in types:
+                return types[expression]
+            literal = cls._literal_type(expression)
+            if literal:
+                return literal
+            if expression.startswith("["):
+                elements = cls._split(expression[1:-1])
+                if elements and all(cls._literal_type(item) == "float" for item in elements):
+                    return "list<float>"
+                if elements and cls._literal_type(elements[0]) == "string":
+                    return "list<string>"
+                return "list<int>"
+            index = re.fullmatch(r"([A-Za-z_]\w*)\[(.+)\]", expression)
+            if index:
+                collection_type = types.get(index.group(1), "")
+                if collection_type.startswith("list<"):
+                    return collection_type[5:-1]
+                return "int"
+            call = re.fullmatch(r"call\s+([\w.]+)\s*,\s*\d+", expression)
+            if call and call.group(1) in functions:
+                return functions[call.group(1)].return_type
+            if expression.startswith("alloc "):
+                return expression[6:].strip()
+            if expression.startswith("c_channel("):
+                return "c_channel"
+            if expression.startswith(("input(", "recv ")):
+                return "string"
+            if expression.startswith("getfield "):
+                operands = cls._split(expression[len("getfield "):])
+                if len(operands) == 2:
+                    class_type = types.get(operands[0], "")
+                    fields = classes.get(class_type.removeprefix("shared_ptr<").removesuffix(">"), [])
+                    try:
+                        return fields[int(operands[1])]
+                    except (ValueError, IndexError):
+                        return None
+            operands = re.split(r"\s+(?:\+|-|\*|/|%)\s+", expression)
+            if len(operands) > 1:
+                operand_types = [expression_type(item) for item in operands]
+                if "string" in operand_types and "+" in expression:
+                    return "string"
+                if "float" in operand_types or "/" in expression:
+                    return "float"
+                if all(item is not None for item in operand_types):
+                    return "int"
+            return None
+
+        def function_calls() -> list[tuple[str, list[str]]]:
+            calls: list[tuple[str, list[str]]] = []
+            for body in [function.lines for function in functions.values()] + [lines]:
+                pending: list[str] = []
+                for line, _ in body:
+                    if line.startswith("param "):
+                        pending.append(line[6:].strip())
+                    else:
+                        call = re.search(r"call\s+([\w.]+)\s*,\s*(\d+)", line)
+                        if call:
+                            count = int(call.group(2))
+                            calls.append((call.group(1), pending[-count:] if count else []))
+                            if count:
+                                del pending[-count:]
+                        elif not line.startswith("#"):
+                            pending.clear()
+            return calls
+
+        # Propagate types from call sites so unannotated TAC parameters remain typed.
+        for _ in range(max(1, len(functions) + 1)):
+            changed = False
+            for function_name, arguments in function_calls():
+                function = functions.get(function_name)
+                if function is None:
+                    continue
+                for index, expression in enumerate(arguments):
+                    if index < len(function.parameters) and not function.parameters[index][1]:
+                        inferred = expression_type(expression)
+                        if inferred and function.parameters[index][1] != inferred:
+                            function.parameters[index] = (function.parameters[index][0], inferred)
+                            changed = True
+            for body, parameters in [(function.lines, function.parameters) for function in functions.values()] + [(lines, [])]:
+                local_types = dict(types)
+                local_types.update({name: kind for name, kind in parameters if kind})
+                for line, _ in body:
+                    assignment = _ASSIGNMENT.fullmatch(line)
+                    if assignment:
+                        destination, explicit_type, expression = assignment.groups()
+                        inferred = explicit_type or expression_type(expression)
+                        if inferred and local_types.get(destination) != inferred:
+                            local_types[destination] = inferred
+                            changed = True
+                types.update(local_types)
+            for function in functions.values():
+                if function.return_type:
+                    continue
+                returns = [
+                    expression_type(match.group(1))
+                    for line, _ in function.lines
+                    if (match := re.fullmatch(r"ret\s+(.+)", line))
+                ]
+                inferred_return = next((item for item in returns if item), None)
+                if inferred_return:
+                    function.return_type = inferred_return
+                    changed = True
+            if not changed:
+                break
+
+        for function in functions.values():
+            function.return_type = function.return_type or (
+                "void" if not any(line.startswith("ret ") for line, _ in function.lines)
+                else "int"
+            )
+        return types, parameters, "void"
+
+    @classmethod
+    def _render_body(
+        cls, lines: list[tuple[str, int | None]], parameters: list[tuple[str, str]],
+        functions: dict[str, _Function], classes: dict[str, list[str]],
+        declare_variables: bool = True,
+    ) -> tuple[list[str], str]:
+        types, _, _ = cls._infer_types(lines, parameters, functions, classes)
+        variables: set[str] = set()
+        for line, _ in lines:
+            assignment = _ASSIGNMENT.fullmatch(line)
+            if assignment:
+                variables.add(assignment.group(1))
+            array_assignment = _ARRAY_ASSIGNMENT.fullmatch(line)
+            if array_assignment:
+                variables.add(array_assignment.group(1))
+        parameter_names = {name for name, _ in parameters}
+        local_declarations = (
+            [
+                f"    [[maybe_unused]] {cls._cpp_type(types.get(name))} {name}{{}};"
+                for name in sorted(variables - parameter_names)
+            ]
+            if declare_variables
+            else []
+        )
+        fork_blocks: dict[
+            int,
+            tuple[
+                str, list[tuple[str, int | None]], dict[str, str],
+                dict[str, str], dict[str, str],
+            ],
+        ] = {}
+        excluded: set[int] = set()
+        for fork_index, (fork_line, _) in enumerate(lines):
+            if not fork_line.startswith("fork "):
+                continue
+            fork = re.fullmatch(
+                r"fork\s+(\w+)\s*,\s*\w+\s*,\s*.*?,\s*(\w+)", fork_line
+            )
+            if fork is None:
+                raise ValueError(f"Instrucao fork TAC invalida: {fork_line}")
+            task_name, branch_label = fork.groups()
+            label_index = next(
+                (
+                    index for index in range(fork_index + 1, len(lines))
+                    if lines[index][0] == f"{branch_label}:"
+                ),
+                None,
+            )
+            if label_index is None:
+                raise ValueError(f"Rotulo fork TAC nao definido: {branch_label}")
+            join_index = next(
+                (
+                    index for index in range(label_index + 1, len(lines))
+                    if lines[index][0].startswith("join ")
+                    and task_name in cls._split(lines[index][0][5:])
+                ),
+                None,
+            )
+            if join_index is None:
+                raise ValueError(f"join TAC nao encontrado para tarefa {task_name}")
+            branch_body = lines[label_index + 1:join_index]
+            branch_types, _, _ = cls._infer_types(
+                branch_body, parameters, functions, classes
+            )
+            assigned: set[str] = set()
+            for branch_line, _ in branch_body:
+                assignment = _ASSIGNMENT.fullmatch(branch_line)
+                if assignment:
+                    assigned.add(assignment.group(1))
+            for name in assigned:
+                branch_types.setdefault(name, types.get(name, ""))
+            scalar_types = {"int", "integer", "int64", "int64_t", "float", "double", "bool", "string"}
+            local_names = {
+                name: f"_minipar_local_{fork_index}_{name}"
+                for name in sorted(assigned)
+                if branch_types.get(name) in scalar_types
+            }
+            result_names = {
+                name: f"_minipar_result_{fork_index}_{name}"
+                for name in local_names
+            }
+            type_names = {
+                name: branch_types[name] for name in local_names
+            }
+            fork_blocks[fork_index] = (
+                task_name, branch_body, local_names, result_names, type_names
+            )
+            excluded.update(range(label_index, join_index + 1))
+
+        output = local_declarations
+        if declare_variables and fork_blocks:
+            output.append("    std::vector<std::function<void()>> _minipar_tasks;")
+            for _, _, _, result_names, type_names in fork_blocks.values():
+                for name, result_name in result_names.items():
+                    output.append(
+                        f"    [[maybe_unused]] {cls._cpp_type(type_names[name])} "
+                        f"{result_name}{{}};"
+                    )
+        pending_parameters: list[str] = []
+        pending_forks: list[int] = []
+        index = 0
+        while index < len(lines):
+            if index in excluded:
+                index += 1
+                continue
+            line, source_line = lines[index]
+            if source_line is not None:
+                output.append(f"    // MiniPar line {source_line}")
+            if index in fork_blocks:
+                _, branch_body, local_names, result_names, _ = fork_blocks[index]
+                renamed_body = [
+                    (cls._rename_identifiers(branch_line, local_names), line_number)
+                    for branch_line, line_number in branch_body
+                ]
+                rendered_branch_body, _ = cls._render_body(
+                    renamed_body, parameters, functions, classes,
+                    declare_variables=False,
                 )
-                ret = self._return_type(node.body)
-                cpp_code += f"{ret} {node.name}({params}) {{\n"
-                if isinstance(node.body, SeqBlock):
-                    for stmt in node.body.statements: cpp_code += self._translate_statement(stmt, "    ")
-                else: cpp_code += self._translate_statement(node.body, "    ")
-                cpp_code += "}\n\n"
+                output.append("    _minipar_tasks.emplace_back([&]() {")
+                output.extend(
+                    f"        auto {local_name} = {original_name};"
+                    for original_name, local_name in local_names.items()
+                )
+                output.extend(f"    {item}" for item in rendered_branch_body)
+                output.extend(
+                    f"        {result_names[name]} = {local_names[name]};"
+                    for name in local_names
+                )
+                output.append("    });")
+                pending_forks.append(index)
+                index += 1
+                continue
+            if line.startswith("param "):
+                pending_parameters.append(line[6:].strip())
+                index += 1
+                continue
+            if line.startswith("print "):
+                print_values = [
+                    cls._expression(value)
+                    for value in cls._split(line[6:])
+                ]
+                output.append(f"    minipar_print({', '.join(print_values)});")
+                index += 1
+                continue
+            assignment = _ASSIGNMENT.fullmatch(line)
+            array_assignment = _ARRAY_ASSIGNMENT.fullmatch(line)
+            if assignment:
+                destination, _, expression = assignment.groups()
+                call = re.fullmatch(r"call\s+([\w.]+)\s*,\s*(\d+)", expression)
+                allocation = re.fullmatch(r"alloc\s+(.+)", expression)
+                getfield = re.fullmatch(r"getfield\s+(.+)", expression)
+                if call:
+                    count = int(call.group(2))
+                    args = pending_parameters[-count:] if count else []
+                    if count:
+                        del pending_parameters[-count:]
+                    output.append(f"    {destination} = {call.group(1)}({', '.join(cls._expression(item) for item in args)});")
+                elif allocation:
+                    allocation_type = types.get(destination, "")
+                    if allocation_type.startswith("shared_ptr<"):
+                        allocation_type = allocation_type[11:-1]
+                    output.append(f"    {destination} = std::make_shared<{allocation_type}>();")
+                elif getfield:
+                    base, offset = cls._split(getfield.group(1))
+                    output.append(f"    {destination} = {cls._expression(base)}->field_{offset};")
+                elif expression.startswith("recv "):
+                    output.append(f"    {destination} = {cls._expression(expression[5:])}->receiveData();")
+                else:
+                    output.append(
+                        f"    {destination} = "
+                        f"{cls._expression(expression, types.get(destination))};"
+                    )
+            elif array_assignment:
+                array_name, array_index, value = array_assignment.groups()
+                output.append(f"    __minipar_array_set({array_name}, {cls._expression(array_index)}, {cls._expression(value)});")
+            elif line.startswith("setfield "):
+                base, offset, value = cls._split(line[len("setfield "):])
+                output.append(f"    {cls._expression(base)}->field_{offset} = {cls._expression(value)};")
+            elif line.startswith("send "):
+                channel, message = cls._split(line[5:])
+                output.append(f"    {cls._expression(channel)}->sendData(__to_string({cls._expression(message)}));")
+            elif line.startswith("ifFalse "):
+                conditional = re.fullmatch(
+                    r"ifFalse\s+(.+?)\s+goto\s+(\w+)", line
+                )
+                if conditional is None:
+                    raise ValueError(f"Instrucao ifFalse TAC invalida: {line}")
+                condition, label = conditional.groups()
+                output.append(f"    if (!({cls._expression(condition)})) goto {label};")
+            elif line.startswith("if "):
+                conditional = re.fullmatch(
+                    r"if\s+(.+?)\s+goto\s+(\w+)", line
+                )
+                if conditional is None:
+                    raise ValueError(f"Instrucao if TAC invalida: {line}")
+                condition, label = conditional.groups()
+                output.append(f"    if ({cls._expression(condition)}) goto {label};")
+            elif line.startswith("goto "):
+                output.append(f"    goto {line[5:].strip()};")
+            elif line.endswith(":"):
+                output.append(f"{line[:-1]}: ;")
+            elif line == "ret":
+                output.append("    return;")
+            elif line.startswith("ret "):
+                output.append(f"    return {cls._expression(line[4:])};")
+            elif re.fullmatch(r"call\s+[\w.]+\s*,\s*\d+", line):
+                call = re.fullmatch(
+                    r"call\s+([\w.]+)\s*,\s*(\d+)", line
+                )
+                if call is None:
+                    raise ValueError(f"Instrucao call TAC invalida: {line}")
+                function_name, count_text = call.groups()
+                count = int(count_text)
+                args = pending_parameters[-count:] if count else []
+                if count:
+                    del pending_parameters[-count:]
+                output.append(
+                    f"    {function_name}({', '.join(cls._expression(item) for item in args)});"
+                )
+            elif line.startswith("fork "):
+                raise ValueError(f"Instrucao fork TAC nao associada a bloco: {line}")
+            elif line.startswith("join"):
+                output.append("    minipar_parallel(_minipar_tasks);")
+                output.append("    _minipar_tasks.clear();")
+                for fork_index in pending_forks:
+                    _, _, _, result_names, _ = fork_blocks[fork_index]
+                    output.extend(
+                        f"    {name} = {result_name};"
+                        for name, result_name in result_names.items()
+                    )
+                pending_forks.clear()
+            elif line in ("par_begin", "par_end") or line.startswith("par_begin "):
+                pass
+            else:
+                raise ValueError(f"Instrucao TAC nao suportada pelo codegen: {line}")
+            index += 1
+        return output, types.get("__return__", "void")
 
-        cpp_code += (
-            "int main() {\n"
-            "    minipar_init_console();\n"
-            "    #ifdef _WIN32\n"
-            "    WSADATA wsa;\n"
-            "    WSAStartup(MAKEWORD(2,2), &wsa);\n"
-            "    #endif\n"
-            "    try {\n"
-        )
-        for node in program.statements:
-            if not isinstance(node, (ClassDecl, FuncDecl)):
-                if isinstance(node, SeqBlock):
-                    for stmt in node.statements: cpp_code += self._translate_statement(stmt, "        ")
-                else: cpp_code += self._translate_statement(node, "        ")
-        cpp_code += (
-            "    } catch (const std::exception& error) {\n"
-            "        std::cerr << \"Erro de execucao: \" << error.what() << std::endl;\n"
-            "        return 1;\n"
-            "    }\n"
-            "    return 0;\n"
-            "}\n"
-        )
+    @classmethod
+    def _generate_cpp(cls, tac: str) -> str:
+        functions, main_lines, classes = cls._parse(tac)
+        function_map = {function.name: function for function in functions}
+        for function in functions:
+            cls._infer_types(function.lines, function.parameters, function_map, classes)
 
+        cpp = ['#include "minipar_rt.hpp"', "", "#include <memory>", "#include <string>", "#include <vector>", ""]
+        for class_name, fields in classes.items():
+            cpp.append(f"struct {class_name} {{")
+            for index, field_type in enumerate(fields):
+                cpp.append(f"    {cls._cpp_type(field_type)} field_{index}{{}};")
+            cpp.extend(["};", ""])
+
+        signatures: dict[str, str] = {}
+        for function in functions:
+            ret = cls._cpp_type(function.return_type)
+            args = ", ".join(
+                f"[[maybe_unused]] {cls._cpp_type(kind)} {name}"
+                for name, kind in function.parameters
+            )
+            signatures[function.name] = f"{ret} {function.name}({args})"
+        for signature in signatures.values():
+            cpp.append(f"{signature};")
+        if signatures:
+            cpp.append("")
+
+        for function in functions:
+            signature = signatures[function.name]
+            cpp.append(f"{signature} {{")
+            body, _ = cls._render_body(function.lines, function.parameters, function_map, classes)
+            cpp.extend(body)
+            if function.return_type != "void" and not any(line.startswith("ret ") for line, _ in function.lines):
+                cpp.append("    return {};")
+            cpp.extend(["}", ""])
+
+        cpp.extend([
+            "int main() {",
+            "    minipar_init_console();",
+            "    #ifdef _WIN32",
+            "    WSADATA wsa{};",
+            "    WSAStartup(MAKEWORD(2, 2), &wsa);",
+            "    #endif",
+            "    try {",
+        ])
+        body, _ = cls._render_body(main_lines, [], function_map, classes)
+        cpp.extend("    " + line for line in body)
+        cpp.extend([
+            "    } catch (const std::exception& error) {",
+            '        std::cerr << "Erro de execucao: " << error.what() << std::endl;',
+            "        return 1;",
+            "    }",
+            "    return 0;",
+            "}",
+            "",
+        ])
+        return "\n".join(cpp)
+
+    def generate(self, tac: str, output_name: str) -> bool:
+        if not isinstance(tac, str):
+            raise TypeError("CppCodeGenerator.generate espera TAC textual")
+        cpp_code = self._generate_cpp(tac)
         output_dir = Path(__file__).resolve().parents[2] / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
         cpp_path = output_dir / f"{output_name}.cpp"
-
-        with cpp_path.open("w", encoding="utf-8") as f:
-            f.write(cpp_code)
-        
-        print("[CODEGEN] Compilando via g++ com -std=c++20 e -O3...")
+        cpp_path.write_text(cpp_code, encoding="utf-8")
+        print("[CODEGEN] Compilando via g++ com -std=c++17 -O3 -Wall...")
         return DriverGCC().compile(cpp_path)

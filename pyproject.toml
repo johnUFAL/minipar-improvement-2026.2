@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "minipar"
 version = "0.1.0"
-description = "Compilador MiniPar: TAC + transpilação para C++20"
+description = "Compilador MiniPar: TAC + transpilação para C++17"
 requires-python = ">=3.11"
 dependencies = ["Flask>=3.0"]
 

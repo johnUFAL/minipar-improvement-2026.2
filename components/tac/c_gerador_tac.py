@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import fields, is_dataclass
 from pathlib import Path
 
 from ..sintatico.ast import (
@@ -60,6 +61,7 @@ class TACGenerator:
         self.class_fields: dict[str, dict[str, tuple[int, str, ASTNode | None]]] = {}
         self.class_methods: dict[str, dict[str, tuple[str, FuncDecl]]] = {}
         self.current_class: str | None = None
+        self.parameter_types: dict[str, tuple[str, ...]] = {}
 
     def _temp(self, type_: str | None = None) -> str:
         name = f"t{self.temp_count}"
@@ -278,9 +280,13 @@ class TACGenerator:
                 )
             for argument in function_arguments:
                 self._emit(f"param {self._expr(argument)}")
-            return self._new_temp(
-                node, f"call {node.name}, {len(function_arguments)}"
-            )
+            call = f"call {node.name}, {len(function_arguments)}"
+            if function and (
+                function.return_type or self._function_return_type(function.body)
+            ) == "void":
+                self._emit(call)
+                return "0"
+            return self._new_temp(node, call)
         if isinstance(node, MethodCall):
             if node.method_name in ("send", "receive"):
                 receiver = self._expr(node.object)
@@ -307,10 +313,15 @@ class TACGenerator:
             self._emit(f"param {receiver}")
             for argument in method_arguments:
                 self._emit(f"param {self._expr(argument)}")
-            return self._new_temp(
-                node,
-                f"call {owner}_{node.method_name}, {len(method_arguments) + 1}",
-            )
+            call_name = f"{owner}_{node.method_name}"
+            call = f"call {call_name}, {len(method_arguments) + 1}"
+            if (
+                declaration.return_type
+                or self._function_return_type(declaration.body)
+            ) == "void":
+                self._emit(call)
+                return "0"
+            return self._new_temp(node, call)
         if isinstance(node, NewExpr):
             if node.class_name not in self.class_fields:
                 raise ValueError(f"Classe TAC nao definida: {node.class_name}")
@@ -392,34 +403,162 @@ class TACGenerator:
         name: str,
         class_name: str | None = None,
     ) -> None:
-        parameters = (["self"] if class_name else []) + [
-            parameter.name for parameter in declaration.params
-        ]
-        self._emit(f"func {name}({', '.join(parameters)}):")
+        parameter_types = self.parameter_types.get(name, ())
         previous_types = self.variable_types
         previous_class = self.current_class
         self.variable_types = {
-            parameter.name: parameter.type
-            for parameter in declaration.params
-            if parameter.type != "var"
+            parameter.name: (
+                parameter.type
+                if parameter.type != "var"
+                else parameter_types[index]
+                if index < len(parameter_types)
+                else "int"
+            )
+            for index, parameter in enumerate(declaration.params)
         }
         if class_name:
             self.variable_types["self"] = class_name
         self.current_class = class_name
+        parameters = (["self:" + (class_name or "var")] if class_name else []) + [
+            f"{parameter.name}:{parameter.type if parameter.type != 'var' else parameter_types[index] if index < len(parameter_types) else 'int'}"
+            for index, parameter in enumerate(declaration.params)
+        ]
+        return_type = declaration.return_type or self._function_return_type(
+            declaration.body
+        )
+        self._emit(f"# source: {declaration.line}")
+        self._emit(
+            f"func {name}({', '.join(parameters)}) -> {return_type}:"
+        )
         self._stmt(declaration.body)
         self._emit("endfunc")
         self.variable_types = previous_types
         self.current_class = previous_class
 
+    def _function_return_type(self, node: ASTNode | None) -> str:
+        return_types: list[str] = []
+
+        def visit(value: object) -> None:
+            if isinstance(value, ReturnStmt) and value.value is not None:
+                inferred = self._type_of(value.value)
+                if inferred and inferred not in ("unknown", "var"):
+                    return_types.append(inferred)
+            if is_dataclass(value):
+                for field in fields(value):
+                    child = getattr(value, field.name)
+                    if isinstance(child, tuple):
+                        for item in child:
+                            visit(item)
+                    elif is_dataclass(child):
+                        visit(child)
+
+        visit(node)
+        if return_types:
+            return return_types[0]
+        if any(isinstance(value, ReturnStmt) and value.value is not None for value in self._walk(node)):
+            return "int"
+        return "void"
+
+    @staticmethod
+    def _walk(node: object) -> tuple[object, ...]:
+        values: list[object] = []
+
+        def visit(value: object) -> None:
+            if is_dataclass(value):
+                values.append(value)
+                for field in fields(value):
+                    child = getattr(value, field.name)
+                    if isinstance(child, tuple):
+                        for item in child:
+                            visit(item)
+                    elif is_dataclass(child):
+                        visit(child)
+
+        visit(node)
+        return tuple(values)
+
+    def _prepare_parameter_types(self, program: Program) -> None:
+        declarations = {
+            statement.name: statement
+            for statement in program.statements
+            if isinstance(statement, FuncDecl)
+        }
+        for statement in program.statements:
+            if isinstance(statement, ClassDecl):
+                declarations.update(
+                    {
+                        f"{statement.name}_{method.name}": method
+                        for method in statement.methods
+                    }
+                )
+        source_types: dict[str, str] = {}
+        calls: dict[str, list[tuple[ASTNode | None, ...]]] = {}
+
+        def visit(node: object) -> None:
+            if isinstance(node, ClassDecl):
+                previous_class = self.current_class
+                self.current_class = node.name
+                for attribute in node.attributes:
+                    visit(attribute)
+                for method in node.methods:
+                    visit(method)
+                self.current_class = previous_class
+                return
+            if isinstance(node, VarDecl) and node.init_value is not None:
+                source_types[node.name] = self._type_of(node.init_value) or node.type
+            if isinstance(node, FuncCallExpr):
+                calls.setdefault(node.name, []).append(node.arguments)
+            if isinstance(node, MethodCall):
+                calls.setdefault(node.method_name, []).append(node.arguments)
+            if is_dataclass(node):
+                for field in fields(node):
+                    child = getattr(node, field.name)
+                    if isinstance(child, tuple):
+                        for item in child:
+                            visit(item)
+                    elif is_dataclass(child):
+                        visit(child)
+
+        visit(program)
+        self.parameter_types = {}
+        for name, declaration in declarations.items():
+            inferred: list[str] = []
+            call_arguments = calls.get(name, [])
+            if not call_arguments and "_" in name:
+                call_arguments = calls.get(name.rsplit("_", 1)[1], [])
+            for index, parameter in enumerate(declaration.params):
+                if parameter.type != "var":
+                    inferred.append(parameter.type)
+                    continue
+                argument_type = None
+                for arguments in call_arguments:
+                    if index >= len(arguments):
+                        continue
+                    argument = arguments[index]
+                    argument_type = self._type_of(argument)
+                    if argument_type in ("unknown", "var"):
+                        argument_type = None
+                    if argument_type is None and isinstance(argument, IdentifierExpr):
+                        argument_type = source_types.get(argument.name)
+                    if argument_type:
+                        break
+                inferred.append(argument_type or "int")
+            self.parameter_types[name] = tuple(inferred)
+
     def _stmt(self, node: ASTNode | None) -> None:
         if node is None:
             return
+        self._emit(f"# source: {node.line}")
         if isinstance(node, VarDecl):
             self._assign_type(node.name, node.init_value, node.type)
-            self._emit(f"{node.name} = {self._expr(node.init_value)}")
+            declared_type = node.type if node.type != "var" else self.variable_types.get(node.name)
+            suffix = f":{declared_type}" if declared_type else ""
+            self._emit(f"{node.name}{suffix} = {self._expr(node.init_value)}")
         elif isinstance(node, Assignment):
             self._assign_type(node.name, node.value)
-            self._emit(f"{node.name} = {self._expr(node.value)}")
+            declared_type = self.variable_types.get(node.name)
+            suffix = f":{declared_type}" if declared_type else ""
+            self._emit(f"{node.name}{suffix} = {self._expr(node.value)}")
         elif isinstance(node, PropertyAssign):
             class_name = self._class_of(node.object)
             field = self._field(class_name, node.property_name)
@@ -439,8 +578,8 @@ class TACGenerator:
             value = self._expr(node.value)
             self._emit(f"{array}[{index}] = {value}")
         elif isinstance(node, PrintStmt):
-            for argument in node.arguments:
-                self._emit(f"print {self._expr(argument)}")
+            arguments = [self._expr(argument) for argument in node.arguments]
+            self._emit(f"print {', '.join(arguments)}")
         elif isinstance(node, SendStmt):
             self._emit(f"send {self._expr(node.channel)}, {self._expr(node.message)}")
         elif isinstance(node, ChannelDecl):
@@ -611,6 +750,13 @@ class TACGenerator:
             if isinstance(statement, ClassDecl)
         ]
         self._build_class_layouts(class_declarations)
+        self._prepare_parameter_types(program)
+        for class_name, fields_by_name in self.class_fields.items():
+            field_types = ", ".join(
+                field_type
+                for _, field_type, _ in fields_by_name.values()
+            )
+            self._emit(f"# class {class_name}: {field_types}")
         functions = [
             statement for statement in program.statements
             if isinstance(statement, (FuncDecl, ClassDecl))

@@ -23,8 +23,7 @@ def test_neuronio_runs_in_tac_and_converges_after_51_iterations() -> None:
 
     _, output = TACExecutor().execute(tac)
 
-    iteration_line = output.index("Iteracoes totais:")
-    assert output[iteration_line + 1] == "51"
+    assert "Iteracoes totais: 51" in output
     assert " = alloc 8" in tac
     assert " = getfield " in tac
     assert "setfield " in tac
@@ -47,7 +46,7 @@ def test_parallel_factorial_and_fibonacci_have_distinct_tac_branches() -> None:
     ]
     assert len(branches) == 2
     assert branches[0] != branches[1]
-    assert "120" in output
+    assert "Fatorial de 5: 120" in output
     assert all(str(value) in output for value in (0, 1, 2, 3, 5, 8, 13))
 
 
@@ -63,8 +62,7 @@ def test_calculator_uses_send_recv_and_simulated_fifo_channels() -> None:
     assert "send requisicao, operando1" in tac
     assert "t10 = recv requisicao" in tac
     assert "t19 = recv resposta" in tac
-    result_line = output.index("Resultado:")
-    assert output[result_line + 1] == "5"
+    assert "Resultado: 5" in output
 
 
 def test_fork_core_and_host_targets_are_lowered_and_joined() -> None:
