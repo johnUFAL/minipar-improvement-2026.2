@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import subprocess
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stderr
 from io import StringIO
@@ -43,6 +45,103 @@ class DriverGCCIntegrationTests(unittest.TestCase):
                     cpp_path, executable, optimization_level="O0"
                 )
             )
+
+    @unittest.skipUnless(
+        shutil.which(os.environ.get("CXX", "g++").strip('"')),
+        "g++ is required for native channel code generation",
+    )
+    def test_logical_channel_uses_runtime_hosts_and_role(self) -> None:
+        source = (
+            "c_channel dados computador_1 computador_2\n"
+            "SEQ\n"
+            "    numero: int = 0\n"
+            "    texto: string = \"\"\n"
+            "    ativo: bool = false\n"
+            "    dados.send(42, \"ola\", true)\n"
+            "    dados.receive(numero, texto, ativo)\n"
+            "    print(numero, texto, ativo)\n"
+        )
+        program = Parser(Lexer(source)).parse()
+        analyzer = SemanticAnalyzer()
+        self.assertTrue(analyzer.analyze(program), analyzer.diagnostics)
+        tac = TACGenerator().generate_text(program)
+        generated_cpp = CppCodeGenerator._generate_cpp(tac)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            cpp_path = temp / "exchange.cpp"
+            cpp_path.write_text(generated_cpp, encoding="utf-8")
+            executable = temp / ("exchange.exe" if os.name == "nt" else "exchange")
+            self.assertTrue(
+                driver_gcc.DriverGCC().compile(
+                    cpp_path, executable, optimization_level="O0"
+                )
+            )
+            hosts_path = temp / "minipar.hosts"
+
+            for attempt in range(2):
+                with socket.socket() as sock:
+                    sock.bind(("127.0.0.1", 0))
+                    port = sock.getsockname()[1]
+                server_address = "127.0.0.1" if attempt == 0 else "127.0.0.2"
+                hosts_path.write_text(
+                    f"computador_1 = 127.0.0.1:{port}\n"
+                    f"computador_2 = {server_address}:{port}\n",
+                    encoding="utf-8",
+                )
+                server = subprocess.Popen(
+                    [
+                        str(executable),
+                        "--hosts",
+                        str(hosts_path),
+                        "--como",
+                        "computador_2",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                try:
+                    time.sleep(0.1)
+                    client = subprocess.run(
+                        [
+                            str(executable),
+                            "--hosts",
+                            str(hosts_path),
+                            "--como",
+                            "computador_1",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                        timeout=10,
+                    )
+                    server_stdout, server_stderr = server.communicate(timeout=10)
+                    self.assertEqual(client.returncode, 0, client.stderr)
+                    self.assertEqual(server.returncode, 0, server_stderr)
+                    self.assertIn("42 ola 1", client.stdout)
+                    self.assertIn("42 ola 1", server_stdout)
+                finally:
+                    if server.poll() is None:
+                        server.kill()
+                        server.communicate(timeout=2)
+
+            invalid_role = subprocess.run(
+                [
+                    str(executable),
+                    "--hosts",
+                    str(hosts_path),
+                    "--como",
+                    "computador_inexistente",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+            self.assertNotEqual(invalid_role.returncode, 0)
+            self.assertIn("computador_1", invalid_role.stderr)
+            self.assertIn("computador_2", invalid_role.stderr)
 
     def test_compiler_diagnostics_map_generated_cpp_to_minipar_line(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

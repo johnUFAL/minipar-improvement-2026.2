@@ -519,4 +519,6 @@ private:
     }
 };
 
+void minipar_init(int argc, char** argv);
+
 void minipar_parallel(const std::vector<std::function<void()>>& tasks);

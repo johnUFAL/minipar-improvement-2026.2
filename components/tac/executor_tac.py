@@ -371,6 +371,37 @@ class TACExecutor:
             )
             return True
 
+        typed_send = re.fullmatch(r"send_typed\s+(.+)", line)
+        if typed_send:
+            operands = self._split_operands(typed_send.group(1))
+            if len(operands) < 2:
+                raise ValueError(f"Instrucao send_typed TAC invalida: {line}")
+            channel = self._evaluate(operands[0], variables, channels)
+            if not isinstance(channel, _Channel):
+                raise TypeError("send_typed TAC requer um canal")
+            channel.messages.extend(
+                self._evaluate(operand, variables, channels)
+                for operand in operands[1:]
+            )
+            return True
+
+        typed_receive = re.fullmatch(r"recv\s+(.+)", line)
+        if typed_receive:
+            operands = self._split_operands(typed_receive.group(1))
+            if len(operands) < 2:
+                raise ValueError(f"Instrucao recv TAC invalida: {line}")
+            channel = self._evaluate(operands[0], variables, channels)
+            if not isinstance(channel, _Channel):
+                raise TypeError("recv TAC requer um canal")
+            if len(channel.messages) < len(operands) - 1:
+                context.pc = line_index
+                return False
+            for destination in operands[1:]:
+                if not re.fullmatch(r"[A-Za-z_]\w*", destination):
+                    raise ValueError(f"Destino recv TAC invalido: {destination}")
+                variables[destination] = channel.messages.pop(0)
+            return True
+
         array_assignment = re.fullmatch(
             r"([A-Za-z_]\w*)\[(.+)\]\s*=\s*(.+)", line
         )

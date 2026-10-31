@@ -1,6 +1,9 @@
 #include "minipar_rt.hpp"
 
 #include <cerrno>
+#include <fstream>
+#include <map>
+#include <sstream>
 #include <string>
 
 #ifdef _WIN32
@@ -12,6 +15,149 @@
 #endif
 
 namespace {
+
+struct MiniParHost {
+    std::string address;
+    int port;
+};
+
+struct MiniParConfiguration {
+    std::string hosts_path = "minipar.hosts";
+    std::string role;
+};
+
+MiniParConfiguration& configuration() {
+    static MiniParConfiguration value;
+    return value;
+}
+
+std::string trim(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+std::map<std::string, MiniParHost> load_hosts() {
+    const std::string& path = configuration().hosts_path;
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error(
+            "Nao foi possivel abrir o arquivo de hosts '" + path +
+            "'. Use --hosts <arquivo> ou crie minipar.hosts."
+        );
+    }
+
+    std::map<std::string, MiniParHost> hosts;
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto comment = line.find('#');
+        if (comment != std::string::npos) {
+            line.erase(comment);
+        }
+        line = trim(line);
+        if (line.empty()) {
+            continue;
+        }
+
+        const auto equals = line.find('=');
+        if (equals == std::string::npos) {
+            throw std::runtime_error(
+                "Entrada invalida em '" + path + "', linha " +
+                std::to_string(line_number) + "; esperado nome = host:porta."
+            );
+        }
+        const std::string name = trim(line.substr(0, equals));
+        const std::string endpoint = trim(line.substr(equals + 1));
+        const auto colon = endpoint.rfind(':');
+        if (name.empty() || endpoint.empty() || colon == std::string::npos ||
+            colon == 0 || colon + 1 == endpoint.size()) {
+            throw std::runtime_error(
+                "Entrada invalida em '" + path + "', linha " +
+                std::to_string(line_number) + "; esperado nome = host:porta."
+            );
+        }
+        const std::string address = trim(endpoint.substr(0, colon));
+        const std::string port_text = trim(endpoint.substr(colon + 1));
+        std::size_t parsed = 0;
+        int port = 0;
+        try {
+            port = std::stoi(port_text, &parsed);
+        } catch (const std::exception&) {
+            throw std::runtime_error(
+                "Porta invalida em '" + path + "', linha " +
+                std::to_string(line_number) + "."
+            );
+        }
+        if (parsed != port_text.size() || port < 1 || port > 65535 ||
+            address.empty()) {
+            throw std::runtime_error(
+                "Host ou porta invalida em '" + path + "', linha " +
+                std::to_string(line_number) + "."
+            );
+        }
+        if (!hosts.emplace(name, MiniParHost{address, port}).second) {
+            throw std::runtime_error(
+                "Nome de computador duplicado em '" + path + "', linha " +
+                std::to_string(line_number) + ": " + name + "."
+            );
+        }
+    }
+    if (input.bad()) {
+        throw std::runtime_error("Falha ao ler o arquivo de hosts '" + path + "'.");
+    }
+    return hosts;
+}
+
+std::string valid_host_names(const std::map<std::string, MiniParHost>& hosts) {
+    std::ostringstream result;
+    bool first = true;
+    for (const auto& [name, _] : hosts) {
+        result << (first ? "" : ", ") << name;
+        first = false;
+    }
+    return first ? "(nenhum configurado)" : result.str();
+}
+
+void open_logical_channel(
+    MiniParChannel& channel,
+    const std::string& first_name,
+    const std::string& second_name
+) {
+    const auto hosts = load_hosts();
+    const std::string& role = configuration().role;
+    const auto local = hosts.find(role);
+    if (role.empty() || local == hosts.end()) {
+        const std::string detail = role.empty()
+            ? "Informe --como <nome>."
+            : "Papel '" + role + "' inexistente.";
+        throw std::runtime_error(
+            detail + " Nomes validos: " + valid_host_names(hosts) + "."
+        );
+    }
+    if (role == first_name) {
+        const auto remote = hosts.find(second_name);
+        if (remote == hosts.end()) {
+            throw std::runtime_error(
+                "Computador '" + second_name + "' do canal nao encontrado. "
+                "Nomes validos: " + valid_host_names(hosts) + "."
+            );
+        }
+        channel.conectar(remote->second.address, remote->second.port);
+    } else if (role == second_name) {
+        channel.ouvir(local->second.port);
+    } else {
+        throw std::runtime_error(
+            "Papel '" + role + "' nao participa do canal '" + first_name +
+            "'-'" + second_name + "'. Use --como " + first_name + " ou --como " +
+            second_name + "."
+        );
+    }
+}
 
 #ifdef _WIN32
 constexpr MiniParNativeSocket invalid_socket = INVALID_SOCKET;
@@ -305,6 +451,7 @@ MiniParChannel::MiniParChannel(std::string first_host, std::string second_host)
     if (first_host.empty() || second_host.empty()) {
         throw std::invalid_argument("Os computadores do canal nao podem ser vazios.");
     }
+    open_logical_channel(*this, first_host, second_host);
 }
 
 MiniParChannel::~MiniParChannel() {
@@ -453,6 +600,32 @@ void MiniParChannel::conectar(const std::string& host, int port) {
         );
     }
     set_socket_timeout(socket_, timeout_);
+}
+
+void minipar_init(int argc, char** argv) {
+    MiniParConfiguration parsed;
+    for (int index = 1; index < argc; ++index) {
+        const std::string argument = argv[index];
+        if (argument == "--como" || argument == "--hosts") {
+            if (index + 1 >= argc || argv[index + 1][0] == '\0') {
+                throw std::invalid_argument(
+                    "A flag " + argument + " exige um argumento."
+                );
+            }
+            const std::string value = argv[++index];
+            if (argument == "--como") {
+                parsed.role = value;
+            } else {
+                parsed.hosts_path = value;
+            }
+        } else {
+            throw std::invalid_argument(
+                "Argumento desconhecido: " + argument +
+                ". Opcoes: --como <nome> --hosts <arquivo>."
+            );
+        }
+    }
+    configuration() = std::move(parsed);
 }
 
 void MiniParChannel::sendData(std::string message) {

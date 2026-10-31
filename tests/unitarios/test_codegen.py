@@ -66,3 +66,14 @@ print t2
     assert 't1 = __minipar_concat(t0, 10);' in generated
     assert "t2 = __minipar_divide(1, 2);" in generated
     assert CppCodeGenerator._cpp_type("Canal*") == "std::shared_ptr<MiniParChannel>"
+
+
+def test_cpp_generator_preserves_text_send_and_typed_channel_send() -> None:
+    tac = """send legacy, 42
+send_typed typed, 42, true
+"""
+
+    generated = CppCodeGenerator._generate_cpp(tac)
+
+    assert "legacy->sendData(__to_string(42));" in generated
+    assert "typed->enviar(42, true);" in generated
