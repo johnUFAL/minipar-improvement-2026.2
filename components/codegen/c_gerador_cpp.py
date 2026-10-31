@@ -502,7 +502,12 @@ class CppCodeGenerator:
                     base, offset = cls._split(getfield.group(1))
                     output.append(f"    {destination} = {cls._expression(base)}->field_{offset};")
                 elif expression.startswith("recv "):
-                    output.append(f"    {destination} = {cls._expression(expression[5:])}->receiveData();")
+                    channel = cls._split(expression[5:])[0]
+                    receive_type = cls._cpp_type(types.get(destination, "string"))
+                    output.append(
+                        f"    {destination} = {cls._expression(channel)}"
+                        f"->receber<{receive_type}>();"
+                    )
                 else:
                     output.append(
                         f"    {destination} = "
@@ -516,7 +521,39 @@ class CppCodeGenerator:
                 output.append(f"    {cls._expression(base)}->field_{offset} = {cls._expression(value)};")
             elif line.startswith("send "):
                 channel, message = cls._split(line[5:])
-                output.append(f"    {cls._expression(channel)}->sendData(__to_string({cls._expression(message)}));")
+                output.append(
+                    f"    {cls._expression(channel)}->sendData("
+                    f"__to_string({cls._expression(message)}));"
+                )
+            elif line.startswith("send_typed "):
+                arguments = cls._split(line[len("send_typed "):])
+                channel, messages = arguments[0], arguments[1:]
+                if not messages:
+                    raise ValueError(f"Instrucao send_typed TAC invalida: {line}")
+                values = ", ".join(cls._expression(message) for message in messages)
+                output.append(
+                    f"    {cls._expression(channel)}->enviar({values});"
+                )
+            elif line.startswith("recv "):
+                arguments = cls._split(line[5:])
+                if len(arguments) < 2:
+                    raise ValueError(f"Instrucao recv TAC invalida: {line}")
+                channel, destinations = arguments[0], arguments[1:]
+                if len(destinations) == 1:
+                    destination = destinations[0]
+                    output.append(
+                        f"    {destination} = {cls._expression(channel)}"
+                        f"->receber<decltype({destination})>();"
+                    )
+                else:
+                    receive_types = ", ".join(
+                        f"decltype({destination})"
+                        for destination in destinations
+                    )
+                    output.append(
+                        f"    std::tie({', '.join(destinations)}) = "
+                        f"{cls._expression(channel)}->receber<{receive_types}>();"
+                    )
             elif line.startswith("ifFalse "):
                 conditional = re.fullmatch(
                     r"ifFalse\s+(.+?)\s+goto\s+(\w+)", line
@@ -611,9 +648,10 @@ class CppCodeGenerator:
             cpp.extend(["}", ""])
 
         cpp.extend([
-            "int main() {",
+            "int main(int argc, char** argv) {",
             "    minipar_init_console();",
             "    try {",
+            "        minipar_init(argc, argv);",
         ])
         body, _ = cls._render_body(main_lines, [], function_map, classes)
         cpp.extend("    " + line for line in body)

@@ -292,8 +292,16 @@ class TACGenerator:
             if node.method_name in ("send", "receive"):
                 receiver = self._expr(node.object)
                 if node.method_name == "send":
-                    for argument in node.arguments:
-                        self._emit(f"send {receiver}, {self._expr(argument)}")
+                    arguments = ", ".join(
+                        self._expr(argument) for argument in node.arguments
+                    )
+                    self._emit(f"send_typed {receiver}, {arguments}")
+                    return "0"
+                if node.arguments:
+                    arguments = ", ".join(
+                        self._expr(argument) for argument in node.arguments
+                    )
+                    self._emit(f"recv {receiver}, {arguments}")
                     return "0"
                 target = self._temp(self._type_of(node))
                 self._emit(f"{target} = recv {receiver}")
@@ -582,7 +590,10 @@ class TACGenerator:
             arguments = [self._expr(argument) for argument in node.arguments]
             self._emit(f"print {', '.join(arguments)}")
         elif isinstance(node, SendStmt):
-            self._emit(f"send {self._expr(node.channel)}, {self._expr(node.message)}")
+            self._emit(
+                f"send {self._expr(node.channel)}, "
+                f"{self._expr(node.message)}"
+            )
         elif isinstance(node, ChannelDecl):
             self._emit(
                 f"{node.name} = c_channel({json.dumps(node.first_host)}, "
