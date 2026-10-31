@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from collections.abc import Sequence
 
 from components.interfaces import (
@@ -122,9 +124,12 @@ class FakeParser(ISintatico):
 
 class FakeTACGenerator(IGeradorTAC):
     def generate(self, program: Program, output_name: str) -> str:
-        return f"{output_name}.tac"
+        path = Path(f"{output_name}.tac")
+        path.write_text("", encoding="utf-8")
+        return str(path)
 
 
 class FakeCppGenerator(IGeradorCpp):
-    def generate(self, program: Program, output_name: str) -> bool:
+    def generate(self, tac: str, output_name: str) -> bool:
+        Path(f"{output_name}.tac").unlink(missing_ok=True)
         return True

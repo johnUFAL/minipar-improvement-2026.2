@@ -22,7 +22,7 @@ def test_quicksort_program_runs_from_ast() -> None:
     variables, output = TACExecutor().execute(tac)
 
     assert variables["ordenado"] == [5, 12, 33, 61, 98]
-    assert output[-1] == "[5, 12, 33, 61, 98]"
+    assert output[-1] == "Array ordenado: [5, 12, 33, 61, 98]"
     assert "PARTITION_LOOP" not in tac
     assert "call quicksort_iterativo, 1" in tac
 

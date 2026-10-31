@@ -49,7 +49,9 @@ class TACExecutor:
         ast.Gt: operator.gt,
         ast.GtE: operator.ge,
     }
-    _function_header = re.compile(r"func\s+(\w+)\((.*?)\):")
+    _function_header = re.compile(
+        r"func\s+(\w+)\((.*?)\)(?:\s*->\s*[\w<>]+)?:"
+    )
     _assignment = re.compile(r"([A-Za-z_]\w*)(?::\w+)?\s*=\s*(.+)")
 
     def __init__(self, max_steps: int = 100_000) -> None:
@@ -220,7 +222,9 @@ class TACExecutor:
             if header:
                 name, parameter_text = header.groups()
                 parameters = tuple(
-                    item.strip() for item in parameter_text.split(",") if item.strip()
+                    item.strip().split(":", 1)[0]
+                    for item in parameter_text.split(",")
+                    if item.strip()
                 )
                 if name in functions:
                     raise ValueError(f"Funcao TAC duplicada: {name}")
@@ -347,9 +351,11 @@ class TACExecutor:
 
         print_match = re.fullmatch(r"print\s+(.+)", line)
         if print_match:
-            output.append(
-                str(self._evaluate(print_match.group(1), variables, channels))
+            values = (
+                self._evaluate(operand, variables, channels)
+                for operand in self._split_operands(print_match.group(1))
             )
+            output.append(" ".join(map(str, values)))
             return True
 
         send = re.fullmatch(r"send\s+(.+)", line)

@@ -98,7 +98,7 @@ class IGeradorTAC(ABC):
 
 class IGeradorCpp(ABC):
     @abstractmethod
-    def generate(self, program: Program, output_name: str) -> bool:
+    def generate(self, tac: str, output_name: str) -> bool:
         """Gera e compila o C++ se o executável foi produzido."""
 
 
