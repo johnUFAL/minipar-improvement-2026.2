@@ -632,7 +632,12 @@ class CppCodeGenerator:
         ])
         return "\n".join(cpp)
 
-    def generate(self, tac: str, output_name: str) -> bool:
+    def generate(
+        self,
+        tac: str,
+        output_name: str,
+        nivel_otimizacao: str = "O2",
+    ) -> bool:
         if not isinstance(tac, str):
             raise TypeError("CppCodeGenerator.generate espera TAC textual")
         cpp_code = self._generate_cpp(tac)
@@ -640,5 +645,8 @@ class CppCodeGenerator:
         output_dir.mkdir(parents=True, exist_ok=True)
         cpp_path = output_dir / f"{output_name}.cpp"
         cpp_path.write_text(cpp_code, encoding="utf-8")
-        print("[CODEGEN] Compilando via g++ com -std=c++17 -O3 -Wall...")
-        return DriverGCC().compile(cpp_path)
+        print(
+            f"[CODEGEN] Compilando via g++ com -std=c++17 "
+            f"-{nivel_otimizacao} -Wall..."
+        )
+        return DriverGCC().compile(cpp_path, optimization_level=nivel_otimizacao)
