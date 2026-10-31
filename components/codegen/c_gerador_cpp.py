@@ -405,13 +405,27 @@ class CppCodeGenerator:
                 assignment = _ASSIGNMENT.fullmatch(branch_line)
                 if assignment:
                     assigned.add(assignment.group(1))
+                array_assignment = _ARRAY_ASSIGNMENT.fullmatch(branch_line)
+                if array_assignment:
+                    assigned.add(array_assignment.group(1))
+                if branch_line.startswith("setfield "):
+                    operands = cls._split(branch_line[len("setfield "):])
+                    if operands and re.fullmatch(r"[A-Za-z_]\w*", operands[0]):
+                        assigned.add(operands[0])
             for name in assigned:
-                branch_types.setdefault(name, types.get(name, ""))
-            scalar_types = {"int", "integer", "int64", "int64_t", "float", "double", "bool", "string"}
+                if not branch_types.get(name):
+                    branch_types[name] = types.get(name, "")
+            untyped_assignments = sorted(
+                name for name in assigned if not branch_types.get(name)
+            )
+            if untyped_assignments:
+                raise ValueError(
+                    "Tipo nao inferido para variavel(is) atribuida(s) "
+                    "em ramo PAR: " + ", ".join(untyped_assignments)
+                )
             local_names = {
                 name: f"_minipar_local_{fork_index}_{name}"
                 for name in sorted(assigned)
-                if branch_types.get(name) in scalar_types
             }
             result_names = {
                 name: f"_minipar_result_{fork_index}_{name}"
@@ -454,7 +468,15 @@ class CppCodeGenerator:
                     renamed_body, parameters, functions, classes,
                     declare_variables=False,
                 )
-                output.append("    _minipar_tasks.emplace_back([&]() {")
+                result_captures = ", ".join(
+                    f"&{result_name}" for result_name in result_names.values()
+                )
+                capture_clause = (
+                    f"[=, {result_captures}]" if result_captures else "[=]"
+                )
+                output.append(
+                    f"    _minipar_tasks.emplace_back({capture_clause}() mutable {{"
+                )
                 output.extend(
                     f"        auto {local_name} = {original_name};"
                     for original_name, local_name in local_names.items()
