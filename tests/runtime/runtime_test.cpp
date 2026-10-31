@@ -1,6 +1,8 @@
 #include "minipar_rt.hpp"
 
+#include <atomic>
 #include <cassert>
+#include <chrono>
 #include <sstream>
 
 int main(int argc, char** argv) {
@@ -10,8 +12,53 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (argc > 1 && std::string(argv[1]) == "division") {
-        __minipar_divide(1, 0);
+        try {
+            __minipar_divide(1, 0);
+        } catch (const std::exception& error) {
+            std::cerr << "Erro de execucao: " << error.what() << std::endl;
+            return 1;
+        }
+        return 2;
+    }
+    if (argc > 1 && std::string(argv[1]) == "parallel") {
+        const auto start = std::chrono::steady_clock::now();
+        minipar_parallel({
+            [] { std::this_thread::sleep_for(std::chrono::milliseconds(200)); },
+            [] { std::this_thread::sleep_for(std::chrono::milliseconds(200)); },
+        });
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - start
+        ).count();
+        std::cout << elapsed << std::endl;
         return 0;
+    }
+    if (argc > 1 && std::string(argv[1]) == "parallel-stress") {
+        for (int iteration = 0; iteration < 50; ++iteration) {
+            minipar_parallel({
+                [] { minipar_print("ramo-a", 1); },
+                [] { minipar_print(std::string("ramo-b"), 2.0); },
+            });
+        }
+        return 0;
+    }
+    if (argc > 1 && std::string(argv[1]) == "parallel-exception") {
+        std::atomic<bool> other_task_finished{false};
+        try {
+            minipar_parallel({
+                [] { __minipar_divide(1, 0); },
+                [&other_task_finished] {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    other_task_finished = true;
+                },
+            });
+        } catch (const std::exception& error) {
+            if (!other_task_finished) {
+                return 3;
+            }
+            std::cerr << "Erro de execucao: " << error.what() << std::endl;
+            return 1;
+        }
+        return 2;
     }
 
     constexpr double expected_random[] = {

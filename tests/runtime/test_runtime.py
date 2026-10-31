@@ -29,6 +29,7 @@ class CppRuntimeTests(unittest.TestCase):
                 compiler_path,
                 "-std=c++20",
                 str(RUNTIME_TEST),
+                str(ROOT / "runtime" / "paralelo.cpp"),
                 "-I",
                 str(ROOT / "runtime"),
                 "-o",
@@ -71,6 +72,37 @@ class CppRuntimeTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(b"divisao por zero", result.stderr)
+
+    def test_parallel_branches_run_concurrently(self) -> None:
+        result = subprocess.run(
+            [str(self.executable), "parallel"], capture_output=True, check=False
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        self.assertLess(int(result.stdout.strip()), 350)
+
+    def test_parallel_output_remains_intact_after_fifty_runs(self) -> None:
+        result = subprocess.run(
+            [str(self.executable), "parallel-stress"],
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
+        lines = result.stdout.decode().splitlines()
+        self.assertEqual(len(lines), 100)
+        self.assertEqual(lines.count("ramo-a 1"), 50)
+        self.assertEqual(lines.count("ramo-b 2"), 50)
+
+    def test_parallel_branch_exception_reaches_main_flow(self) -> None:
+        result = subprocess.run(
+            [str(self.executable), "parallel-exception"],
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(b"Erro de execucao: divisao por zero", result.stderr)
 
 
 if __name__ == "__main__":

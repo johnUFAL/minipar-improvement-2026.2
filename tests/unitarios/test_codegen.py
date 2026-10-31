@@ -46,11 +46,33 @@ par_end
 
     generated = CppCodeGenerator._generate_cpp(tac)
 
-    assert "_minipar_tasks.emplace_back([&]() {" in generated
+    assert "_minipar_tasks.emplace_back([=, &_minipar_result_2_counter]() mutable {" in generated
     assert "minipar_parallel(_minipar_tasks);" in generated
     assert "_minipar_local_2_counter = counter;" in generated
     assert "counter = _minipar_result_2_counter;" in generated
     assert "goto BRANCH;" not in generated
+
+
+def test_cpp_generator_copies_collection_inputs_into_parallel_branches() -> None:
+    tac = """values:list<int> = [1, 2]
+par_begin 1
+fork worker, simulated, 0, BRANCH
+join worker
+goto END
+BRANCH:
+values[0] = 9
+join worker
+END:
+par_end
+print values[0]
+"""
+
+    generated = CppCodeGenerator._generate_cpp(tac)
+
+    assert "[=, &_minipar_result_2_values]() mutable {" in generated
+    assert "auto _minipar_local_2_values = values;" in generated
+    assert "__minipar_array_set(_minipar_local_2_values, 0, 9);" in generated
+    assert "values = _minipar_result_2_values;" in generated
 
 
 def test_cpp_generator_uses_runtime_helpers_for_string_addition_and_division() -> None:

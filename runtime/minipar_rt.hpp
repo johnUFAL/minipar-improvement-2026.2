@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -298,8 +299,14 @@ double __minipar_to_float(T value) {
     return static_cast<double>(value);
 }
 
+inline std::mutex& minipar_output_mutex() {
+    static std::mutex output_mutex;
+    return output_mutex;
+}
+
 template<typename... Values>
 void minipar_print(const Values&... values) {
+    std::lock_guard<std::mutex> lock(minipar_output_mutex());
     minipar_init_console();
     bool first = true;
     ((std::cout << (first ? "" : " ") << values, first = false), ...);
@@ -344,8 +351,7 @@ auto __minipar_max(First first, Second second, Rest... rest) {
 template<typename Left, typename Right>
 auto __minipar_divide(Left left, Right right) {
     if (right == 0) {
-        std::cerr << "Erro de execucao: divisao por zero." << std::endl;
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("divisao por zero.");
     }
     return left / right;
 }
