@@ -494,6 +494,8 @@ public:
         return receiveValues<Types...>(fields, std::index_sequence_for<Types...>{});
     }
 
+    void sendFields(const std::vector<minipar_channel_detail::Field>& fields);
+    std::vector<minipar_channel_detail::Field> receiveFields();
     void sendData(std::string message);
     std::string receiveData();
 
@@ -526,6 +528,21 @@ private:
 };
 
 void minipar_init(int argc, char** argv);
+bool minipar_worker_requested();
+int minipar_worker_port();
+std::pair<std::string, int> minipar_resolve_host(const std::string& name);
+
+using MiniParTaskHandler = std::function<std::vector<minipar_channel_detail::Field>(
+    const std::vector<minipar_channel_detail::Field>&
+)>;
+
+void minipar_register_task(std::string name, MiniParTaskHandler handler);
+bool minipar_run_worker_if_requested();
+std::vector<minipar_channel_detail::Field> minipar_remote_call(
+    const std::string& host,
+    const std::string& task,
+    const std::vector<minipar_channel_detail::Field>& arguments
+);
 
 void minipar_parallel(
     const std::vector<std::function<void()>>& tasks,

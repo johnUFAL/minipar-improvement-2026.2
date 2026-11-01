@@ -93,6 +93,7 @@ def compilar(
         str(source),
         str(runtime_dir / "canal.cpp"),
         str(runtime_dir / "paralelo.cpp"),
+        str(runtime_dir / "worker.cpp"),
         "-I",
         str(runtime_dir),
         "-o",
@@ -126,7 +127,30 @@ def compilar(
         )
     if result.returncode == 0:
         if executable.is_file():
+            generated_source = source.read_text(encoding="utf-8")
+            needs_worker = (
+                "minipar_run_worker_if_requested()" in generated_source
+                and "minipar_register_task(" in generated_source
+            )
+            worker_name = (
+                "minipar_worker.exe"
+                if sys.platform == "win32"
+                else "minipar_worker"
+            )
+            worker_executable = executable.with_name(worker_name)
+            if needs_worker and worker_executable != executable:
+                try:
+                    shutil.copy2(executable, worker_executable)
+                except OSError as error:
+                    print(
+                        f"[ERRO] Nao foi possivel criar o worker "
+                        f"'{worker_executable}': {error}",
+                        file=sys.stderr,
+                    )
+                    return False
             print(f"[SUCESSO] Executavel: {executable}")
+            if needs_worker and worker_executable != executable:
+                print(f"[SUCESSO] Worker: {worker_executable}")
             return True
         print(
             f"[ERRO] O compilador terminou sem erro, mas nao gerou "

@@ -88,6 +88,7 @@ class SemanticAnalyzer:
         self._loop_depth = 0
         self._class_declarations: dict[str, ClassDecl] = {}
         self._concurrent_scope_paths: list[str] = []
+        self._remote_fork_scope_paths: list[str] = []
         self._fork_scopes: list[dict[str, ForkStmt]] = []
         self._channel_calls: dict[
             str,
@@ -143,6 +144,15 @@ class SemanticAnalyzer:
         self, name: str, line: int, column: int | None
     ) -> None:
         symbol = self._lookup(name)
+        if (
+            self._remote_fork_scope_paths
+            and self._concurrent_scope_paths
+            and (
+                self._remote_fork_scope_paths[-1]
+                == self._concurrent_scope_paths[-1]
+            )
+        ):
+            return
         if (
             symbol is not None
             and symbol.category not in ("channel", "function", "class", "task")
@@ -796,12 +806,15 @@ class SemanticAnalyzer:
                 node.task_name, "task", node.line, "task", column=node.column
             )
             self._enter_scope()
-            self._concurrent_scope_paths.append(
-                self._symbol_table.current_scope_path
-            )
+            fork_scope = self._symbol_table.current_scope_path
+            self._concurrent_scope_paths.append(fork_scope)
+            if node.target_kind == "host":
+                self._remote_fork_scope_paths.append(fork_scope)
             self._fork_scopes.append({})
             self.validate_node(node.body)
             self._finish_fork_scope()
+            if node.target_kind == "host":
+                self._remote_fork_scope_paths.pop()
             self._concurrent_scope_paths.pop()
             self._exit_scope()
         elif isinstance(node, JoinStmt):
@@ -1174,6 +1187,7 @@ class SemanticAnalyzer:
 
     def analyze(self, program: Program) -> bool:
         self._concurrent_scope_paths.clear()
+        self._remote_fork_scope_paths.clear()
         self._fork_scopes.clear()
         self._channel_calls.clear()
         self._collect_declarations(program)

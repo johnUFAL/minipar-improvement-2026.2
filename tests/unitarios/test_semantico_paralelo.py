@@ -61,6 +61,17 @@ class ParallelSemanticAnalyzerTests(unittest.TestCase):
             analyzer.diagnostics,
         )
 
+    def test_remote_fork_can_return_outer_result_after_join(self) -> None:
+        analyzer = analyze(
+            "SEQ\n"
+            "    result: int = 0\n"
+            "    fork worker em host(\"computador_2\"):\n"
+            "        result = 42\n"
+            "    join worker\n"
+        )
+
+        self.assertFalse(analyzer.diagnostics, analyzer.diagnostics)
+
     def test_channel_send_and_receive_signatures_must_match(self) -> None:
         analyzer = analyze(
             "c_channel dados pc1 pc2\n"

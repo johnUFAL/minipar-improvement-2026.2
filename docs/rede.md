@@ -50,3 +50,45 @@ atualize a configuracao e a regra de firewall correspondente.
 
 Um papel inexistente ou nao declarado no arquivo produz erro de execucao com
 os nomes validos encontrados na configuracao.
+
+## Fork remoto
+
+O codegen cria, junto do executavel MiniPar, uma copia chamada
+`minipar_worker` (`minipar_worker.exe` no Windows). Ela contem o mesmo codigo
+e os handlers das subtarefas do programa. Argumentos e resultados simples
+(`int`, `float`, `bool` e `string`) sao enviados por valor pelo protocolo tipado
+do canal; cada subtarefa remota tem um nome de tarefa estavel no programa.
+
+Declare os nomes logicos e os enderecos/portas dos workers no arquivo de hosts:
+
+```text
+computador_1 = 192.0.2.10:5001
+computador_2 = 192.0.2.11:5002
+```
+
+Inicie um worker em cada maquina, usando a porta configurada para ela:
+
+```powershell
+.\minipar_worker.exe --porta 5001
+.\minipar_worker.exe --porta 5002
+```
+
+Execute o programa cliente, que deve usar `fork nome em host("computador_2")`
+para encaminhar a subtarefa ao worker correspondente:
+
+```powershell
+.\programa.exe --hosts .\minipar.hosts
+```
+
+Copie para todas as maquinas o mesmo `minipar_worker` gerado para o programa,
+altere `minipar.hosts` para os enderecos alcancaveis e libere as portas dos
+workers no firewall. O cliente falha com erro de conexao ou timeout se o worker
+nao estiver acessivel. O timeout de conexao/resposta pode ser configurado em
+milissegundos pela variavel `MINIPAR_TIMEOUT_MS` (padrao: 5000).
+
+Para validar em dois computadores reais, inicie os workers, execute o programa
+cliente e registre neste documento os sistemas operacionais, configuracao de
+hosts/portas, comandos e resultados observados (incluindo os resultados
+recebidos em `join`). A integracao automatizada valida duas subtarefas remotas
+em localhost; essa verificacao nao substitui a execucao em maquinas reais
+prevista em T41.
