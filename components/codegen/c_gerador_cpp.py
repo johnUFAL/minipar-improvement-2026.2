@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -161,6 +162,36 @@ class CppCodeGenerator:
                 result.append(character)
                 index += 1
         return "".join(result)
+
+    @staticmethod
+    def _identifiers(text: str) -> set[str]:
+        identifiers: set[str] = set()
+        index = 0
+        quote: str | None = None
+        escaped = False
+        while index < len(text):
+            character = text[index]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif character == "\\":
+                    escaped = True
+                elif character == quote:
+                    quote = None
+                index += 1
+                continue
+            if character in ("'", '"'):
+                quote = character
+                index += 1
+                continue
+            identifier = re.match(r"[A-Za-z_]\w*", text[index:])
+            if identifier:
+                word = identifier.group()
+                identifiers.add(word)
+                index += len(word)
+            else:
+                index += 1
+        return identifiers
 
     @staticmethod
     def _parse(tac: str) -> tuple[list[_Function], list[tuple[str, int | None]], dict[str, list[str]]]:
@@ -341,6 +372,8 @@ class CppCodeGenerator:
         cls, lines: list[tuple[str, int | None]], parameters: list[tuple[str, str]],
         functions: dict[str, _Function], classes: dict[str, list[str]],
         declare_variables: bool = True,
+        worker_handlers: list[str] | None = None,
+        task_namespace: str = "main",
     ) -> tuple[list[str], str]:
         types, _, _ = cls._infer_types(lines, parameters, functions, classes)
         variables: set[str] = set()
@@ -363,8 +396,8 @@ class CppCodeGenerator:
         fork_blocks: dict[
             int,
             tuple[
-                str, str | None, list[tuple[str, int | None]], dict[str, str],
-                dict[str, str], dict[str, str],
+                str, str | None, str | None, list[tuple[str, int | None]],
+                dict[str, str], dict[str, str], dict[str, str], list[str], str,
             ],
         ] = {}
         excluded: set[int] = set()
@@ -435,13 +468,61 @@ class CppCodeGenerator:
             type_names = {
                 name: branch_types[name] for name in local_names
             }
+            input_names: list[str] = []
+            if target_kind == "host":
+                identifiers = {
+                    identifier
+                    for branch_line, _ in branch_body
+                    for identifier in cls._identifiers(branch_line)
+                }
+                input_names = sorted(
+                    name for name in identifiers
+                    if name in types and name not in functions
+                )
+                serializable_types = {
+                    "int",
+                    "integer",
+                    "int64",
+                    "int64_t",
+                    "float",
+                    "double",
+                    "bool",
+                    "string",
+                }
+                unsupported = sorted(
+                    name for name in input_names
+                    if types[name] not in serializable_types
+                )
+                unsupported.extend(
+                    name for name in local_names
+                    if type_names[name] not in serializable_types
+                    and name not in unsupported
+                )
+                if unsupported:
+                    raise ValueError(
+                        "Tipos nao serializaveis em fork remoto: "
+                        + ", ".join(unsupported)
+                        + ". Use int, float, bool ou string."
+                    )
+            target_cpp = None
+            if target_kind == "core":
+                target_cpp = cls._expression(target)
+            elif target_kind == "host":
+                target_cpp = (
+                    cls._expression(target)
+                    if target.lstrip().startswith(("'", '"'))
+                    else json.dumps(target)
+                )
             fork_blocks[fork_index] = (
                 task_name,
-                cls._expression(target) if target_kind == "core" else None,
+                target_cpp if target_kind == "core" else None,
+                target_cpp if target_kind == "host" else None,
                 branch_body,
                 local_names,
                 result_names,
                 type_names,
+                input_names,
+                f"{task_namespace}::{task_name}::{fork_index}",
             )
             excluded.update(range(label_index, join_index + 1))
 
@@ -450,7 +531,7 @@ class CppCodeGenerator:
             output.append("    std::vector<std::function<void()>> _minipar_tasks;")
             output.append("    std::vector<std::int64_t> _minipar_cores;")
             output.append("    std::vector<std::string> _minipar_task_names;")
-            for _, _, _, _, result_names, type_names in fork_blocks.values():
+            for _, _, _, _, _, result_names, type_names, _, _ in fork_blocks.values():
                 for name, result_name in result_names.items():
                     output.append(
                         f"    [[maybe_unused]] {cls._cpp_type(type_names[name])} "
@@ -470,11 +551,88 @@ class CppCodeGenerator:
                 (
                     task_name,
                     core_target,
+                    host_target,
                     branch_body,
                     local_names,
                     result_names,
-                    _,
+                    type_names,
+                    input_names,
+                    remote_task_id,
                 ) = fork_blocks[index]
+                if host_target is not None:
+                    handler_body, _ = cls._render_body(
+                        branch_body, parameters, functions, classes,
+                        declare_variables=False,
+                    )
+                    handler_lines = [
+                        f"minipar_register_task({json.dumps(remote_task_id)}, "
+                        "[](const std::vector<minipar_channel_detail::Field>& "
+                        "_minipar_request) {",
+                        f"    if (_minipar_request.size() != {len(input_names)}) "
+                        'throw std::runtime_error("Numero de argumentos remoto inesperado.");',
+                    ]
+                    handler_lines.extend(
+                        "    auto " + name
+                        + " = minipar_channel_detail::decode<"
+                        + cls._cpp_type(types[name]) + ">(_minipar_request["
+                        + str(arg_index) + "]);"
+                        for arg_index, name in enumerate(input_names)
+                    )
+                    handler_lines.extend("    " + item for item in handler_body)
+                    encoded_results = ", ".join(
+                        "minipar_channel_detail::encode(" + name + ")"
+                        for name in result_names
+                    )
+                    handler_lines.append(
+                        "    return std::vector<minipar_channel_detail::Field>{"
+                        + encoded_results + "};"
+                    )
+                    handler_lines.append("});")
+                    if worker_handlers is not None:
+                        worker_handlers.extend("    " + item for item in handler_lines)
+
+                    result_captures = ", ".join(
+                        "&" + value for value in result_names.values()
+                    )
+                    capture_clause = (
+                        f"[=, {result_captures}]"
+                        if result_captures else "[=]"
+                    )
+                    output.append(
+                        f"    _minipar_tasks.emplace_back({capture_clause}() mutable {{"
+                    )
+                    arguments = ", ".join(
+                        "minipar_channel_detail::encode(" + name + ")"
+                        for name in input_names
+                    )
+                    output.append(
+                        "        const auto _minipar_remote_result = "
+                        "minipar_remote_call("
+                        + host_target + ", " + json.dumps(remote_task_id)
+                        + ", std::vector<minipar_channel_detail::Field>{"
+                        + arguments + "});"
+                    )
+                    if result_names:
+                        output.append(
+                            "        if (_minipar_remote_result.size() != "
+                            + str(len(result_names))
+                            + ') throw std::runtime_error("Numero de resultados remotos inesperado.");'
+                        )
+                    for result_index, name in enumerate(result_names):
+                        output.append(
+                            "        " + result_names[name]
+                            + " = minipar_channel_detail::decode<"
+                            + cls._cpp_type(type_names[name])
+                            + ">(_minipar_remote_result[" + str(result_index) + "]);"
+                        )
+                    output.append("    });")
+                    output.append("    _minipar_cores.push_back(0);")
+                    output.append(
+                        f'    _minipar_task_names.emplace_back("{task_name}");'
+                    )
+                    pending_forks.append(index)
+                    index += 1
+                    continue
                 renamed_body = [
                     (cls._rename_identifiers(branch_line, local_names), line_number)
                     for branch_line, line_number in branch_body
@@ -570,8 +728,8 @@ class CppCodeGenerator:
                     f"__to_string({cls._expression(message)}));"
                 )
             elif line.startswith("send_typed "):
-                arguments = cls._split(line[len("send_typed "):])
-                channel, messages = arguments[0], arguments[1:]
+                send_arguments = cls._split(line[len("send_typed "):])
+                channel, messages = send_arguments[0], send_arguments[1:]
                 if not messages:
                     raise ValueError(f"Instrucao send_typed TAC invalida: {line}")
                 values = ", ".join(cls._expression(message) for message in messages)
@@ -579,10 +737,13 @@ class CppCodeGenerator:
                     f"    {cls._expression(channel)}->enviar({values});"
                 )
             elif line.startswith("recv "):
-                arguments = cls._split(line[5:])
-                if len(arguments) < 2:
+                receive_arguments = cls._split(line[5:])
+                if len(receive_arguments) < 2:
                     raise ValueError(f"Instrucao recv TAC invalida: {line}")
-                channel, destinations = arguments[0], arguments[1:]
+                channel, destinations = (
+                    receive_arguments[0],
+                    receive_arguments[1:],
+                )
                 if len(destinations) == 1:
                     destination = destinations[0]
                     output.append(
@@ -647,7 +808,7 @@ class CppCodeGenerator:
                 output.append("    _minipar_cores.clear();")
                 output.append("    _minipar_task_names.clear();")
                 for fork_index in pending_forks:
-                    _, _, _, _, result_names, _ = fork_blocks[fork_index]
+                    _, _, _, _, _, result_names, _, _, _ = fork_blocks[fork_index]
                     output.extend(
                         f"    {name} = {result_name};"
                         for name, result_name in result_names.items()
@@ -675,6 +836,7 @@ class CppCodeGenerator:
             cpp.extend(["};", ""])
 
         signatures: dict[str, str] = {}
+        worker_handlers: list[str] = []
         for function in functions:
             ret = cls._cpp_type(function.return_type)
             args = ", ".join(
@@ -690,19 +852,36 @@ class CppCodeGenerator:
         for function in functions:
             signature = signatures[function.name]
             cpp.append(f"{signature} {{")
-            body, _ = cls._render_body(function.lines, function.parameters, function_map, classes)
+            body, _ = cls._render_body(
+                function.lines,
+                function.parameters,
+                function_map,
+                classes,
+                worker_handlers=worker_handlers,
+                task_namespace=function.name,
+            )
             cpp.extend(body)
             if function.return_type != "void" and not any(line.startswith("ret ") for line, _ in function.lines):
                 cpp.append("    return {};")
             cpp.extend(["}", ""])
 
+        body, _ = cls._render_body(
+            main_lines,
+            [],
+            function_map,
+            classes,
+            worker_handlers=worker_handlers,
+            task_namespace="main",
+        )
         cpp.extend([
             "int main(int argc, char** argv) {",
             "    minipar_init_console();",
             "    try {",
-            "        minipar_init(argc, argv);",
         ])
-        body, _ = cls._render_body(main_lines, [], function_map, classes)
+        cpp.extend(worker_handlers)
+        cpp.append("        minipar_init(argc, argv);")
+        if worker_handlers:
+            cpp.append("        if (minipar_run_worker_if_requested()) return 0;")
         cpp.extend("    " + line for line in body)
         cpp.extend([
             "    } catch (const std::exception& error) {",

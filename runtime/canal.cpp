@@ -24,6 +24,8 @@ struct MiniParHost {
 struct MiniParConfiguration {
     std::string hosts_path = "minipar.hosts";
     std::string role;
+    bool worker_mode = false;
+    int worker_port = 0;
 };
 
 MiniParConfiguration& configuration() {
@@ -458,6 +460,16 @@ MiniParChannel::~MiniParChannel() {
     close();
 }
 
+void MiniParChannel::sendFields(
+    const std::vector<minipar_channel_detail::Field>& fields
+) {
+    sendFrame(fields);
+}
+
+std::vector<minipar_channel_detail::Field> MiniParChannel::receiveFields() {
+    return receiveFrame();
+}
+
 void MiniParChannel::setTimeout(std::chrono::milliseconds timeout) {
     if (timeout.count() <= 0) {
         throw std::invalid_argument("O timeout do canal deve ser maior que zero.");
@@ -604,9 +616,23 @@ void MiniParChannel::conectar(const std::string& host, int port) {
 
 void minipar_init(int argc, char** argv) {
     MiniParConfiguration parsed;
+    if (argc > 0 && argv[0] != nullptr) {
+        std::string executable_name = argv[0];
+        const auto separator = executable_name.find_last_of("/\\");
+        if (separator != std::string::npos) {
+            executable_name.erase(0, separator + 1);
+        }
+        if (executable_name == "minipar_worker" ||
+            executable_name == "minipar_worker.exe") {
+            parsed.worker_mode = true;
+        }
+    }
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
-        if (argument == "--como" || argument == "--hosts") {
+        if (argument == "--worker") {
+            parsed.worker_mode = true;
+        } else if (argument == "--como" || argument == "--hosts" ||
+                   argument == "--porta") {
             if (index + 1 >= argc || argv[index + 1][0] == '\0') {
                 throw std::invalid_argument(
                     "A flag " + argument + " exige um argumento."
@@ -615,17 +641,56 @@ void minipar_init(int argc, char** argv) {
             const std::string value = argv[++index];
             if (argument == "--como") {
                 parsed.role = value;
-            } else {
+            } else if (argument == "--hosts") {
                 parsed.hosts_path = value;
+            } else {
+                std::size_t parsed_characters = 0;
+                try {
+                    parsed.worker_port = std::stoi(value, &parsed_characters);
+                } catch (const std::exception&) {
+                    throw std::invalid_argument("Porta do worker invalida: " + value);
+                }
+                if (parsed_characters != value.size() ||
+                    parsed.worker_port < 1 || parsed.worker_port > 65535) {
+                    throw std::invalid_argument("Porta do worker invalida: " + value);
+                }
             }
         } else {
             throw std::invalid_argument(
                 "Argumento desconhecido: " + argument +
-                ". Opcoes: --como <nome> --hosts <arquivo>."
+                ". Opcoes: --como <nome> --hosts <arquivo> "
+                "--worker --porta <porta>."
             );
         }
     }
+    if (parsed.worker_mode && parsed.worker_port == 0) {
+        throw std::invalid_argument("O modo --worker exige --porta <porta>.");
+    }
+    if (!parsed.worker_mode && parsed.worker_port != 0) {
+        throw std::invalid_argument("--porta so pode ser usada com --worker.");
+    }
     configuration() = std::move(parsed);
+}
+
+bool minipar_worker_requested() {
+    return configuration().worker_mode;
+}
+
+int minipar_worker_port() {
+    return configuration().worker_port;
+}
+
+std::pair<std::string, int> minipar_resolve_host(const std::string& name) {
+    const auto hosts = load_hosts();
+    const auto host = hosts.find(name);
+    if (host == hosts.end()) {
+        throw std::runtime_error(
+            "Host remoto '" + name + "' nao encontrado em '" +
+            configuration().hosts_path + "'. Nomes validos: " +
+            valid_host_names(hosts) + "."
+        );
+    }
+    return {host->second.address, host->second.port};
 }
 
 void MiniParChannel::sendData(std::string message) {
