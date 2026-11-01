@@ -94,6 +94,26 @@ Para verificar os tipos:
 uv run mypy
 ```
 
+## Afinidade de CPU em `fork`
+
+`fork tarefa em core(N):` solicita afinidade da thread a uma CPU disponível
+para o processo. `N` começa em 1 e seleciona a N-ésima CPU permitida; portanto,
+o mapeamento também respeita restrições como `taskset` no Linux. Sem `core(N)`,
+o escalonador do sistema operacional escolhe a CPU. Se o índice solicitado não
+estiver disponível ou não puder ser aplicado, o runtime avisa e executa a
+tarefa sem afinidade.
+
+Para registrar a CPU em que cada tarefa executou, defina
+`MINIPAR_TRACE_CORES=1`. O benchmark de quatro tarefas CPU-bound geradas pelo
+MiniPar pode ser executado com:
+
+```bash
+uv run python benchmarks/benchmark_fork_core.py
+```
+
+O benchmark reporta a mediana das amostras e o speedup; use uma máquina com
+pelo menos quatro CPUs disponíveis para avaliar o critério de `> 2,5x`.
+
 ## Fases
 
 1. Análise léxica e sintática: `components/lexico/` e `components/sintatico/`.

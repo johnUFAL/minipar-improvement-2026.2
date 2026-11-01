@@ -527,4 +527,8 @@ private:
 
 void minipar_init(int argc, char** argv);
 
-void minipar_parallel(const std::vector<std::function<void()>>& tasks);
+void minipar_parallel(
+    const std::vector<std::function<void()>>& tasks,
+    const std::vector<std::int64_t>& core_indices = {},
+    const std::vector<std::string>& task_names = {}
+);

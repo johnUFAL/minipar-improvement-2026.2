@@ -363,7 +363,7 @@ class CppCodeGenerator:
         fork_blocks: dict[
             int,
             tuple[
-                str, list[tuple[str, int | None]], dict[str, str],
+                str, str | None, list[tuple[str, int | None]], dict[str, str],
                 dict[str, str], dict[str, str],
             ],
         ] = {}
@@ -372,11 +372,12 @@ class CppCodeGenerator:
             if not fork_line.startswith("fork "):
                 continue
             fork = re.fullmatch(
-                r"fork\s+(\w+)\s*,\s*\w+\s*,\s*.*?,\s*(\w+)", fork_line
+                r"fork\s+(\w+)\s*,\s*(\w+)\s*,\s*(.+?)\s*,\s*(\w+)",
+                fork_line,
             )
             if fork is None:
                 raise ValueError(f"Instrucao fork TAC invalida: {fork_line}")
-            task_name, branch_label = fork.groups()
+            task_name, target_kind, target, branch_label = fork.groups()
             label_index = next(
                 (
                     index for index in range(fork_index + 1, len(lines))
@@ -435,14 +436,21 @@ class CppCodeGenerator:
                 name: branch_types[name] for name in local_names
             }
             fork_blocks[fork_index] = (
-                task_name, branch_body, local_names, result_names, type_names
+                task_name,
+                cls._expression(target) if target_kind == "core" else None,
+                branch_body,
+                local_names,
+                result_names,
+                type_names,
             )
             excluded.update(range(label_index, join_index + 1))
 
         output = local_declarations
         if declare_variables and fork_blocks:
             output.append("    std::vector<std::function<void()>> _minipar_tasks;")
-            for _, _, _, result_names, type_names in fork_blocks.values():
+            output.append("    std::vector<std::int64_t> _minipar_cores;")
+            output.append("    std::vector<std::string> _minipar_task_names;")
+            for _, _, _, _, result_names, type_names in fork_blocks.values():
                 for name, result_name in result_names.items():
                     output.append(
                         f"    [[maybe_unused]] {cls._cpp_type(type_names[name])} "
@@ -459,7 +467,14 @@ class CppCodeGenerator:
             if source_line is not None:
                 output.append(f"    // MiniPar line {source_line}")
             if index in fork_blocks:
-                _, branch_body, local_names, result_names, _ = fork_blocks[index]
+                (
+                    task_name,
+                    core_target,
+                    branch_body,
+                    local_names,
+                    result_names,
+                    _,
+                ) = fork_blocks[index]
                 renamed_body = [
                     (cls._rename_identifiers(branch_line, local_names), line_number)
                     for branch_line, line_number in branch_body
@@ -487,6 +502,13 @@ class CppCodeGenerator:
                     for name in local_names
                 )
                 output.append("    });")
+                output.append(
+                    "    _minipar_cores.push_back("
+                    f"{core_target if core_target is not None else '0'});"
+                )
+                output.append(
+                    f'    _minipar_task_names.emplace_back("{task_name}");'
+                )
                 pending_forks.append(index)
                 index += 1
                 continue
@@ -617,10 +639,15 @@ class CppCodeGenerator:
             elif line.startswith("fork "):
                 raise ValueError(f"Instrucao fork TAC nao associada a bloco: {line}")
             elif line.startswith("join"):
-                output.append("    minipar_parallel(_minipar_tasks);")
+                output.append(
+                    "    minipar_parallel("
+                    "_minipar_tasks, _minipar_cores, _minipar_task_names);"
+                )
                 output.append("    _minipar_tasks.clear();")
+                output.append("    _minipar_cores.clear();")
+                output.append("    _minipar_task_names.clear();")
                 for fork_index in pending_forks:
-                    _, _, _, result_names, _ = fork_blocks[fork_index]
+                    _, _, _, _, result_names, _ = fork_blocks[fork_index]
                     output.extend(
                         f"    {name} = {result_name};"
                         for name, result_name in result_names.items()

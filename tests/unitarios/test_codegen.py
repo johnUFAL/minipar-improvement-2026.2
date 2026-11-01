@@ -47,10 +47,37 @@ par_end
     generated = CppCodeGenerator._generate_cpp(tac)
 
     assert "_minipar_tasks.emplace_back([=, &_minipar_result_2_counter]() mutable {" in generated
-    assert "minipar_parallel(_minipar_tasks);" in generated
+    assert (
+        "minipar_parallel("
+        "_minipar_tasks, _minipar_cores, _minipar_task_names);"
+    ) in generated
     assert "_minipar_local_2_counter = counter;" in generated
     assert "counter = _minipar_result_2_counter;" in generated
     assert "goto BRANCH;" not in generated
+
+
+def test_cpp_generator_preserves_fork_core_target() -> None:
+    tac = """par_begin 1
+fork worker, core, requested_core, BRANCH
+join worker
+goto END
+BRANCH:
+print 'running'
+join worker
+END:
+par_end
+"""
+
+    generated = CppCodeGenerator._generate_cpp(tac)
+
+    assert (
+        "_minipar_cores.push_back(requested_core);"
+    ) in generated
+    assert '_minipar_task_names.emplace_back("worker");' in generated
+    assert (
+        "minipar_parallel("
+        "_minipar_tasks, _minipar_cores, _minipar_task_names);"
+    ) in generated
 
 
 def test_cpp_generator_copies_collection_inputs_into_parallel_branches() -> None:
