@@ -27,6 +27,11 @@ class _Function:
 class CppCodeGenerator:
     """Translates textual TAC into C++ without consulting the source AST."""
 
+    def generate_source(self, tac: str) -> str:
+        if not isinstance(tac, str):
+            raise TypeError("CppCodeGenerator.generate_source espera TAC textual")
+        return self._generate_cpp(tac)
+
     @staticmethod
     def _split(text: str) -> list[str]:
         values: list[str] = []
@@ -900,9 +905,7 @@ class CppCodeGenerator:
         output_name: str,
         nivel_otimizacao: str = "O2",
     ) -> bool:
-        if not isinstance(tac, str):
-            raise TypeError("CppCodeGenerator.generate espera TAC textual")
-        cpp_code = self._generate_cpp(tac)
+        cpp_code = self.generate_source(tac)
         output_dir = Path(__file__).resolve().parents[2] / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
         cpp_path = output_dir / f"{output_name}.cpp"

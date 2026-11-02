@@ -7,6 +7,7 @@ from ..codegen.c_gerador_cpp import CppCodeGenerator
 from ..lexico.c_lexico import Lexer
 from ..semantico.c_semantico import SemanticAnalyzer
 from ..sintatico.c_sintatico import Parser
+from ..sintatico.ast import Program
 from ..tac.c_gerador_tac import TACGenerator
 from ..interfaces import (
     IControle,
@@ -37,15 +38,24 @@ class CControle(IControle):
         self._cpp_generator = cpp_generator
         self.diagnostics = DiagnosticBag()
 
-    def compile(self, source: str, output_name: str) -> bool:
-        self.diagnostics = DiagnosticBag(source)
+    def analyze(
+        self,
+        source: str,
+        *,
+        analyze_semantics: bool = True,
+        diagnostics: DiagnosticBag | None = None,
+    ) -> Program | None:
+        self.diagnostics = diagnostics if diagnostics is not None else DiagnosticBag(source)
         for component in (self._lexer, self._parser, self._semantic_analyzer):
             set_collector = getattr(component, "set_diagnostic_collector", None)
             if callable(set_collector):
                 set_collector(self.diagnostics)
 
         self._lexer.initialize(source)
-        program = self._parser.parse(self._lexer, self._semantic_analyzer)
+        program = self._parser.parse(
+            self._lexer,
+            self._semantic_analyzer if analyze_semantics else None,
+        )
         for component in (self._lexer, self._parser, self._semantic_analyzer):
             component_diagnostics = getattr(component, "diagnostics", ())
             for diagnostic in component_diagnostics:
@@ -53,6 +63,17 @@ class CControle(IControle):
                     self.diagnostics.report(diagnostic)
 
         if self.diagnostics.has_errors:
+            return None
+        return program
+
+    def compile(
+        self,
+        source: str,
+        output_name: str,
+        diagnostics: DiagnosticBag | None = None,
+    ) -> bool:
+        program = self.analyze(source, diagnostics=diagnostics)
+        if program is None:
             print(self.diagnostics.format_text(), file=sys.stderr)
             return False
         tac_path = self._tac_generator.generate(program, output_name)
