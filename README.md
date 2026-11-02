@@ -105,6 +105,15 @@ Na IDE web, marque **Otimizar TAC** para comparar o TAC original e o otimizado
 lado a lado. Essa opção afeta apenas a visualização didática do TAC; a geração
 e execução do binário C++ permanecem inalteradas.
 
+A API web também oferece `POST /api/compilar`, que recebe
+`{"code": "<fonte MiniPar>"}` e retorna `tokens`, `ast`,
+`tabela_simbolos`, `tac`, `cpp` e `diagnosticos`. `POST /api/executar`
+recebe o mesmo código e uma lista opcional `inputs`, compila e executa em
+subprocesso e retorna `stdout`, `stderr`, `exit_code` e `tempo` (em segundos).
+A execução é interrompida após 30 segundos ou ao ultrapassar 1 MiB de saída
+combinada. A rota legada `POST /api/compile`, usada pela IDE atual, continua
+disponível e mantém o contrato de compilar e executar em uma única chamada.
+
 Para executar os testes unitários:
 
 ```bash
