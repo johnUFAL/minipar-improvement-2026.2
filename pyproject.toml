@@ -9,6 +9,9 @@ description = "Compilador MiniPar: TAC + transpilação para C++17"
 requires-python = ">=3.11"
 dependencies = ["Flask>=3.0"]
 
+[project.scripts]
+minipar = "interfaces.command_line:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 

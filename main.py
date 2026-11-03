@@ -61,19 +61,26 @@ def start_interactive():
 
 
 def main() -> int:
-    # Se rodar sem argumentos (ex: `python main.py`), inicia a interface de escolha
-    if len(sys.argv) < 2:
+    arguments = sys.argv[1:]
+    if not arguments:
         start_interactive()
         return 0
 
+    if arguments[0] in {
+        "compilar", "tokens", "ast", "tac", "cpp", "build", "run", "--help"
+    }:
+        from interfaces.command_line import run
+
+        return run(arguments)
+
     # Caso o script seja chamado via subprocesso pela IDE (passando arquivo como
     # argumento)
-    source_path = sys.argv[1]
+    source_path = arguments[0]
 
     # Se não passarem o nome da saída manualmente, extraímos do nome do próprio arquivo
     # Minipar
-    if len(sys.argv) > 2:
-        output_name = sys.argv[2]
+    if len(arguments) > 1:
+        output_name = arguments[1]
     else:
         base_file = os.path.basename(source_path)
         output_name = os.path.splitext(base_file)[0]

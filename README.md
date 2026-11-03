@@ -77,6 +77,30 @@ python main.py programas_teste/t03_neuronio.mp
 ```
 
 O compilador grava os arquivos `.tac`, `.cpp` e o executável em `output/`. No menu, a opção web inicia a IDE em `http://127.0.0.1:5000`.
+
+Com o comando `minipar` instalado pelo projeto (`uv sync` ou `pip install -e .`),
+compile e execute em um único comando:
+
+```bash
+minipar compilar programas_teste/t07_quicksort_iterativo_tac.mp -O2 -o output/t07 --executar
+```
+
+Também é possível usar `python main.py compilar` no ambiente de desenvolvimento.
+As fases podem ser inspecionadas sem compilar o executável:
+
+```bash
+minipar compilar programa.mp --tokens
+minipar compilar programa.mp --ast
+minipar compilar programa.mp --tac
+minipar compilar programa.mp --emit-cpp
+```
+
+Os comandos `tokens`, `ast`, `tac`, `cpp`, `build` e `run` são atalhos para as
+mesmas operações. `--tac` grava e imprime o TAC sem gerar C++ ou executável;
+`-o` escolhe o caminho do binário, e `-O0` a `-O3` configuram a otimização.
+Falhas léxicas, sintáticas, semânticas, de geração, de build e de execução usam
+códigos de saída `2`, `3`, `4`, `5`, `6` e `7`, respectivamente. Erros de uso
+ou de leitura do arquivo retornam `1`.
 Na IDE web, marque **Otimizar TAC** para comparar o TAC original e o otimizado
 lado a lado. Essa opção afeta apenas a visualização didática do TAC; a geração
 e execução do binário C++ permanecem inalteradas.
