@@ -53,14 +53,20 @@ class WebCompileTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
 
+    @patch("interfaces.web.api._run_limited")
     @patch("interfaces.web.api.subprocess.run")
-    def test_web_forwards_inputs_and_returns_program_output(self, run):
-        run.side_effect = [
-            CompletedProcess(args=[], returncode=0, stdout="compiled", stderr=""),
-            CompletedProcess(
-                args=[], returncode=0, stdout="Resultado: 42\n", stderr=""
-            ),
-        ]
+    def test_web_forwards_inputs_and_returns_program_output(self, run, execute):
+        run.return_value = CompletedProcess(
+            args=[], returncode=0, stdout="compiled", stderr=""
+        )
+        execute.return_value = {
+            "stdout": "Resultado: 42\n",
+            "stderr": "",
+            "exit_code": 0,
+            "tempo": 0.01,
+            "timed_out": False,
+            "output_limited": False,
+        }
         exe_ext = ".exe" if sys.platform == "win32" else ""
         executable = Path(api.OUTPUT_DIR) / f"input_output{exe_ext}"
         executable.touch()
@@ -78,7 +84,7 @@ class WebCompileTests(unittest.TestCase):
         result = response.get_json()
         self.assertTrue(result["success"])
         self.assertIn("Resultado: 42", result["stdout"])
-        self.assertEqual(run.call_args_list[1].kwargs["input"], "42\n")
+        self.assertEqual(execute.call_args.kwargs["input_text"], "42\n")
 
     @patch("interfaces.web.api.subprocess.run")
     def test_web_reports_compiler_failure_without_claiming_success(self, run):
@@ -149,6 +155,162 @@ class WebCompileTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("optimize_tac", response.get_json()["error"])
+
+    def test_compile_phases_returns_the_documented_json_shape(self):
+        response = self.client.post(
+            "/api/compilar",
+            json={"code": "SEQ\n    result: int = 42\n    print(result)\n"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertEqual(
+            set(result),
+            {
+                "tokens", "ast", "tabela_simbolos", "tac", "cpp",
+                "diagnosticos", "success",
+            },
+        )
+        self.assertIsInstance(result["tokens"], list)
+        self.assertIsInstance(result["ast"], dict)
+        self.assertIsInstance(result["tabela_simbolos"], dict)
+        self.assertIsInstance(result["tac"], str)
+        self.assertIsInstance(result["cpp"], str)
+        self.assertIsInstance(result["diagnosticos"], list)
+        self.assertTrue(result["success"])
+
+    def test_compile_phases_returns_diagnostics_for_invalid_source(self):
+        response = self.client.post("/api/compilar", json={"code": ""})
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertFalse(result["success"])
+        self.assertTrue(result["diagnosticos"])
+        self.assertEqual(result["cpp"], "")
+        self.assertEqual(result["tac"], "")
+
+    def test_compile_phases_returns_schema_for_ten_test_programs(self):
+        filenames = [
+            *(f"t0{number}_{name}.mp" for number, name in [
+                (1, "calculadora"),
+                (2, "fatorial_fibonacci_par"),
+                (3, "neuronio"),
+                (4, "rede_neural_xor"),
+                (5, "recomendacao"),
+                (6, "quicksort_classes"),
+                (7, "quicksort_iterativo_tac"),
+            ]),
+            "teste_adicional1_paralelismo_3_computadores.mp",
+            "teste_adicional2_tapete_sierpinski.mp",
+            "teste_bnf_controles_input.mp",
+        ]
+        required_fields = {
+            "tokens", "ast", "tabela_simbolos", "tac", "cpp",
+            "diagnosticos", "success",
+        }
+
+        for filename in filenames:
+            with self.subTest(filename=filename):
+                source = (Path(api.TESTS_DIR) / filename).read_text(encoding="utf-8")
+                response = self.client.post("/api/compilar", json={"code": source})
+                self.assertEqual(response.status_code, 200)
+                result = response.get_json()
+                self.assertEqual(set(result), required_fields)
+                self.assertIsInstance(result["tokens"], list)
+                self.assertIsInstance(result["ast"], dict)
+                self.assertIsInstance(result["tabela_simbolos"], dict)
+                self.assertIsInstance(result["tac"], str)
+                self.assertIsInstance(result["cpp"], str)
+                self.assertIsInstance(result["diagnosticos"], list)
+
+    @patch("interfaces.web.api._run_limited")
+    @patch("interfaces.web.api.DriverGCC.compile", return_value=True)
+    @patch("interfaces.web.api._compile_phases")
+    def test_execute_endpoint_returns_process_result(self, compile_phases, _, run):
+        compile_phases.return_value = {
+            "success": True,
+            "cpp": "int main() {}",
+            "diagnosticos": [],
+        }
+        run.return_value = {
+            "stdout": "42\n",
+            "stderr": "",
+            "exit_code": 0,
+            "tempo": 0.02,
+            "timed_out": False,
+            "output_limited": False,
+        }
+
+        response = self.client.post(
+            "/api/executar",
+            json={"code": "print(42);", "inputs": ["value"]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertEqual(result["stdout"], "42\n")
+        self.assertEqual(result["stderr"], "")
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["tempo"], 0.02)
+        self.assertTrue(result["success"])
+        self.assertEqual(run.call_args.kwargs["input_text"], "value\n")
+
+    def test_execute_endpoint_rejects_non_scalar_input(self):
+        response = self.client.post(
+            "/api/executar",
+            json={"code": "print(42);", "inputs": [{"unexpected": "object"}]},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("inputs", response.get_json()["error"])
+
+    def test_execution_timeout_and_output_are_bounded(self):
+        timeout_result = api._run_limited(
+            [sys.executable, "-c", "import time; time.sleep(2)"],
+            timeout=0.1,
+        )
+        output_result = api._run_limited(
+            [
+                sys.executable,
+                "-c",
+                "while True: print('output', flush=True)",
+            ],
+            timeout=2,
+            output_limit=64,
+        )
+
+        self.assertTrue(timeout_result["timed_out"])
+        self.assertLessEqual(
+            len(str(output_result["stdout"]).encode("utf-8"))
+            + len(str(output_result["stderr"]).encode("utf-8")),
+            64,
+        )
+        self.assertTrue(output_result["output_limited"])
+
+    @patch("interfaces.web.api._run_limited")
+    @patch("interfaces.web.api.DriverGCC.compile", return_value=True)
+    @patch("interfaces.web.api._compile_phases")
+    def test_server_responds_after_execution_timeout(self, compile_phases, _, run):
+        compile_phases.return_value = {
+            "success": True,
+            "cpp": "int main() {}",
+            "diagnosticos": [],
+        }
+        run.return_value = {
+            "stdout": "",
+            "stderr": "",
+            "exit_code": -9,
+            "tempo": api.EXECUTION_TIMEOUT_SECONDS,
+            "timed_out": True,
+            "output_limited": False,
+        }
+
+        execution = self.client.post("/api/executar", json={"code": "print(42);"})
+        follow_up = self.client.get("/api/tests")
+
+        self.assertFalse(execution.get_json()["success"])
+        self.assertTrue(execution.get_json()["timed_out"])
+        self.assertEqual(follow_up.status_code, 200)
 
 
 if __name__ == "__main__":

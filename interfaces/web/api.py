@@ -2,13 +2,22 @@ import glob
 import os
 import subprocess
 import sys
+import tempfile
+import threading
+import time
+from pathlib import Path
+from typing import Any
 
 from flask import Flask, jsonify, render_template, request
 
 from components.lexico.c_lexico import Lexer
+from components.codegen.c_gerador_cpp import CppCodeGenerator
+from components.codegen.driver_gcc import DriverGCC
 from components.semantico.c_semantico import SemanticAnalyzer
-from components.sintatico.c_sintatico import Parser
+from components.sintatico.c_sintatico import Parser, _ParseError
+from components.sintatico.ast import Program
 from components.tac import TACOptimizer
+from components.tac.c_gerador_tac import TACGenerator
 from erros.diagnosticos import DiagnosticBag
 
 from ..program_analyzer import get_program_spec
@@ -41,9 +50,177 @@ app = Flask(
 TESTS_DIR = os.path.join(PROJECT_ROOT, "programas_teste")
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
 TEMP_DIR = os.path.join(PROJECT_ROOT, "temp_code")
+EXECUTION_TIMEOUT_SECONDS = 30
+EXECUTION_OUTPUT_LIMIT_BYTES = 1024 * 1024
+MAX_EXECUTION_INPUT_BYTES = 1024 * 1024
 
 os.makedirs(TEMP_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+
+def _serialize_diagnostic(diagnostic: Any) -> dict[str, object]:
+    phase = getattr(diagnostic.phase, "value", diagnostic.phase)
+    severity = getattr(diagnostic.severity, "value", diagnostic.severity)
+    return {
+        "phase": phase,
+        "message": diagnostic.message,
+        "line": diagnostic.line,
+        "column": diagnostic.column,
+        "length": diagnostic.length,
+        "severity": severity,
+        "header": diagnostic.header,
+    }
+
+
+def _compile_phases(source: str) -> dict[str, object]:
+    token_diagnostics = DiagnosticBag(source)
+    tokens = Lexer(source, token_diagnostics).tokenize()
+
+    diagnostics = DiagnosticBag(source)
+    lexer = Lexer(source, diagnostics)
+    try:
+        program = Parser(lexer, diagnostics).parse()
+    except _ParseError:
+        program = Program()
+    analyzer = SemanticAnalyzer(diagnostics)
+    if not diagnostics.has_errors:
+        analyzer.analyze(program)
+
+    serialized_diagnostics: list[dict[str, object]] = []
+    seen_diagnostics: set[tuple[object, ...]] = set()
+    for diagnostic in (*token_diagnostics.diagnostics, *diagnostics.diagnostics):
+        serialized = _serialize_diagnostic(diagnostic)
+        key = tuple(serialized.values())
+        if key not in seen_diagnostics:
+            serialized_diagnostics.append(serialized)
+            seen_diagnostics.add(key)
+
+    tac = ""
+    cpp = ""
+    if not diagnostics.has_errors:
+        try:
+            tac = TACGenerator().generate_text(program)
+            cpp = CppCodeGenerator().generate_source(tac)
+        except (NotImplementedError, ValueError) as error:
+            diagnostics.error("generation", str(error))
+            serialized_diagnostics.append(
+                _serialize_diagnostic(diagnostics.diagnostics[-1])
+            )
+
+    return {
+        "tokens": [
+            {
+                "type": token.type.name,
+                "lexeme": token.lexeme,
+                "line": token.line,
+                "column": token.column,
+                "value": token.value,
+            }
+            for token in tokens
+        ],
+        "ast": program.para_dict(),
+        "tabela_simbolos": analyzer.symbol_table.export(),
+        "tac": tac,
+        "cpp": cpp,
+        "diagnosticos": serialized_diagnostics,
+        "success": not diagnostics.has_errors,
+    }
+
+
+def _run_limited(
+    command: list[str],
+    *,
+    input_text: str = "",
+    timeout: float = EXECUTION_TIMEOUT_SECONDS,
+    output_limit: int = EXECUTION_OUTPUT_LIMIT_BYTES,
+) -> dict[str, object]:
+    """Executa um processo, drenando pipes e limitando bytes retidos em memória."""
+    started_at = time.monotonic()
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=PROJECT_ROOT,
+    )
+    output_lock = threading.Lock()
+    output_size = 0
+    output_exceeded = threading.Event()
+    captured: dict[str, list[bytes]] = {"stdout": [], "stderr": []}
+
+    def drain(stream_name: str, stream: Any) -> None:
+        nonlocal output_size
+        while True:
+            chunk = stream.read(8192)
+            if not chunk:
+                return
+            with output_lock:
+                remaining = max(0, output_limit - output_size)
+                captured[stream_name].append(chunk[:remaining])
+                output_size += min(len(chunk), remaining)
+                exceeded = len(chunk) > remaining
+            if exceeded and not output_exceeded.is_set():
+                output_exceeded.set()
+                try:
+                    process.kill()
+                except OSError:
+                    pass
+
+    def write_input() -> None:
+        if process.stdin is None:
+            return
+        try:
+            process.stdin.write(input_text.encode("utf-8"))
+            process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+    readers = [
+        threading.Thread(target=drain, args=("stdout", process.stdout), daemon=True),
+        threading.Thread(target=drain, args=("stderr", process.stderr), daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    writer = threading.Thread(target=write_input, daemon=True)
+    writer.start()
+
+    timed_out = False
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            process.kill()
+        except OSError:
+            pass
+        process.wait()
+
+    writer.join()
+    for reader in readers:
+        reader.join()
+
+    return {
+        "stdout": b"".join(captured["stdout"]).decode("utf-8", errors="replace"),
+        "stderr": b"".join(captured["stderr"]).decode("utf-8", errors="replace"),
+        "exit_code": process.returncode,
+        "tempo": time.monotonic() - started_at,
+        "timed_out": timed_out,
+        "output_limited": output_exceeded.is_set(),
+    }
+
+
+def _execution_input(data: dict[str, object]) -> tuple[str | None, str | None]:
+    inputs = data.get("inputs", [])
+    if not isinstance(inputs, list) or any(
+        not isinstance(value, (str, int, float, bool)) for value in inputs
+    ):
+        return None, "O campo 'inputs' deve ser uma lista de valores simples."
+    input_text = "\n".join(str(value) for value in inputs)
+    if inputs:
+        input_text += "\n"
+    if len(input_text.encode("utf-8")) > MAX_EXECUTION_INPUT_BYTES:
+        return None, "As entradas excedem o limite permitido."
+    return input_text, None
 
 
 @app.route('/')
@@ -152,6 +329,94 @@ def analyze_symbols():
     })
 
 
+@app.route('/api/compilar', methods=['POST'])
+def compile_phases():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("code"), str):
+        return jsonify({
+            "error": "O campo 'code' deve ser texto.", "success": False
+        }), 400
+    return jsonify(_compile_phases(data["code"]))
+
+
+@app.route('/api/executar', methods=['POST'])
+def execute_code():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("code"), str):
+        return jsonify({
+            "error": "O campo 'code' deve ser texto.", "success": False
+        }), 400
+
+    input_text, input_error = _execution_input(data)
+    if input_error:
+        return jsonify({"error": input_error, "success": False}), 400
+
+    compilation = _compile_phases(data["code"])
+    if not compilation["success"]:
+        return jsonify({
+            "stdout": "",
+            "stderr": "\n".join(
+                diagnostic["header"] for diagnostic in compilation["diagnosticos"]
+            ),
+            "exit_code": None,
+            "tempo": 0.0,
+            "timed_out": False,
+            "output_limited": False,
+            "success": False,
+            "diagnosticos": compilation["diagnosticos"],
+        })
+
+    with tempfile.TemporaryDirectory(prefix="minipar-web-") as work_dir:
+        work_path = Path(work_dir)
+        cpp_path = work_path / "program.cpp"
+        executable_path = work_path / "program"
+        cpp_path.write_text(str(compilation["cpp"]), encoding="utf-8")
+        compiled = DriverGCC().compile(cpp_path, executable_path)
+        if not compiled:
+            return jsonify({
+                "stdout": "",
+                "stderr": (
+                    "Falha ao compilar o programa C++. Consulte o log do servidor "
+                    "para os detalhes do compilador."
+                ),
+                "exit_code": None,
+                "tempo": 0.0,
+                "timed_out": False,
+                "output_limited": False,
+                "success": False,
+                "diagnosticos": compilation["diagnosticos"],
+            })
+
+        executable = executable_path
+        if sys.platform == "win32":
+            executable = executable.with_suffix(".exe")
+        try:
+            result = _run_limited([str(executable)], input_text=input_text or "")
+        except OSError as error:
+            return jsonify({
+                "stdout": "",
+                "stderr": f"Falha ao iniciar o programa: {error}",
+                "exit_code": None,
+                "tempo": 0.0,
+                "timed_out": False,
+                "output_limited": False,
+                "success": False,
+                "diagnosticos": compilation["diagnosticos"],
+            })
+
+    result["success"] = (
+        result["exit_code"] == 0
+        and not result["timed_out"]
+        and not result["output_limited"]
+    )
+    result["diagnosticos"] = compilation["diagnosticos"]
+    if result["timed_out"]:
+        result["stderr"] += "\nTempo limite de execução excedido."
+    if result["output_limited"]:
+        result["stderr"] += "\nLimite de saída excedido."
+    return jsonify(result)
+
+
 @app.route('/api/compile', methods=['POST'])
 def compile_code():
     data = request.get_json(silent=True)
@@ -222,21 +487,25 @@ def compile_code():
                     stdin_data = "\n".join(str(value) for value in stdin_lines)
                     if stdin_lines:
                         stdin_data += "\n"
-                    exe_proc = subprocess.run(
+                    execution = _run_limited(
                         [os.path.abspath(exe_path)],
-                        input=stdin_data,
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                        check=False
+                        input_text=stdin_data,
+                        timeout=EXECUTION_TIMEOUT_SECONDS,
                     )
-                    full_output += exe_proc.stdout
-                    if exe_proc.stderr:
-                        full_output += "\n[ERRO NA EXECUÇÃO]:\n" + exe_proc.stderr
-                    record_execution_output(exe_proc.stdout or "")
-                except subprocess.TimeoutExpired:
-                    full_output += "\n[ERRO] Tempo limite de execução excedido."
-                    success = False
+                    full_output += str(execution["stdout"])
+                    if execution["stderr"]:
+                        full_output += "\n[ERRO NA EXECUÇÃO]:\n" + str(
+                            execution["stderr"]
+                        )
+                    record_execution_output(str(execution["stdout"]) or "")
+                    if execution["timed_out"]:
+                        full_output += "\n[ERRO] Tempo limite de execução excedido."
+                        success = False
+                    if execution["output_limited"]:
+                        full_output += "\n[ERRO] Limite de saída excedido."
+                        success = False
+                    if execution["exit_code"] != 0:
+                        success = False
                 except (subprocess.SubprocessError, OSError) as e:
                     full_output += f"\n[ERRO] Falha ao executar binário: {e}"
                     success = False
