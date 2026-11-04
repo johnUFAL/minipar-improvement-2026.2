@@ -257,6 +257,24 @@ def _remove_dead_temporaries(lines: list[str]) -> list[str]:
         optimized = updated
 
 
+def _remove_unreachable_instructions(lines: list[str]) -> list[str]:
+    result: list[str] = []
+    unreachable = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.endswith(":"):
+            unreachable = False
+        if not stripped or stripped.startswith(("#", "//")):
+            result.append(line)
+            continue
+        if unreachable:
+            continue
+        result.append(line)
+        if _JUMP.fullmatch(stripped) or stripped in ("ret", "return"):
+            unreachable = True
+    return result
+
+
 class TACOptimizer:
     """Aplica otimizações locais conservadoras sobre TAC textual."""
 
@@ -270,7 +288,9 @@ class TACOptimizer:
             and not line.strip().startswith(("#", "//"))
         )
 
-    def optimize(self, tac: str) -> str:
+    def optimize(self, tac: str, level: str = "O2") -> str:
+        if level not in {"O1", "O2", "O3"}:
+            raise ValueError("level deve ser O1, O2 ou O3")
         lines = tac.splitlines()
         values: dict[str, str] = {}
         optimized: list[str] = []
@@ -353,8 +373,11 @@ class TACOptimizer:
             optimized.append(line)
             values.clear()
 
-        optimized = _remove_redundant_jumps(optimized)
-        optimized = _remove_dead_temporaries(optimized)
+        if level in {"O2", "O3"}:
+            optimized = _remove_redundant_jumps(optimized)
+            optimized = _remove_dead_temporaries(optimized)
+        if level == "O3":
+            optimized = _remove_unreachable_instructions(optimized)
         return "\n".join(optimized) + ("\n" if tac.endswith("\n") else "")
 
 

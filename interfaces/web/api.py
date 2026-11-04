@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from components.lexico.c_lexico import Lexer
 from components.codegen.c_gerador_cpp import CppCodeGenerator
@@ -40,6 +41,13 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "interfaces", "web", "frontend")
+REFERENCE_DIR = os.path.join(FRONTEND_DIR, "reference")
+LEGACY_REFERENCE_IMAGES = {
+    "painel": "Painel de Benchmark - IC UFAL.jpg",
+    "resultados": "Resultados do Benchmark - IC UFAL.jpg",
+    "configuracoes": "Configurações do Sistema - IC UFAL.jpg",
+    "minipar": "MiniPar 2026.2.jpg",
+}
 app = Flask(
     __name__,
     template_folder=os.path.join(FRONTEND_DIR, "templates"),
@@ -70,6 +78,23 @@ def _serialize_diagnostic(diagnostic: Any) -> dict[str, object]:
         "severity": severity,
         "header": diagnostic.header,
     }
+
+
+def _source_line_map(text: str, marker_pattern: str) -> list[dict[str, int]]:
+    current_source_line: int | None = None
+    result: list[dict[str, int]] = []
+    marker = re.compile(marker_pattern)
+    for generated_line, content in enumerate(text.splitlines(), start=1):
+        match = marker.fullmatch(content.strip())
+        if match:
+            current_source_line = int(match.group(1))
+            continue
+        if current_source_line is not None and content.strip():
+            result.append({
+                "generated_line": generated_line,
+                "source_line": current_source_line,
+            })
+    return result
 
 
 def _compile_phases(source: str) -> dict[str, object]:
@@ -122,6 +147,8 @@ def _compile_phases(source: str) -> dict[str, object]:
         "tabela_simbolos": analyzer.symbol_table.export(),
         "tac": tac,
         "cpp": cpp,
+        "tac_origin": _source_line_map(tac, r"#\s*source:\s*(\d+)"),
+        "cpp_origin": _source_line_map(cpp, r"//\s*MiniPar line\s+(\d+)"),
         "diagnosticos": serialized_diagnostics,
         "success": not diagnostics.has_errors,
     }
@@ -226,6 +253,38 @@ def _execution_input(data: dict[str, object]) -> tuple[str | None, str | None]:
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/modelo-antigo')
+def legacy_model():
+    """Serve a interface anterior real, preservada a partir do branch main."""
+    return render_template('legacy/index.html')
+
+
+@app.route('/modelo-antigo/referencias')
+def legacy_model_references():
+    """Exibe as imagens de referência da interface anterior."""
+    return render_template(
+        'legacy_model.html',
+        images=LEGACY_REFERENCE_IMAGES,
+    )
+
+
+@app.route('/modelo-antigo/referencias/imagem/<path:image_name>')
+def legacy_model_image(image_name: str):
+    if image_name not in LEGACY_REFERENCE_IMAGES.values():
+        return jsonify({"error": "Referência visual não encontrada."}), 404
+    return send_from_directory(REFERENCE_DIR, image_name)
+
+
+@app.route('/modelo-antigo/static/<path:asset_name>')
+def legacy_model_asset(asset_name: str):
+    if asset_name not in {"style.css", "script.js"}:
+        return jsonify({"error": "Asset da interface anterior não encontrado."}), 404
+    return send_from_directory(
+        os.path.join(FRONTEND_DIR, "legacy"),
+        asset_name,
+    )
 
 
 @app.route('/api/tests', methods=['GET'])
@@ -357,15 +416,17 @@ def optimize_phases():
 
     compilation = _compile_phases(data["code"])
     tac = str(compilation["tac"])
-    optimized = (
-        TACOptimizer().optimize(tac)
-        if compilation["success"] and level != "O0"
-        else tac if compilation["success"] else ""
-    )
+    optimized = ""
+    if compilation["success"]:
+        optimized = tac if level == "O0" else TACOptimizer().optimize(tac, level)
     return jsonify({
         "success": compilation["success"],
         "tac": tac,
         "tac_optimized": optimized,
+        "tac_origin": _source_line_map(tac, r"#\s*source:\s*(\d+)"),
+        "optimized_tac_origin": _source_line_map(
+            optimized, r"#\s*source:\s*(\d+)"
+        ),
         "tac_instruction_counts": {
             "original": TACOptimizer.instruction_count(tac),
             "optimized": TACOptimizer.instruction_count(optimized),

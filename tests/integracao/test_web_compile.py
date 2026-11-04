@@ -25,6 +25,36 @@ class WebCompileTests(unittest.TestCase):
         self.temp_path.stop()
         self.temp_dir.cleanup()
 
+    def test_new_interface_links_to_legacy_reference_gallery(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("/modelo-antigo", page)
+        self.assertIn('id="dashboard-example"', page)
+        self.assertIn('id="dashboard-analyze"', page)
+        self.assertIn('id="example-select"', page)
+        self.assertIn('id="page-pipeline"', page)
+        self.assertIn('data-page-target="pipeline"', page)
+        self.assertNotIn('dashboard-pipeline-card', page)
+        self.assertNotIn('id="test-list"', page)
+
+    def test_legacy_interface_is_independent_and_links_to_new(self):
+        response = self.client.get("/modelo-antigo")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Explorer", response.get_data(as_text=True))
+        self.assertIn("C++ Output", response.get_data(as_text=True))
+        self.assertIn('href="/"', response.get_data(as_text=True))
+        image = self.client.get(
+            "/modelo-antigo/static/style.css"
+        )
+        self.assertEqual(image.status_code, 200)
+        self.assertIn(".app-container", image.get_data(as_text=True))
+        gallery = self.client.get("/modelo-antigo/referencias")
+        self.assertEqual(gallery.status_code, 200)
+        self.assertIn("Modelo anterior do MiniPar", gallery.get_data(as_text=True))
+
     def test_symbols_endpoint_returns_serializable_symbol_table(self):
         response = self.client.post(
             "/api/symbols",
@@ -46,6 +76,46 @@ class WebCompileTests(unittest.TestCase):
             for symbol in scope["symbols"]
         ]
         self.assertTrue(any(symbol["name"] == "result" for symbol in exported_symbols))
+
+    def test_compile_phases_returns_tac_and_cpp_origin_maps(self):
+        response = self.client.post(
+            "/api/compilar",
+            json={"code": "SEQ\n    print(42)\n"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertTrue(result["success"])
+        self.assertTrue(result["tac_origin"])
+        self.assertTrue(result["cpp_origin"])
+        self.assertTrue(
+            any(item["source_line"] == 2 for item in result["tac_origin"])
+        )
+        self.assertTrue(
+            any(item["source_line"] == 2 for item in result["cpp_origin"])
+        )
+
+    def test_optimization_levels_have_distinct_contracts(self):
+        source = "SEQ\n    result: int = 2 + 3\n    print(result)\n"
+        outputs = {}
+        for level in ("O0", "O1", "O2", "O3"):
+            response = self.client.post(
+                "/api/otimizar",
+                json={"code": source, "optimization_level": level},
+            )
+            self.assertEqual(response.status_code, 200)
+            outputs[level] = response.get_json()
+
+        self.assertEqual(outputs["O0"]["tac"], outputs["O0"]["tac_optimized"])
+        self.assertNotEqual(outputs["O1"]["tac"], outputs["O1"]["tac_optimized"])
+        self.assertLessEqual(
+            outputs["O2"]["tac_instruction_counts"]["optimized"],
+            outputs["O1"]["tac_instruction_counts"]["optimized"],
+        )
+        self.assertLessEqual(
+            outputs["O3"]["tac_instruction_counts"]["optimized"],
+            outputs["O2"]["tac_instruction_counts"]["optimized"],
+        )
 
     def test_symbols_endpoint_rejects_missing_source(self):
         response = self.client.post("/api/symbols", json={})
@@ -168,7 +238,7 @@ class WebCompileTests(unittest.TestCase):
             set(result),
             {
                 "tokens", "ast", "tabela_simbolos", "tac", "cpp",
-                "diagnosticos", "success",
+                "tac_origin", "cpp_origin", "diagnosticos", "success",
             },
         )
         self.assertIsInstance(result["tokens"], list)
@@ -206,7 +276,7 @@ class WebCompileTests(unittest.TestCase):
         ]
         required_fields = {
             "tokens", "ast", "tabela_simbolos", "tac", "cpp",
-            "diagnosticos", "success",
+            "tac_origin", "cpp_origin", "diagnosticos", "success",
         }
 
         for filename in filenames:

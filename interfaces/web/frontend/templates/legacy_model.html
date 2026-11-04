@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MiniPar — Modelo anterior</title>
+    <style>
+        :root { color-scheme: dark; --bg: #111827; --panel: #1b2434; --line: #34435a; --text: #f2f5fb; --muted: #9aa8bd; --accent: #8ca8ff; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", Arial, sans-serif; }
+        header { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 28px; border-bottom: 1px solid var(--line); background: #111827ee; backdrop-filter: blur(8px); }
+        h1 { margin: 2px 0; font-size: 22px; } p { margin: 0; color: var(--muted); }
+        .eyebrow { color: #ef7089; font: 10px "Cascadia Code", monospace; letter-spacing: 1px; }
+        a { color: var(--accent); text-decoration: none; } .button { padding: 9px 13px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); color: var(--text); }
+        main { max-width: 1280px; margin: auto; padding: 28px; }
+        .intro { margin-bottom: 20px; } .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        figure { margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
+        figcaption { padding: 5px 2px 10px; color: var(--muted); font: 11px "Cascadia Code", monospace; text-transform: uppercase; }
+        img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 4px; background: #0c1321; }
+        @media (max-width: 760px) { header { align-items: flex-start; flex-direction: column; padding: 16px; } main { padding: 16px; } .gallery { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<header>
+    <div><p class="eyebrow">REFERÊNCIA PRESERVADA</p><h1>Modelo anterior do MiniPar</h1><p>Visual original disponível para comparação, sem substituir a nova interface.</p></div>
+    <a class="button" href="/">Voltar ao MiniPar novo</a>
+</header>
+<main>
+    <div class="intro"><p>Estas imagens são carregadas diretamente da pasta <code>frontend/reference</code>.</p></div>
+    <section class="gallery" aria-label="Telas do modelo anterior">
+        {% for label, filename in images.items() %}
+        <figure>
+            <figcaption>{{ label }}</figcaption>
+            <img src="{{ url_for('legacy_model_image', image_name=filename) }}" alt="Tela {{ label }} do modelo anterior">
+        </figure>
+        {% endfor %}
+    </section>
+</main>
+</body>
+</html>

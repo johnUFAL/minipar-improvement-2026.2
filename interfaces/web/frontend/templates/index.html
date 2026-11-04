@@ -23,13 +23,10 @@
                 <button class="nav-item" data-page="configuration"><span class="nav-icon">⚙</span><span>Configurações</span></button>
             </nav>
         </div>
-        <div class="sidebar-section examples-section">
-            <div class="sidebar-label-row"><p class="sidebar-label">PROGRAMAS DE TESTE</p><span id="example-count">--</span></div>
-            <ul id="test-list" class="test-list"></ul>
-        </div>
         <div class="sidebar-footer">
             <div class="system-card"><div><span class="live-dot"></span><b>COMPILADOR ONLINE</b></div><small>Flask Compiler API · local</small></div>
             <div class="version-row"><span>MINIPAR 2026.2</span><span>UFAL</span></div>
+            <a class="legacy-link" href="/modelo-antigo" target="_blank" rel="noopener">Ver modelo anterior ↗</a>
         </div>
     </aside>
 
@@ -39,8 +36,8 @@
             <div class="topbar-actions">
                 <span class="runtime-chip"><span class="live-dot"></span> 7 FASES</span>
                 <span id="status" class="status-text"><span class="live-dot"></span> Pronto</span>
-                <button id="compile-button" class="button button-outline">Compilar</button>
-                <button id="run-button" class="button button-primary">Executar</button>
+                <button id="compile-button" class="button button-primary">Compilar e executar</button>
+                <button id="theme-toggle" class="button button-outline theme-toggle" type="button" aria-label="Mudar para modo claro">☼ Claro</button>
                 <span class="avatar" aria-label="Perfil local">MP</span>
             </div>
         </header>
@@ -48,53 +45,64 @@
         <main class="main">
             <section id="page-dashboard" class="page active-page">
                 <div class="page-intro">
-                    <div><p class="kicker">INSTITUTO DE COMPUTAÇÃO · UFAL</p><h1>Painel de compilação</h1><p class="intro-copy">Acompanhe, passo a passo, como um programa MiniPar se transforma em código executável.</p></div>
-                    <button class="button button-primary" data-page-target="ide">Abrir editor <span>→</span></button>
+                    <div><p class="kicker">INSTITUTO DE COMPUTAÇÃO · UFAL</p><h1>Painel de compilação</h1><p class="intro-copy">Escolha um programa, acompanhe cada transformação e avance até a execução.</p></div>
+                    <div class="intro-actions"><button class="button button-primary" data-page-target="ide">Abrir editor <span>→</span></button><button class="button button-outline" data-page-target="results">Ver resultados</button></div>
                 </div>
                 <div class="metric-grid">
-                    <div class="metric-card"><span>PROGRAMAS DISPONÍVEIS</span><strong id="metric-tests">--</strong><small>exemplos para explorar</small></div>
-                    <div class="metric-card"><span>FASES DO PIPELINE</span><strong>07</strong><small>do código à execução</small></div>
+                    <div class="metric-card dashboard-summary-card"><span>ÚLTIMO PROGRAMA</span><strong id="dashboard-last-file">Nenhum</strong><small id="dashboard-last-status">Aguardando uma execução</small></div>
+                    <div class="metric-card"><span>ÚLTIMA EXECUÇÃO</span><strong id="dashboard-last-time">—</strong><small>tempo medido pelo ambiente</small></div>
+                    <div class="metric-card"><span>FASES DO PIPELINE</span><strong>07</strong><small>da análise à execução</small></div>
                     <div class="metric-card"><span>OTIMIZAÇÃO ATIVA</span><strong id="dashboard-optimization" class="accent-text">O0</strong><small>TAC sem transformação</small></div>
-                    <div class="metric-card"><span>ESTADO DA SESSÃO</span><strong id="metric-state" class="success-text">PRONTO</strong><small>aguardando programa</small></div>
                 </div>
-                <div class="dashboard-columns">
-                    <article class="card config-card">
-                        <div class="card-head"><div><p class="card-eyebrow">INÍCIO RÁPIDO</p><h2>Escolha um programa</h2></div><span class="round-icon">◇</span></div>
-                        <p class="card-copy">Carregue um dos programas de teste ou abra o editor para escrever seu próprio código.</p>
+                <div class="dashboard-columns dashboard-main-grid">
+                    <article class="card config-card dashboard-quick-card">
+                        <div class="card-head"><div><p class="card-eyebrow">COMECE POR AQUI</p><h2>Escolha um programa</h2></div><span class="round-icon">◇</span></div>
+                        <p class="card-copy">Carregue um exemplo pronto para entender o pipeline ou abra o editor para escrever seu próprio código.</p>
                         <label class="field-label" for="dashboard-example">PROGRAMA DE ENTRADA</label>
                         <select id="dashboard-example" class="select-control"><option value="">Escolha um exemplo</option></select>
-                        <div class="card-foot"><span class="mini-status"><span class="live-dot"></span> Editor pronto</span><button class="button button-primary" data-page-target="ide">Começar análise</button></div>
-                    </article>
-                    <article class="card flow-card">
-                        <div class="card-head"><div><p class="card-eyebrow">COMO FUNCIONA</p><h2>Pipeline MiniPar</h2></div><span class="tag">7 ETAPAS</span></div>
-                        <div class="pipeline-list">
-                            <div class="pipeline-item active"><b>01</b><span><strong>Código-fonte</strong><small>onde você começa</small></span><i>●</i></div>
-                            <div class="pipeline-item"><b>02</b><span><strong>Tokens · AST · Símbolos</strong><small>entender a estrutura</small></span><i>○</i></div>
-                            <div class="pipeline-item"><b>03</b><span><strong>TAC · C++ · Execução</strong><small>acompanhar o resultado</small></span><i>○</i></div>
-                        </div>
+                        <div class="card-foot"><span class="mini-status"><span class="live-dot"></span> Selecione um exemplo</span><button id="dashboard-analyze" class="button button-primary" type="button">Analisar programa</button></div>
                     </article>
                 </div>
-                <div class="section-heading"><div><p class="kicker">ROTEIRO DIDÁTICO</p><h2>Explore cada fase</h2></div><button class="text-button" data-page-target="ide">Ver no editor →</button></div>
-                <div class="phase-cards">
-                    <button class="phase-card" data-page-target="ide"><span>01</span><strong>Escreva</strong><small>Edite seu programa MiniPar</small></button>
-                    <button class="phase-card" data-page-target="ide"><span>02</span><strong>Entenda</strong><small>Veja tokens, AST e símbolos</small></button>
-                    <button class="phase-card" data-page-target="ide"><span>03</span><strong>Transforme</strong><small>Compare TAC e C++ gerados</small></button>
-                    <button class="phase-card" data-page-target="ide"><span>04</span><strong>Execute</strong><small>Confira saída, erros e tempo</small></button>
+                <div class="dashboard-bottom">
+                    <article class="card dashboard-guide-card"><div class="card-head"><div><p class="card-eyebrow">PRÓXIMO PASSO</p><h2>Entenda antes de executar</h2></div><span class="round-icon">?</span></div><p class="card-copy">Veja o que acontece com seu programa em cada etapa, do código-fonte até a execução.</p><button class="text-button" data-page-target="pipeline">Explorar o pipeline no editor →</button></article>
+                    <article class="card dashboard-history-card"><div class="card-head"><div><p class="card-eyebrow">SESSÃO ATUAL</p><h2>Execuções recentes</h2></div><button class="text-button" data-page-target="results">Ver todas →</button></div><div id="dashboard-history-list" class="dashboard-history-list"><p class="empty-state">Ainda não há execuções nesta sessão.</p></div></article>
                 </div>
+            </section>
+
+            <section id="page-pipeline" class="page pipeline-page">
+                <div class="page-intro">
+                    <div><p class="kicker">GUIA DO COMPILADOR</p><h1>Como funciona o pipeline</h1><p class="intro-copy">O MiniPar transforma seu programa em etapas para que você possa acompanhar e entender cada resultado.</p></div>
+                    <div class="intro-actions"><button class="button button-outline" data-page-target="dashboard">Voltar ao painel</button><button class="button button-primary" data-page-target="ide">Abrir editor <span>→</span></button></div>
+                </div>
+                <div class="pipeline-explainer-grid">
+                    <article class="card pipeline-explainer-card"><span class="pipeline-number">01</span><div><h2>Código-fonte</h2><p>Você escreve ou carrega um programa MiniPar no editor. Esta é a entrada usada em todas as etapas seguintes.</p></div></article>
+                    <article class="card pipeline-explainer-card"><span class="pipeline-number">02</span><div><h2>Tokens</h2><p>O analisador léxico separa o texto em unidades, como palavras-chave, identificadores, operadores e valores.</p></div></article>
+                    <article class="card pipeline-explainer-card"><span class="pipeline-number">03</span><div><h2>AST</h2><p>O analisador sintático organiza os tokens em uma árvore que representa a estrutura do programa.</p></div></article>
+                    <article class="card pipeline-explainer-card"><span class="pipeline-number">04</span><div><h2>Símbolos</h2><p>A análise semântica verifica o significado do código e registra variáveis, funções, tipos e escopos.</p></div></article>
+                    <article class="card pipeline-explainer-card"><span class="pipeline-number">05</span><div><h2>TAC</h2><p>O programa é convertido em código de três endereços, uma forma intermediária simples para analisar e otimizar.</p></div></article>
+                    <article class="card pipeline-explainer-card"><span class="pipeline-number">06</span><div><h2>C++</h2><p>O gerador traduz o TAC para C++, preparando o programa que será compilado pelo ambiente.</p></div></article>
+                    <article class="card pipeline-explainer-card pipeline-explainer-final"><span class="pipeline-number">07</span><div><h2>Execução</h2><p>O MiniPar executa o programa compilado e mostra a saída, os erros e o tempo medido.</p></div></article>
+                </div>
+                <div class="pipeline-next card"><div><p class="card-eyebrow">PRONTO PARA TESTAR?</p><h2>Acompanhe cada fase no editor</h2><p class="card-copy">Depois de compilar, use os controles de fase para navegar pelos artefatos produzidos.</p></div><button class="button button-primary" data-page-target="ide">Ir para o editor <span>→</span></button></div>
             </section>
 
             <section id="page-ide" class="page ide-page">
                 <div class="page-intro ide-intro"><div><p class="kicker">AMBIENTE DE APRENDIZAGEM</p><h1>Editor MiniPar</h1><p class="intro-copy">Compile o programa e avance por uma fase de cada vez.</p></div><div class="ide-toolbar"><label for="example-select">EXEMPLO</label><select id="example-select" class="select-control"><option>Carregando...</option></select><label for="optimization">TAC</label><select id="optimization" class="select-control compact"><option value="O0">O0</option><option value="O1">O1</option><option value="O2">O2</option><option value="O3">O3</option></select><button id="clear-button" class="button button-outline">Limpar</button></div></div>
                 <div class="ide-grid">
-                    <article class="editor-panel card"><div class="panel-title"><span><span class="panel-mark">◇</span> Código-fonte</span><small>MINIPAR · EDITÁVEL</small></div><textarea id="source-editor" aria-label="Editor de código MiniPar"></textarea><div class="input-area"><label for="program-input">ENTRADAS DO PROGRAMA <span>stdin · uma por linha</span></label><textarea id="program-input" class="program-input" placeholder="42"></textarea></div><div id="diagnostics" class="diagnostics" aria-live="polite"></div><div class="editor-actions"><button class="button button-primary" id="editor-compile" type="button">Compilar programa</button><span>Ctrl + Enter</span></div></article>
-                    <article class="phase-panel card"><div class="panel-title"><span><span class="panel-mark">▣</span> <b id="phase-title">Código</b></span><small id="phase-count">1 de 7</small></div><nav class="phase-nav" aria-label="Fases do compilador"><button class="step active" data-phase="code"><span>01</span><b>Código</b></button><button class="step" data-phase="tokens"><span>02</span><b>Tokens</b></button><button class="step" data-phase="ast"><span>03</span><b>AST</b></button><button class="step" data-phase="symbols"><span>04</span><b>Símbolos</b></button><button class="step" data-phase="tac"><span>05</span><b>TAC</b></button><button class="step" data-phase="cpp"><span>06</span><b>C++</b></button><button class="step" data-phase="execution"><span>07</span><b>Execução</b></button></nav><div id="phase-content" class="phase-content"></div></article>
+                    <article class="editor-panel card"><div class="panel-title"><span><span class="panel-mark">◇</span> Código-fonte</span><small>MINIPAR · EDITÁVEL</small></div><textarea id="source-editor" aria-label="Editor de código MiniPar"></textarea><div class="input-area"><label for="program-input">ENTRADAS DO PROGRAMA <span>stdin · uma por linha</span></label><textarea id="program-input" class="program-input" placeholder="42"></textarea></div><div class="editor-actions"><button class="button button-primary" id="editor-compile" type="button">Compilar e executar</button><span>Ctrl + Enter</span></div></article>
+                    <article class="phase-panel card"><div class="panel-title"><span><span class="panel-mark">▣</span> <b id="phase-title">Código</b></span><small id="phase-count">1 de 7</small></div><nav class="phase-nav" aria-label="Fases do compilador"><button type="button" class="step active" data-phase="code" aria-controls="phase-content"><span>01</span><b>Código</b></button><button type="button" class="step" data-phase="tokens" aria-controls="phase-content"><span>02</span><b>Tokens</b></button><button type="button" class="step" data-phase="ast" aria-controls="phase-content"><span>03</span><b>AST</b></button><button type="button" class="step" data-phase="symbols" aria-controls="phase-content"><span>04</span><b>Símbolos</b></button><button type="button" class="step" data-phase="tac" aria-controls="phase-content"><span>05</span><b>TAC</b></button><button type="button" class="step" data-phase="cpp" aria-controls="phase-content"><span>06</span><b>C++</b></button><button type="button" class="step" data-phase="execution" aria-controls="phase-content"><span>07</span><b>Execução</b></button></nav><div id="phase-content" class="phase-content" role="region" aria-live="polite" aria-labelledby="phase-title"></div></article>
                 </div>
             </section>
 
             <section id="page-results" class="page">
                 <div class="page-intro"><div><p class="kicker">HISTÓRICO DA SESSÃO</p><h1>Resultados do compilador</h1><p class="intro-copy">Reveja as execuções e os artefatos produzidos pelo pipeline.</p></div><button id="export-results" class="button button-outline">Exportar sessão</button></div>
                 <div class="metric-grid"><div class="metric-card"><span>EXECUÇÕES</span><strong id="result-count">0</strong><small>nesta sessão</small></div><div class="metric-card"><span>SUCESSO</span><strong id="result-success" class="success-text">0</strong><small>programas executados</small></div><div class="metric-card"><span>COM DIAGNÓSTICOS</span><strong id="result-errors" class="danger-text">0</strong><small>execuções com erro</small></div><div class="metric-card"><span>ÚLTIMO TEMPO</span><strong id="result-time">—</strong><small>tempo medido</small></div></div>
-                <div class="results-grid"><article class="card results-list-card"><div class="card-head"><div><p class="card-eyebrow">ATIVIDADE</p><h2>Execuções recentes</h2></div><span class="tag">SESSÃO ATUAL</span></div><div id="results-list" class="empty-state">Execute um programa pela IDE para visualizar os resultados.</div></article><article id="result-detail" class="card result-detail"><div class="empty-state"><strong>Nenhuma execução selecionada</strong><p>Os dados completos aparecerão aqui.</p></div></article></div>
+                <article class="card results-list-card"><div class="card-head"><div><p class="card-eyebrow">ATIVIDADE</p><h2>Execuções recentes</h2></div><span class="tag">SESSÃO ATUAL</span></div><div id="results-list" class="empty-state">Execute um programa pela IDE para visualizar os resultados.</div></article>
+            </section>
+
+            <section id="page-result-detail" class="page">
+                <div class="page-intro ide-intro"><div><p class="kicker">RESULTADO PRESERVADO</p><h1>Resultado selecionado</h1><p class="intro-copy">A mesma visão do Editor MiniPar, sem edição ou execução.</p></div><div class="ide-toolbar"><span class="tag">SOMENTE LEITURA</span><button id="back-to-results" class="button button-outline">Voltar ao histórico</button></div></div>
+                <div id="result-detail" class="result-detail"></div>
             </section>
 
             <section id="page-configuration" class="page">
