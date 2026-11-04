@@ -29,3 +29,5 @@ venv
 *.egg-info
 .venv
 uv.lock
+
+reference/

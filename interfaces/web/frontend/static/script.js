@@ -1,417 +1,215 @@
 document.addEventListener("DOMContentLoaded", () => {
-    const editorMinipar = CodeMirror.fromTextArea(document.getElementById("editor-minipar"), {
-        mode: "clike",
-        theme: "dracula",
-        lineNumbers: true,
-        autoCloseBrackets: true
+    const editor = CodeMirror.fromTextArea(document.getElementById("source-editor"), {
+        mode: "clike", lineNumbers: true, lineWrapping: true, autoCloseBrackets: true,
     });
+    const phaseNames = {code:"Código", tokens:"Tokens", ast:"AST", symbols:"Tabela de símbolos", tac:"TAC", cpp:"C++", execution:"Execução"};
+    const phaseOrder = Object.keys(phaseNames);
+    const examples = document.getElementById("example-select");
+    const content = document.getElementById("phase-content");
+    const diagnostics = document.getElementById("diagnostics");
+    const status = document.getElementById("status");
+    const programInput = document.getElementById("program-input");
+    const pages = document.querySelectorAll(".page");
+    const navItems = document.querySelectorAll(".nav-item[data-page]");
+    const metricState = document.getElementById("metric-state");
+    const history = [];
+    const defaultOptimization = "O0";
+    let optimizationLevel = localStorage.getItem("minipar-optimization") || defaultOptimization;
+    let result = null;
+    let execution = null;
+    let currentPhase = "code";
+    let markers = [];
 
-    const editorCpp = CodeMirror.fromTextArea(document.getElementById("editor-cpp"), {
-        mode: "text/x-c++src",
-        theme: "dracula",
-        lineNumbers: true,
-        readOnly: true
-    });
-
-    const editorTac = CodeMirror.fromTextArea(document.getElementById("editor-tac"), {
-        mode: "clike",
-        theme: "dracula",
-        lineNumbers: true,
-        readOnly: true
-    });
-
-    const editorTacOriginal = CodeMirror.fromTextArea(
-        document.getElementById("editor-tac-original"),
-        { mode: "clike", theme: "dracula", lineNumbers: true, readOnly: true }
-    );
-    const editorTacOptimized = CodeMirror.fromTextArea(
-        document.getElementById("editor-tac-optimized"),
-        { mode: "clike", theme: "dracula", lineNumbers: true, readOnly: true }
-    );
-
-    const testList         = document.getElementById("test-list");
-    const currentFileLabel = document.getElementById("current-file");
-    const terminalOutput   = document.getElementById("terminal-output");
-    const btnRun           = document.getElementById("btn-run");
-    const btnClear         = document.getElementById("btn-clear");
-    const optimizeTacToggle = document.getElementById("toggle-optimize-tac");
-    const tabs             = document.querySelectorAll(".tab");
-
-    let currentTestSpec = null;
-    let progressPollTimer = null;
-    let lastLogCount = 0;
-    let isSessionJoiner = false;
-
-    function stopProgressPoll() {
-        if (progressPollTimer) {
-            clearInterval(progressPollTimer);
-            progressPollTimer = null;
-        }
+    const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
+    const json = value => `<pre class="json-output">${escape(JSON.stringify(value, null, 2))}</pre>`;
+    const output = (title, value) => `<section><h3>${title}</h3><pre class="code-output">${escape(value)}</pre></section>`;
+    const explain = {
+        tokens: "Veja como o texto foi separado em unidades que o compilador consegue reconhecer.",
+        ast: "A árvore sintática preserva a estrutura das expressões, comandos e blocos do programa.",
+        symbols: "A tabela registra nomes, tipos e escopos encontrados na análise semântica.",
+        tac: "O TAC transforma o programa em instruções simples, antes da geração do C++.",
+        cpp: "Este é o código C++ produzido a partir do TAC e usado na execução.",
+        execution: "Confira a saída do programa, os erros e o tempo medido pelo ambiente.",
+    };
+    function setStatus(text, error = false) { status.classList.toggle("error", error); status.innerHTML = `<span></span> ${escape(text)}`; }
+    function showPage(pageName) {
+        pages.forEach(page => page.classList.toggle("active-page", page.id === `page-${pageName}`));
+        navItems.forEach(item => item.classList.toggle("active", item.dataset.page === pageName));
+        const pageLabels = { dashboard: "Painel", ide: "Editor MiniPar", results: "Resultados", configuration: "Configurações" };
+        document.getElementById("topbar-page").textContent = pageLabels[pageName] || "MiniPar";
+        if (pageName === "ide") setTimeout(() => editor.refresh(), 30);
+        window.location.hash = pageName;
+        if (pageName === "results") renderHistory();
     }
-
-    function formatProgressPanel(data) {
-        const session = data.session;
-        if (!session) return "";
-
-        const myRole = session.participants?.find(
-            p => p.terminal_id === data.terminal_id
-        )?.role || "participante";
-
-        const percent = session.progress_percent ?? 0;
-        const filled = Math.floor(percent / 5);
-        const bar = "█".repeat(filled) + "░".repeat(20 - filled);
-
-        let text =
-            "══ TERMINAL PARTICIPANTE — MONITOR DE PROGRESSO ══\n\n" +
-            `Terminal : ${data.terminal_id}\n` +
-            `Papel    : ${myRole}\n` +
-            `Teste    : ${session.titulo || session.test_file}\n` +
-            `Status   : ${session.phase_message || session.status}\n` +
-            `[${bar}] ${percent}%\n\n` +
-            "── LOG DE ATIVIDADE ──\n";
-
-        (session.progress_log || []).forEach(entry => {
-            const prefix = entry.source === "initiator" ? "→" : "•";
-            text += `${prefix} [${entry.time}] ${entry.message}\n`;
-        });
-
-        if (session.execution_output) {
-            text += "\n── SAÍDA DO INICIADOR ──\n";
-            session.execution_output.trim().split("\n").slice(-6).forEach(line => {
-                text += `  ${line}\n`;
-            });
-        }
-
-        if (session.status === "completed") {
-            text += "\n✓ Teste concluído pelo terminal iniciador.\n";
-            stopProgressPoll();
-        }
-
-        return text;
+    function renderHistory() {
+        const list = document.getElementById("results-list");
+        if (!list) return;
+        document.getElementById("result-count").textContent = history.length;
+        document.getElementById("result-success").textContent = history.filter(item => item.success).length;
+        document.getElementById("result-errors").textContent = history.filter(item => !item.success).length;
+        document.getElementById("result-time").textContent = history.length ? `${history[0].time.toFixed(3)} s` : "—";
+        list.innerHTML = history.length ? history.map((item, index) => `<button class="history-row ${index === 0 ? "selected" : ""}" data-history-index="${index}"><b>${escape(item.file)}</b><span>${item.success ? '<em class="green-text">Sucesso</em>' : '<em class="red-text">Com erro</em>'}</span><small>${item.time.toFixed(3)} s</small></button>`).join("") : "Execute um programa pela IDE para visualizar os resultados.";
+        list.querySelectorAll("[data-history-index]").forEach(button => button.addEventListener("click", () => renderResultDetail(history[Number(button.dataset.historyIndex)])));
+        if (history.length) renderResultDetail(history[0]);
     }
-
-    function startProgressPoll() {
-        stopProgressPoll();
-        isSessionJoiner = true;
-        lastLogCount = 0;
-
-        progressPollTimer = setInterval(() => {
-            fetch("/api/session")
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.active || !data.session) {
-                        stopProgressPoll();
-                        return;
-                    }
-
-                    const logLen = (data.session.progress_log || []).length;
-                    if (logLen !== lastLogCount || data.session.status === "completed") {
-                        terminalOutput.textContent = formatProgressPanel(data);
-                        lastLogCount = logLen;
-                    }
-
-                    if (data.session.status === "completed") {
-                        isSessionJoiner = false;
-                    }
-                });
-        }, 500);
+    function renderResultDetail(item) {
+        const detail = document.getElementById("result-detail");
+        if (!detail || !item) return;
+        detail.innerHTML = `<div class="card-title"><span>${escape(item.file)}</span><span class="${item.success ? "green-text" : "red-text"}">${item.success ? "EXECUÇÃO CONCLUÍDA" : "EXECUÇÃO COM ERRO"}</span></div>
+            <div class="result-meta"><span>Tempo <b>${item.time.toFixed(3)} s</b></span><span>Saída <b>código ${item.execution.exit_code ?? "—"}</b></span></div>
+            <div class="execution-grid"><div class="execution-box"><h3>STDOUT</h3><pre>${escape(item.execution.stdout || "(sem saída)")}</pre></div><div class="execution-box"><h3>STDERR</h3><pre>${escape(item.execution.stderr || "(sem erros)")}</pre></div></div>
+            <button class="btn secondary result-open">Abrir na IDE</button>`;
+        detail.querySelector(".result-open").addEventListener("click", () => showPage("ide"));
     }
-
-    tabs.forEach(tab => {
-        tab.addEventListener("click", () => {
-            tabs.forEach(t => t.classList.remove("active"));
-            document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-            tab.classList.add("active");
-            document.getElementById(tab.dataset.target).classList.add("active");
-            editorCpp.refresh();
-            editorTac.refresh();
-            editorTacOriginal.refresh();
-            editorTacOptimized.refresh();
-        });
-    });
-
-    optimizeTacToggle.addEventListener("change", () => {
-        const target = optimizeTacToggle.checked ? "out-tac-comparison" : "out-tac";
-        const tab = document.querySelector(`.tab[data-target="${target}"]`);
-        if (tab) tab.click();
-    });
-
-    // Verifica sessão multi-terminal ativa ao carregar a IDE
-    fetch("/api/session")
-        .then(res => res.json())
-        .then(data => {
-            if (data.active && data.needs_choice) {
-                showSessionChoiceDialog(data);
-            } else if (data.active) {
-                const isParticipant = data.session.participants?.some(
-                    p => p.terminal_id === data.terminal_id
-                );
-                if (isParticipant && data.session.status !== "completed") {
-                    startProgressPoll();
-                } else {
-                    terminalOutput.textContent =
-                        `[Sessão ativa] Teste: ${data.session.titulo || data.session.test_file}\n` +
-                        `Terminal: ${data.terminal_id}\n` +
-                        `Participantes: ${data.session.participants.length}/${data.session.required_participants}`;
-                }
-            }
-        });
-
-    function showSessionChoiceDialog(sessionData) {
-        const session = sessionData.session;
-        const msg =
-            `Teste em andamento: ${session.titulo || session.test_file}\n` +
-            `Participantes: ${session.participants.length}/${session.required_participants}\n` +
-            `Seu terminal: ${sessionData.terminal_id}\n\n` +
-            `Deseja participar deste teste ou executar de forma independente?`;
-
-        if (confirm(msg + "\n\nOK = Participar do teste\nCancelar = Modo independente")) {
-            fetch("/api/session/join", { method: "POST" })
-                .then(res => res.json())
-                .then(result => {
-                    if (result.success) {
-                        const role = result.session.participants.slice(-1)[0].role;
-                        terminalOutput.textContent =
-                            `[OK] Você entrou como: ${role}\nIniciando monitor de progresso...\n`;
-                        startProgressPoll();
-                    }
-                });
-        }
-    }
-
-    fetch("/api/tests")
-        .then(res => res.json())
-        .then(data => {
-            data.tests.forEach(test => {
-                const li = document.createElement("li");
-                li.textContent = test;
-                li.onclick = () => loadTest(test, li);
-                testList.appendChild(li);
-            });
-        });
-
-    function loadTestSpec(filename) {
-        return fetch("/api/test_spec", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename })
-        })
-        .then(res => res.json())
-        .then(spec => {
-            currentTestSpec = spec.titulo ? spec : null;
-            return currentTestSpec;
+    function markDiagnostics(items) {
+        markers.forEach(marker => marker.clear()); markers = [];
+        diagnostics.innerHTML = "";
+        items.forEach(item => {
+            const line = Math.max(0, Number(item.line || 1) - 1);
+            markers.push(editor.addLineClass(line, "background", "cm-error-line"));
+            const button = document.createElement("button");
+            button.className = "diagnostic";
+            button.textContent = `${item.header || item.message} (linha ${line + 1}, coluna ${item.column || 1})`;
+            button.onclick = () => { editor.focus(); editor.setCursor(line, Math.max(0, Number(item.column || 1) - 1)); };
+            diagnostics.appendChild(button);
         });
     }
-
-    function loadTest(filename, element) {
-        document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));
-        if (element) element.classList.add("active");
-
-        currentFileLabel.textContent = filename;
-        terminalOutput.textContent = `Carregando ${filename}...`;
-        terminalOutput.classList.remove("error-text");
-
-        Promise.all([
-            fetch("/api/get_test", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ filename })
-            }).then(res => res.json()),
-            loadTestSpec(filename)
-        ]).then(([data, spec]) => {
-            if (data.code) {
-                editorMinipar.setValue(data.code);
-                editorCpp.setValue("");
-                editorTac.setValue("");
-                editorTacOriginal.setValue("");
-                editorTacOptimized.setValue("");
-                document.getElementById("tac-original-count").textContent = "";
-                document.getElementById("tac-optimized-count").textContent = "";
-
-                let info = "Arquivo carregado. Clique em 'Compile & Run'.";
-                if (spec) {
-                    const tags = [];
-                    if (spec.requires_input) tags.push(`${spec.input_count || spec.inputs.length} input(s)`);
-                    if (spec.multi_computer) tags.push(`${spec.multi_computer.count} terminais`);
-                    if (tags.length) info += `\n[${tags.join(" | ")}]`;
-                }
-                terminalOutput.textContent = info;
-            }
-        });
+    function renderPhase() {
+        const index = phaseOrder.indexOf(currentPhase);
+        document.getElementById("phase-title").textContent = phaseNames[currentPhase];
+        document.getElementById("phase-count").textContent = `${index + 1} de ${phaseOrder.length}`;
+        document.querySelectorAll(".step").forEach(step => step.classList.toggle("active", step.dataset.phase === currentPhase));
+        if (currentPhase === "code") content.innerHTML = `<div class="phase-placeholder"><strong>Seu ponto de partida</strong><p>Edite o programa à esquerda e compile para liberar as próximas fases.</p></div>`;
+        else if (!result) content.innerHTML = `<div class="phase-placeholder"><strong>Compile primeiro</strong><p>Os dados desta fase aparecerão aqui.</p></div>`;
+        else if (currentPhase === "tokens") content.innerHTML = `<div class="phase-explainer">${explain.tokens}</div><table class="data-table"><thead><tr><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead><tbody>${result.tokens.map(token => `<tr><td>${escape(token.type)}</td><td><code>${escape(token.lexeme)}</code></td><td>${token.line}</td><td>${token.column}</td></tr>`).join("")}</tbody></table>`;
+        else if (currentPhase === "ast") content.innerHTML = `<div class="phase-explainer">${explain.ast}</div>${json(result.ast)}`;
+        else if (currentPhase === "symbols") content.innerHTML = `<div class="phase-explainer">${explain.symbols}</div>${json(result.tabela_simbolos)}`;
+        else if (currentPhase === "tac") content.innerHTML = `<div class="phase-explainer">${explain.tac}</div><div class="tac-toolbar"><span>Nível selecionado: <b>${optimizationLevel}</b></span><button class="btn secondary" id="compare-tac">Comparar antes/depois</button></div>${result.tac ? output("Código intermediário", result.tac) : `<p class="hint">Nenhum TAC foi gerado porque há erros no programa.</p>`}`;
+        else if (currentPhase === "cpp") content.innerHTML = `<div class="phase-explainer">${explain.cpp}</div>${result.cpp ? output("Código C++ gerado", result.cpp) : `<p class="hint">Nenhum C++ foi gerado porque há erros no programa.</p>`}`;
+        else content.innerHTML = execution ? `<div class="phase-explainer">${explain.execution}</div><div class="execution"><p class="hint">Tempo: ${Number(execution.tempo || 0).toFixed(3)} s · código de saída: ${execution.exit_code ?? "—"}</p><div class="execution-grid"><div class="execution-box"><h3>STDOUT</h3><pre>${escape(execution.stdout)}</pre></div><div class="execution-box"><h3>STDERR</h3><pre>${escape(execution.stderr)}</pre></div></div></div>` : `<div class="phase-placeholder"><strong>Ainda não executado</strong><p>Clique em Executar para ver stdout, stderr e tempo.</p></div>`;
+        const compareButton = document.getElementById("compare-tac");
+        if (compareButton) compareButton.addEventListener("click", compareTac);
     }
-
-    async function collectInputs(spec) {
-        if (!spec || !spec.requires_input || !spec.inputs.length) return [];
-
-        let msg =
-            `${spec.titulo}\n\n` +
-            `Este programa possui ${spec.input_count || spec.inputs.length} entrada(s) input().\n` +
-            `Informe os valores que serão enviados ao programa:\n\n`;
-        spec.inputs.forEach((inp, i) => {
-            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
-            msg += `[${i + 1}] ${desc}\n`;
-        });
-        alert(msg);
-
-        const collected = [];
-        for (let i = 0; i < spec.inputs.length; i++) {
-            const inp = spec.inputs[i];
-            const desc = inp.descricao || inp.prompt || `Entrada ${i + 1}`;
-            const valor = prompt(`${desc}\n\nDigite o valor:`);
-            if (valor === null) return null;
-            collected.push(valor.trim());
-        }
-        return collected;
-    }
-
-    async function handleMultiComputer(spec, filename) {
-        if (!spec || !spec.multi_computer || !spec.multi_computer.required) return true;
-
-        const multi = spec.multi_computer;
-        let msg =
-            `${spec.titulo}\n\n${spec.descricao}\n\n` +
-            `Este teste exige ${multi.count} computador(es/terminais).\n\n` +
-            `Papéis:\n`;
-        multi.roles.forEach((role, i) => { msg += `  [${i + 1}] ${role}\n`; });
-        msg += `\n${multi.instrucoes}\n\n` +
-            `Abra outro terminal e execute: python main.py\n` +
-            `Escolha 'Continuar teste em andamento' no novo terminal.\n\n` +
-            `Pressione OK quando o(s) outro(s) terminal(is) estiver(em) pronto(s).`;
-
-        if (!confirm(msg)) return false;
-
-        await fetch("/api/session/create", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename })
-        });
-
-        terminalOutput.textContent =
-            "Aguardando participantes nos outros terminais...\n" +
-            "Abra outro terminal com: python main.py\n";
-
-        let connected = 1;
-        const required = multi.count;
-        for (let i = 0; i < 60; i++) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            const res = await fetch("/api/session");
-            const data = await res.json();
-            if (data.session) {
-                connected = data.session.participants.length;
-                terminalOutput.textContent =
-                    `Aguardando participantes... ${connected}/${required} conectados (${i + 1}s)\n` +
-                    (data.session.progress_log || []).slice(-5).map(e =>
-                        `• [${e.time}] ${e.message}`
-                    ).join("\n");
-                if (connected >= required) break;
-            }
-        }
-
-        await fetch("/api/session/ready", { method: "POST" });
-        return true;
-    }
-
-    function setCompiling(state) {
-        btnRun.disabled = state;
-        btnRun.textContent = state ? "⏳ Compilando..." : "▶ Compile & Run";
-    }
-
-    async function runCompile(code, filename, inputs) {
-        setCompiling(true);
-        terminalOutput.textContent = "Rodando compilador...";
-        terminalOutput.classList.remove("error-text");
-
+    async function compareTac() {
+        if (!result || !result.tac) return;
+        const compareButton = document.getElementById("compare-tac");
+        if (compareButton) compareButton.disabled = true;
         try {
-            const res = await fetch("/api/compile", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    code,
-                    filename,
-                    inputs,
-                    optimize_tac: optimizeTacToggle.checked
-                })
-            });
-            const data = await res.json();
-
-            editorCpp.setValue(data.cpp || "");
-            editorTac.setValue(data.tac || "");
-            editorTacOriginal.setValue(data.tac || "");
-            editorTacOptimized.setValue(data.tac_optimized || "");
-            if (data.tac_instruction_counts) {
-                document.getElementById("tac-original-count").textContent =
-                    `${data.tac_instruction_counts.original} instruções`;
-                document.getElementById("tac-optimized-count").textContent =
-                    `${data.tac_instruction_counts.optimized} instruções`;
-            } else {
-                document.getElementById("tac-original-count").textContent = "";
-                document.getElementById("tac-optimized-count").textContent = "";
-            }
-
-            setTimeout(() => {
-                editorCpp.refresh();
-                editorTac.refresh();
-                editorTacOriginal.refresh();
-                editorTacOptimized.refresh();
-            }, 50);
-
-            if (data.success) {
-                terminalOutput.textContent = data.stdout || "Compilação concluída com sucesso!";
-                terminalOutput.classList.remove("error-text");
-            } else {
-                terminalOutput.textContent = data.stderr || data.error || "Erro na execução.";
-                terminalOutput.classList.add("error-text");
-            }
-        } catch (err) {
-            terminalOutput.textContent = "Erro de conexão com o servidor Backend.";
-            terminalOutput.classList.add("error-text");
-        } finally {
-            setCompiling(false);
-        }
+            const response = await fetch("/api/otimizar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: editor.getValue(), optimization_level: optimizationLevel }) });
+            const optimized = await response.json();
+            if (!optimized.success) { setStatus("Não foi possível otimizar o TAC", true); return; }
+            content.innerHTML = `<div class="phase-explainer">${explain.tac}</div><div class="comparison">${output("TAC antes", optimized.tac)}${output(`TAC depois (${optimizationLevel})`, optimized.tac_optimized)}</div>`;
+        } catch (error) { setStatus("Falha ao comparar TAC", true); }
+        finally { if (compareButton) compareButton.disabled = false; }
     }
-
-    btnRun.onclick = async () => {
-        const code     = editorMinipar.getValue();
-        const filename = currentFileLabel.textContent;
-
-        if (!currentTestSpec) {
-            await loadTestSpec(filename);
-        }
-
-        const spec = currentTestSpec;
-
-        if (spec && spec.multi_computer && spec.multi_computer.required) {
-            const proceed = await handleMultiComputer(spec, filename);
-            if (!proceed) {
-                terminalOutput.textContent = "[INFO] Execução cancelada — aguardando participantes.";
-                return;
+    async function loadExamples() {
+        const response = await fetch("/api/tests"); const data = await response.json();
+        examples.innerHTML = `<option value="">Escolher um exemplo pronto</option>` + data.tests.map(name => `<option value="${escape(name)}">${escape(name)}</option>`).join("");
+        const metric = document.getElementById("metric-tests");
+        if (metric) metric.textContent = data.tests.length;
+        const exampleCount = document.getElementById("example-count");
+        if (exampleCount) exampleCount.textContent = String(data.tests.length).padStart(2, "0");
+        const dashboardExample = document.getElementById("dashboard-example");
+        if (dashboardExample) dashboardExample.innerHTML = data.tests.map(name => `<option>${escape(name)}</option>`).join("");
+        const testList = document.getElementById("test-list");
+        if (testList) testList.innerHTML = data.tests.map(name => `<li data-filename="${escape(name)}" tabindex="0">${escape(name.replace(/\.mp$/, ""))}</li>`).join("");
+        testList?.querySelectorAll("[data-filename]").forEach(item => {
+            item.addEventListener("click", () => loadExample(item.dataset.filename));
+            item.addEventListener("keydown", event => { if (event.key === "Enter" || event.key === " ") loadExample(item.dataset.filename); });
+        });
+    }
+    async function loadExample(filename) {
+        const response = await fetch("/api/get_test", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ filename }) });
+        const data = await response.json();
+        editor.setValue(data.code || "");
+        document.getElementById("current-file").textContent = filename;
+        document.querySelectorAll(".test-list li").forEach(item => item.classList.toggle("active", item.dataset.filename === filename));
+        result = null; execution = null; markDiagnostics([]); currentPhase = "code"; renderPhase();
+        showPage("ide"); setStatus("Exemplo carregado");
+    }
+    async function compile() {
+        const button = document.getElementById("compile-button"); button.disabled = true; setStatus("Compilando...");
+        try {
+            const response = await fetch("/api/compilar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: editor.getValue() }) });
+            result = await response.json(); execution = null; markDiagnostics(result.diagnosticos || []);
+            if (metricState) metricState.textContent = result.success ? "COMPILADO" : "COM ERROS";
+            setStatus(result.success ? "Compilação concluída" : "Há erros no programa", !result.success);
+            currentPhase = result.success ? "tokens" : "code"; renderPhase();
+        } catch (error) { setStatus("Não foi possível conectar ao compilador", true); }
+        finally { button.disabled = false; }
+    }
+    async function run() {
+        const button = document.getElementById("run-button"); button.disabled = true; setStatus("Executando...");
+        try {
+            if (!result) {
+                await compile();
+                if (!result || !result.success) return;
             }
+            const inputs = programInput.value.split(/\r?\n/).filter(line => line.length > 0);
+            const response = await fetch("/api/executar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: editor.getValue(), inputs }) });
+            execution = await response.json();
+            history.unshift({ file: document.getElementById("current-file").textContent, success: Boolean(execution.success), time: Number(execution.tempo || 0), execution });
+            renderHistory();
+            currentPhase = "execution"; setStatus(execution.success ? "Execução concluída" : "Execução terminou com erro", !execution.success); renderPhase();
+        } catch (error) { setStatus("Não foi possível executar", true); }
+        finally { button.disabled = false; }
+    }
+    examples.addEventListener("change", async event => {
+        if (!event.target.value) return;
+        await loadExample(event.target.value);
+    });
+    document.getElementById("dashboard-example")?.addEventListener("change", event => loadExample(event.target.value));
+    document.getElementById("compile-button").addEventListener("click", compile);
+    document.getElementById("editor-compile").addEventListener("click", compile);
+    document.getElementById("run-button").addEventListener("click", run);
+    editor.getWrapperElement().addEventListener("keydown", event => {
+        if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            compile();
         }
-
-        let inputs = [];
-        if (spec && spec.requires_input) {
-            inputs = await collectInputs(spec);
-            if (inputs === null) {
-                terminalOutput.textContent = "[INFO] Execução cancelada — entrada não fornecida.";
-                return;
-            }
-        }
-
-        await runCompile(code, filename, inputs);
-    };
-
-    btnClear.onclick = () => {
-        editorMinipar.setValue("");
-        editorCpp.setValue("");
-        editorTac.setValue("");
-        editorTacOriginal.setValue("");
-        editorTacOptimized.setValue("");
-        document.getElementById("tac-original-count").textContent = "";
-        document.getElementById("tac-optimized-count").textContent = "";
-        currentFileLabel.textContent = "ide_temp.minipar";
-        currentTestSpec = null;
-        document.querySelectorAll(".test-list li").forEach(li => li.classList.remove("active"));
-        terminalOutput.textContent = "Workspace limpo. Pode começar a digitar.";
-        terminalOutput.classList.remove("error-text");
-    };
+    });
+    document.getElementById("clear-button").addEventListener("click", () => { editor.setValue(""); result = null; execution = null; markDiagnostics([]); currentPhase = "code"; renderPhase(); });
+    navItems.forEach(item => item.addEventListener("click", () => showPage(item.dataset.page)));
+    document.querySelectorAll("[data-page-target]").forEach(button => button.addEventListener("click", () => showPage(button.dataset.pageTarget)));
+    document.querySelectorAll(".step").forEach(step => step.addEventListener("click", async () => {
+        currentPhase = step.dataset.phase;
+        if (currentPhase === "tac" && result) {
+            await compareTac();
+        } else renderPhase();
+    }));
+    function syncOptimization(value) {
+        optimizationLevel = value;
+        localStorage.setItem("minipar-optimization", value);
+        document.getElementById("optimization").value = value;
+        document.getElementById("settings-optimization").value = value;
+        document.getElementById("dashboard-optimization").textContent = `${value} — ${value === "O0" ? "sem otimização" : "otimização aplicada"}`;
+        renderPhase();
+    }
+    document.getElementById("optimization").value = optimizationLevel;
+    document.getElementById("settings-optimization").value = optimizationLevel;
+    document.getElementById("optimization").addEventListener("change", event => syncOptimization(event.target.value));
+    document.getElementById("settings-optimization").addEventListener("change", event => {
+        document.getElementById("settings-saved").innerHTML = '<span class="status-dot"></span> Alterações não salvas';
+        optimizationLevel = event.target.value;
+    });
+    document.getElementById("save-settings").addEventListener("click", () => {
+        syncOptimization(document.getElementById("settings-optimization").value);
+        document.getElementById("settings-saved").innerHTML = '<span class="status-dot"></span> Configuração salva';
+        setStatus("Configurações salvas");
+    });
+    document.getElementById("restore-settings").addEventListener("click", () => {
+        document.getElementById("settings-optimization").value = defaultOptimization;
+        syncOptimization(defaultOptimization);
+        document.getElementById("settings-saved").innerHTML = '<span class="status-dot"></span> Padrão restaurado';
+    });
+    document.getElementById("export-results").addEventListener("click", () => {
+        const data = JSON.stringify(history, null, 2);
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
+        link.download = "minipar-resultados.json";
+        link.click();
+        URL.revokeObjectURL(link.href);
+    });
+    const initialPage = ["results", "configuration", "ide"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "dashboard";
+    loadExamples(); renderPhase(); showPage(initialPage);
 });

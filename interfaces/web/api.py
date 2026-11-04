@@ -339,6 +339,41 @@ def compile_phases():
     return jsonify(_compile_phases(data["code"]))
 
 
+@app.route('/api/otimizar', methods=['POST'])
+def optimize_phases():
+    """Retorna o TAC original e o resultado da otimização para a interface didática."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("code"), str):
+        return jsonify({
+            "error": "O campo 'code' deve ser texto.", "success": False
+        }), 400
+
+    level = data.get("optimization_level", "O1")
+    if level not in {"O0", "O1", "O2", "O3"}:
+        return jsonify({
+            "error": "optimization_level deve ser O0, O1, O2 ou O3.",
+            "success": False,
+        }), 400
+
+    compilation = _compile_phases(data["code"])
+    tac = str(compilation["tac"])
+    optimized = (
+        TACOptimizer().optimize(tac)
+        if compilation["success"] and level != "O0"
+        else tac if compilation["success"] else ""
+    )
+    return jsonify({
+        "success": compilation["success"],
+        "tac": tac,
+        "tac_optimized": optimized,
+        "tac_instruction_counts": {
+            "original": TACOptimizer.instruction_count(tac),
+            "optimized": TACOptimizer.instruction_count(optimized),
+        },
+        "diagnosticos": compilation["diagnosticos"],
+    })
+
+
 @app.route('/api/executar', methods=['POST'])
 def execute_code():
     data = request.get_json(silent=True)
