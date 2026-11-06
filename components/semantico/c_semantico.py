@@ -633,7 +633,11 @@ class SemanticAnalyzer:
                     node.column,
                 )
             self._define_symbol(
-                node.name, declared_type, node.line, column=node.column
+                node.name,
+                declared_type,
+                node.line,
+                "channel" if declared_type == "c_channel" else "variable",
+                column=node.column,
             )
 
         elif isinstance(node, Assignment):

@@ -8,6 +8,24 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="icon-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></symbol>
+    <symbol id="icon-editor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/></symbol>
+    <symbol id="icon-results" viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-3"/></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.2.4.6.8 1 .99.3.2.7.3 1.1.3H21v4h-.09a1.7 1.7 0 0 0-1.51.71Z"/></symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></symbol>
+    <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></symbol>
+    <symbol id="icon-code" viewBox="0 0 24 24"><path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/></symbol>
+    <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 16 9 5 9-5"/></symbol>
+    <symbol id="icon-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 1 1 5 2.2c-.8.6-1.6 1.1-1.6 2.3"/><path d="M12 17h.01"/></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+    <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+    <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.7 7.3L20 12"/><path d="M17.9 15A7 7 0 0 1 5.3 16.7L4 12"/></symbol>
+</svg>
 <div class="shell">
     <aside class="sidebar" aria-label="Navegação do MiniPar">
         <div class="brand">
@@ -17,16 +35,16 @@
         <div class="sidebar-section">
             <p class="sidebar-label">WORKSPACE</p>
             <nav class="main-nav">
-                <button class="nav-item active" data-page="dashboard"><span class="nav-icon">⌂</span><span>Painel</span></button>
-                <button class="nav-item" data-page="ide"><span class="nav-icon">◇</span><span>Editor MiniPar</span></button>
-                <button class="nav-item" data-page="results"><span class="nav-icon">▥</span><span>Resultados</span></button>
-                <button class="nav-item" data-page="configuration"><span class="nav-icon">⚙</span><span>Configurações</span></button>
+                <button class="nav-item active" data-page="dashboard"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg></span><span>Painel</span></button>
+                <button class="nav-item" data-page="ide"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-editor"></use></svg></span><span>Editor MiniPar</span></button>
+                <button class="nav-item" data-page="results"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-results"></use></svg></span><span>Resultados</span></button>
+                <button class="nav-item" data-page="configuration"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg></span><span>Configurações</span></button>
             </nav>
         </div>
         <div class="sidebar-footer">
             <div class="system-card"><div><span class="live-dot"></span><b>COMPILADOR ONLINE</b></div><small>Flask Compiler API · local</small></div>
             <div class="version-row"><span>MINIPAR 2026.2</span><span>UFAL</span></div>
-            <a class="legacy-link" href="/modelo-antigo" target="_blank" rel="noopener">Ver modelo anterior ↗</a>
+            <a class="legacy-link" href="/modelo-antigo" target="_blank" rel="noopener"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg><span>Modelo antigo</span></a>
         </div>
     </aside>
 
@@ -36,8 +54,9 @@
             <div class="topbar-actions">
                 <span class="runtime-chip"><span class="live-dot"></span> 7 FASES</span>
                 <span id="status" class="status-text"><span class="live-dot"></span> Pronto</span>
-                <button id="compile-button" class="button button-primary">Compilar e executar</button>
-                <button id="theme-toggle" class="button button-outline theme-toggle" type="button" aria-label="Mudar para modo claro">☼ Claro</button>
+                <a class="button button-outline legacy-button" href="/modelo-antigo" target="_blank" rel="noopener" aria-label="Abrir o modelo antigo em nova aba"><svg class="icon" aria-hidden="true"><use href="#icon-external"></use></svg><span class="button-label">Modelo antigo</span></a>
+                <button id="compile-button" class="button button-primary compile-button" type="button" hidden><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg><span class="button-label">Compilar e executar</span><span class="button-label-short">Executar</span></button>
+                <button id="theme-toggle" class="button button-outline theme-toggle" type="button" aria-label="Mudar para modo claro"><svg class="icon" aria-hidden="true"><use href="#icon-sun"></use></svg><span class="button-label">Claro</span></button>
                 <span class="avatar" aria-label="Perfil local">MP</span>
             </div>
         </header>
@@ -56,7 +75,7 @@
                 </div>
                 <div class="dashboard-columns dashboard-main-grid">
                     <article class="card config-card dashboard-quick-card">
-                        <div class="card-head"><div><p class="card-eyebrow">COMECE POR AQUI</p><h2>Escolha um programa</h2></div><span class="round-icon">◇</span></div>
+                        <div class="card-head"><div><p class="card-eyebrow">COMECE POR AQUI</p><h2>Escolha um programa</h2></div><span class="round-icon"><svg class="icon" aria-hidden="true"><use href="#icon-code"></use></svg></span></div>
                         <p class="card-copy">Carregue um exemplo pronto para entender o pipeline ou abra o editor para escrever seu próprio código.</p>
                         <label class="field-label" for="dashboard-example">PROGRAMA DE ENTRADA</label>
                         <select id="dashboard-example" class="select-control"><option value="">Escolha um exemplo</option></select>
@@ -64,7 +83,7 @@
                     </article>
                 </div>
                 <div class="dashboard-bottom">
-                    <article class="card dashboard-guide-card"><div class="card-head"><div><p class="card-eyebrow">PRÓXIMO PASSO</p><h2>Entenda antes de executar</h2></div><span class="round-icon">?</span></div><p class="card-copy">Veja o que acontece com seu programa em cada etapa, do código-fonte até a execução.</p><button class="text-button" data-page-target="pipeline">Explorar o pipeline no editor →</button></article>
+                    <article class="card dashboard-guide-card"><div class="card-head"><div><p class="card-eyebrow">PRÓXIMO PASSO</p><h2>Entenda antes de executar</h2></div><span class="round-icon"><svg class="icon" aria-hidden="true"><use href="#icon-help"></use></svg></span></div><p class="card-copy">Veja o que acontece com seu programa em cada etapa, do código-fonte até a execução.</p><button class="text-button" data-page-target="pipeline">Explorar o pipeline no editor →</button></article>
                     <article class="card dashboard-history-card"><div class="card-head"><div><p class="card-eyebrow">SESSÃO ATUAL</p><h2>Execuções recentes</h2></div><button class="text-button" data-page-target="results">Ver todas →</button></div><div id="dashboard-history-list" class="dashboard-history-list"><p class="empty-state">Ainda não há execuções nesta sessão.</p></div></article>
                 </div>
             </section>
@@ -87,27 +106,27 @@
             </section>
 
             <section id="page-ide" class="page ide-page">
-                <div class="page-intro ide-intro"><div><p class="kicker">AMBIENTE DE APRENDIZAGEM</p><h1>Editor MiniPar</h1><p class="intro-copy">Compile o programa e avance por uma fase de cada vez.</p></div><div class="ide-toolbar"><label for="example-select">EXEMPLO</label><select id="example-select" class="select-control"><option>Carregando...</option></select><label for="optimization">TAC</label><select id="optimization" class="select-control compact"><option value="O0">O0</option><option value="O1">O1</option><option value="O2">O2</option><option value="O3">O3</option></select><button id="clear-button" class="button button-outline">Limpar</button></div></div>
+                <div class="page-intro ide-intro"><div><p class="kicker">AMBIENTE DE APRENDIZAGEM</p><h1>Editor MiniPar</h1><p class="intro-copy">Compile o programa e avance por uma fase de cada vez.</p></div><div class="ide-toolbar"><label for="example-select">EXEMPLO</label><select id="example-select" class="select-control"><option>Carregando...</option></select><label for="optimization">TAC</label><select id="optimization" class="select-control compact"><option value="O0">O0</option><option value="O1">O1</option><option value="O2">O2</option><option value="O3">O3</option></select><button id="clear-button" class="button button-outline"><svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>Limpar</button></div></div>
                 <div class="ide-grid">
-                    <article class="editor-panel card"><div class="panel-title"><span><span class="panel-mark">◇</span> Código-fonte</span><small>MINIPAR · EDITÁVEL</small></div><textarea id="source-editor" aria-label="Editor de código MiniPar"></textarea><div class="input-area"><label for="program-input">ENTRADAS DO PROGRAMA <span>stdin · uma por linha</span></label><textarea id="program-input" class="program-input" placeholder="42"></textarea></div><div class="editor-actions"><button class="button button-primary" id="editor-compile" type="button">Compilar e executar</button><span>Ctrl + Enter</span></div></article>
-                    <article class="phase-panel card"><div class="panel-title"><span><span class="panel-mark">▣</span> <b id="phase-title">Código</b></span><small id="phase-count">1 de 7</small></div><nav class="phase-nav" aria-label="Fases do compilador"><button type="button" class="step active" data-phase="code" aria-controls="phase-content"><span>01</span><b>Código</b></button><button type="button" class="step" data-phase="tokens" aria-controls="phase-content"><span>02</span><b>Tokens</b></button><button type="button" class="step" data-phase="ast" aria-controls="phase-content"><span>03</span><b>AST</b></button><button type="button" class="step" data-phase="symbols" aria-controls="phase-content"><span>04</span><b>Símbolos</b></button><button type="button" class="step" data-phase="tac" aria-controls="phase-content"><span>05</span><b>TAC</b></button><button type="button" class="step" data-phase="cpp" aria-controls="phase-content"><span>06</span><b>C++</b></button><button type="button" class="step" data-phase="execution" aria-controls="phase-content"><span>07</span><b>Execução</b></button></nav><div id="phase-content" class="phase-content" role="region" aria-live="polite" aria-labelledby="phase-title"></div></article>
+                    <article class="editor-panel card"><div class="panel-title"><span><span class="panel-mark"><svg class="icon" aria-hidden="true"><use href="#icon-code"></use></svg></span> Código-fonte</span><small>MINIPAR · EDITÁVEL</small></div><textarea id="source-editor" aria-label="Editor de código MiniPar"></textarea><div class="input-area"><label for="program-input">ENTRADAS DO PROGRAMA <span>stdin · uma por linha</span></label><textarea id="program-input" class="program-input" placeholder="42"></textarea></div><div class="editor-actions"><button class="button button-primary compile-button" id="editor-compile" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg><span class="button-label">Compilar e executar</span><span class="button-label-short">Executar</span></button><span>Ctrl + Enter</span></div></article>
+                    <article class="phase-panel card"><div class="panel-title"><span><span class="panel-mark"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg></span> <b id="phase-title">Código</b></span><small id="phase-count">1 de 7</small></div><nav class="phase-nav" aria-label="Fases do compilador"><button type="button" class="step active" data-phase="code" aria-controls="phase-content"><span>01</span><b>Código</b></button><button type="button" class="step" data-phase="tokens" aria-controls="phase-content"><span>02</span><b>Tokens</b></button><button type="button" class="step" data-phase="ast" aria-controls="phase-content"><span>03</span><b>AST</b></button><button type="button" class="step" data-phase="symbols" aria-controls="phase-content"><span>04</span><b>Símbolos</b></button><button type="button" class="step" data-phase="tac" aria-controls="phase-content"><span>05</span><b>TAC</b></button><button type="button" class="step" data-phase="cpp" aria-controls="phase-content"><span>06</span><b>C++</b></button><button type="button" class="step" data-phase="execution" aria-controls="phase-content"><span>07</span><b>Execução</b></button></nav><div id="phase-content" class="phase-content" role="region" aria-live="polite" aria-labelledby="phase-title"></div></article>
                 </div>
             </section>
 
             <section id="page-results" class="page">
-                <div class="page-intro"><div><p class="kicker">HISTÓRICO DA SESSÃO</p><h1>Resultados do compilador</h1><p class="intro-copy">Reveja as execuções e os artefatos produzidos pelo pipeline.</p></div><button id="export-results" class="button button-outline">Exportar sessão</button></div>
+                <div class="page-intro"><div><p class="kicker">HISTÓRICO DA SESSÃO</p><h1>Resultados do compilador</h1><p class="intro-copy">Reveja as execuções e os artefatos produzidos pelo pipeline.</p></div><button id="export-results" class="button button-outline"><svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg>Exportar sessão</button></div>
                 <div class="metric-grid"><div class="metric-card"><span>EXECUÇÕES</span><strong id="result-count">0</strong><small>nesta sessão</small></div><div class="metric-card"><span>SUCESSO</span><strong id="result-success" class="success-text">0</strong><small>programas executados</small></div><div class="metric-card"><span>COM DIAGNÓSTICOS</span><strong id="result-errors" class="danger-text">0</strong><small>execuções com erro</small></div><div class="metric-card"><span>ÚLTIMO TEMPO</span><strong id="result-time">—</strong><small>tempo medido</small></div></div>
                 <article class="card results-list-card"><div class="card-head"><div><p class="card-eyebrow">ATIVIDADE</p><h2>Execuções recentes</h2></div><span class="tag">SESSÃO ATUAL</span></div><div id="results-list" class="empty-state">Execute um programa pela IDE para visualizar os resultados.</div></article>
             </section>
 
             <section id="page-result-detail" class="page">
-                <div class="page-intro ide-intro"><div><p class="kicker">RESULTADO PRESERVADO</p><h1>Resultado selecionado</h1><p class="intro-copy">A mesma visão do Editor MiniPar, sem edição ou execução.</p></div><div class="ide-toolbar"><span class="tag">SOMENTE LEITURA</span><button id="back-to-results" class="button button-outline">Voltar ao histórico</button></div></div>
+                <div class="page-intro ide-intro"><div><p class="kicker">RESULTADO PRESERVADO</p><h1>Resultado selecionado</h1><p class="intro-copy">A mesma visão do Editor MiniPar, sem edição ou execução.</p></div><div class="ide-toolbar"><span class="tag">SOMENTE LEITURA</span><button id="back-to-results" class="button button-outline"><svg class="icon" aria-hidden="true"><use href="#icon-arrow-left"></use></svg>Voltar ao histórico</button></div></div>
                 <div id="result-detail" class="result-detail"></div>
             </section>
 
             <section id="page-configuration" class="page">
                 <div class="page-intro"><div><p class="kicker">PARÂMETROS DO PROJETO</p><h1>Configurações</h1><p class="intro-copy">Escolha como o MiniPar deve transformar e executar seu programa.</p></div><span class="runtime-chip"><span class="live-dot"></span> Ambiente local</span></div>
-                <article class="card settings-card"><div class="settings-row"><div><p class="card-eyebrow">OTIMIZADOR TAC</p><h2>Nível de otimização</h2><p>Escolha entre preservar o TAC original ou aplicar simplificações antes do C++.</p></div><select id="settings-optimization" class="select-control"><option value="O0">O0 — sem otimização</option><option value="O1">O1 — simplificação</option><option value="O2">O2 — código morto</option><option value="O3">O3 — máxima</option></select></div><div class="settings-row"><div><p class="card-eyebrow">FLUXO DIDÁTICO</p><h2>Uma fase por vez</h2><p>Código → Tokens → AST → Símbolos → TAC → C++ → Execução.</p></div><span class="tag tag-success">7 FASES ATIVAS</span></div><div class="settings-row"><div><p class="card-eyebrow">ENTRADA</p><h2>Dados pelo stdin</h2><p>As linhas digitadas no editor são enviadas ao programa na ordem informada.</p></div><span class="mono-value">UMA LINHA / VALOR</span></div><div class="settings-actions"><button id="restore-settings" class="button button-danger">Restaurar padrão</button><span id="settings-saved" class="saved-state"><span class="live-dot"></span> Configuração salva</span><button id="save-settings" class="button button-primary">Salvar configurações</button></div></article>
+                <article class="card settings-card"><div class="settings-row"><div><p class="card-eyebrow">OTIMIZADOR TAC</p><h2>Nível de otimização</h2><p>Escolha entre preservar o TAC original ou aplicar simplificações antes do C++.</p></div><select id="settings-optimization" class="select-control"><option value="O0">O0 — sem otimização</option><option value="O1">O1 — simplificação</option><option value="O2">O2 — código morto</option><option value="O3">O3 — máxima</option></select></div><div class="settings-row"><div><p class="card-eyebrow">FLUXO DIDÁTICO</p><h2>Uma fase por vez</h2><p>Código → Tokens → AST → Símbolos → TAC → C++ → Execução.</p></div><span class="tag tag-success">7 FASES ATIVAS</span></div><div class="settings-row"><div><p class="card-eyebrow">ENTRADA</p><h2>Dados pelo stdin</h2><p>As linhas digitadas no editor são enviadas ao programa na ordem informada.</p></div><span class="mono-value">UMA LINHA / VALOR</span></div><div class="settings-actions"><button id="restore-settings" class="button button-danger"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"></use></svg>Restaurar padrão</button><span id="settings-saved" class="saved-state"><span class="live-dot"></span> Configuração salva</span><button id="save-settings" class="button button-primary"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>Salvar configurações</button></div></article>
             </section>
         </main>
     </div>

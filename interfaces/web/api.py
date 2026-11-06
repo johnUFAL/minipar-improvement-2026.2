@@ -34,6 +34,7 @@ from ..test_orchestrator import (
     get_terminal_id,
     join_session,
     record_execution_output,
+    resolve_test_file,
     set_session_phase,
 )
 
@@ -296,8 +297,12 @@ def get_tests():
 
 @app.route('/api/get_test', methods=['POST'])
 def get_test():
-    filename = request.json.get('filename')
-    filepath = os.path.join(TESTS_DIR, filename)
+    data = request.get_json(silent=True)
+    filename = data.get("filename") if isinstance(data, dict) else None
+    try:
+        filepath = resolve_test_file(filename)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     if os.path.exists(filepath):
         with open(filepath, 'r', encoding='utf-8') as f:
             return jsonify({"code": f.read()})
@@ -307,11 +312,16 @@ def get_test():
 @app.route('/api/test_spec', methods=['POST'])
 def get_test_spec_api():
     """Requisitos detectados automaticamente pelo program_analyzer."""
-    filename = request.json.get('filename')
+    data = request.get_json(silent=True)
+    filename = data.get("filename") if isinstance(data, dict) else None
+    try:
+        resolve_test_file(filename)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     spec = get_spec_summary(filename)
     if spec:
         return jsonify(spec)
-    return jsonify({"requires_input": False, "multi_computer": None})
+    return jsonify({"error": "Arquivo não encontrado"}), 404
 
 
 @app.route('/api/session', methods=['GET'])
@@ -338,8 +348,12 @@ def session_join():
 
 @app.route('/api/session/create', methods=['POST'])
 def session_create():
-    filename = request.json.get('filename')
-    path = os.path.join(TESTS_DIR, filename)
+    data = request.get_json(silent=True)
+    filename = data.get("filename") if isinstance(data, dict) else None
+    try:
+        path = resolve_test_file(filename)
+    except ValueError as error:
+        return jsonify({"success": False, "error": str(error)}), 400
     if not os.path.exists(path):
         return jsonify({"success": False, "error": "Arquivo não encontrado"}), 404
     spec = get_program_spec(path)

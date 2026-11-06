@@ -13,7 +13,7 @@ dependencies = ["Flask>=3.0"]
 minipar = "interfaces.command_line:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "playwright>=1.40"]
 
 [tool.setuptools.packages.find]
 include = ["components*", "erros*", "interfaces*"]

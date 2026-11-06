@@ -1,3 +1,6 @@
+import os
+import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -6,6 +9,12 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from interfaces.web import api
+
+
+ROOT = Path(__file__).resolve().parents[2]
+PROGRAMS_DIR = ROOT / "programas_teste"
+CXX = os.environ.get("CXX", "g++").strip('"')
+CXX_AVAILABLE = shutil.which(CXX) is not None
 
 
 class WebCompileTests(unittest.TestCase):
@@ -38,6 +47,43 @@ class WebCompileTests(unittest.TestCase):
         self.assertIn('data-page-target="pipeline"', page)
         self.assertNotIn('dashboard-pipeline-card', page)
         self.assertNotIn('id="test-list"', page)
+
+    def test_new_interface_contains_origin_highlight_contract(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        script = self.client.get("/static/script.js").get_data(as_text=True)
+        self.assertIn("data-source-line", script)
+        self.assertIn("origin-highlight", script)
+        self.assertIn("cm-origin-line", script)
+        self.assertIn('role="button"', script)
+        self.assertIn("tac-origin-popover", script)
+        self.assertIn("moveTacPopover", script)
+        self.assertIn('scope.querySelector(".mapped-code")', script)
+        self.assertIn('line.closest(".mapped-code")', script)
+        self.assertIn("pointermove", script)
+        self.assertIn('querySelectorAll(".tac-origin-popover")', script)
+        self.assertIn("cm-origin-line", script)
+        self.assertNotIn("editor.scrollIntoView", script)
+        self.assertIn("panel.addEventListener(\"pointerleave\", clear)", script)
+        self.assertIn("readonly-code-line", script)
+        self.assertIn("type: \"readonly\"", script)
+        self.assertIn("result-source-code", script)
+        self.assertIn("resultPhaseContent, source:", script)
+        self.assertIn("bindSourceOriginHighlights", script)
+        self.assertIn("highlightSource", script)
+        self.assertIn("coordsChar", script)
+        self.assertIn("index < editor.lineCount()", script)
+        self.assertIn('editor.removeLineClass(index, "background", "cm-origin-line")', script)
+
+    def test_new_interface_marks_diagnostic_columns(self):
+        script = self.client.get("/static/script.js").get_data(as_text=True)
+        style = self.client.get("/static/style.css").get_data(as_text=True)
+
+        self.assertIn("columnMarkers", script)
+        self.assertIn("editor.markText", script)
+        self.assertIn("cm-error-token", script)
+        self.assertIn(".cm-error-token", style)
 
     def test_legacy_interface_is_independent_and_links_to_new(self):
         response = self.client.get("/modelo-antigo")
@@ -122,6 +168,149 @@ class WebCompileTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.get_json()["success"])
+
+    def test_get_test_rejects_path_traversal(self):
+        for filename in ("../README.md", "..\\README.md", "C:\\README.md"):
+            with self.subTest(filename=filename):
+                response = self.client.post(
+                    "/api/get_test",
+                    json={"filename": filename},
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.get_json()["error"],
+                    "Nome de arquivo inválido.",
+                )
+
+    def test_file_endpoints_reject_invalid_filenames(self):
+        for endpoint in ("/api/test_spec", "/api/session/create"):
+            with self.subTest(endpoint=endpoint):
+                response = self.client.post(
+                    endpoint,
+                    json={"filename": "../programas_teste/t01_calculadora.mp"},
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.get_json()["error"],
+                    "Nome de arquivo inválido.",
+                )
+
+    def test_get_test_loads_file_inside_tests_directory(self):
+        response = self.client.post(
+            "/api/get_test",
+            json={"filename": "t01_calculadora.mp"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["code"])
+
+    def test_file_endpoints_distinguish_missing_files(self):
+        for endpoint in ("/api/get_test", "/api/test_spec", "/api/session/create"):
+            with self.subTest(endpoint=endpoint):
+                response = self.client.post(
+                    endpoint,
+                    json={"filename": "does-not-exist.mp"},
+                )
+
+                self.assertEqual(response.status_code, 404)
+
+    def test_get_test_rejects_missing_or_non_text_filename(self):
+        for filename in ("", None, 42):
+            with self.subTest(filename=filename):
+                response = self.client.post(
+                    "/api/get_test",
+                    json={"filename": filename},
+                )
+
+                self.assertEqual(response.status_code, 400)
+
+    @unittest.skipUnless(
+        CXX_AVAILABLE, "g++ is required for the end-to-end web acceptance tests"
+    )
+    def test_acceptance_programs_run_through_web_pipeline(self):
+        cases = {
+            "t02_fatorial_fibonacci_par.mp": (
+                [],
+                ["Fibonacci:", "Fatorial de 5: 120"],
+            ),
+            "t03_neuronio.mp": (
+                [],
+                [
+                    "Valor desejado: 0",
+                    "Iteracao: 51",
+                    "Neuronio aprendeu dinamicamente.",
+                ],
+            ),
+            "t05_recomendacao.mp": (
+                ["1", "0", "1", "0", "0", "0", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0"],
+                ["Produtos recomendados para voce:", "probabilidade:"],
+            ),
+            "t06_quicksort_classes.mp": (
+                ["10 -3 -40 80 70 -100"],
+                [
+                    "Vetor original: [10, -3, -40, 80, 70, -100]",
+                    "Vetor ordenado: [-100, -40, -3, 10, 70, 80]",
+                ],
+            ),
+            "t07_quicksort_iterativo_tac.mp": (
+                [],
+                ["Array ordenado: [5, 12, 33, 61, 98]"],
+            ),
+        }
+
+        for filename, (inputs, expected_fragments) in cases.items():
+            with self.subTest(program=filename):
+                source = (PROGRAMS_DIR / filename).read_text(encoding="utf-8")
+                response = self.client.post(
+                    "/api/executar",
+                    json={"code": source, "inputs": inputs},
+                )
+
+                self.assertEqual(response.status_code, 200)
+                result = response.get_json()
+                self.assertTrue(result["success"], result.get("stderr"))
+                self.assertEqual(result["exit_code"], 0)
+                for fragment in expected_fragments:
+                    self.assertIn(fragment, result["stdout"])
+
+    @unittest.skipUnless(
+        CXX_AVAILABLE, "g++ is required for the end-to-end web acceptance tests"
+    )
+    def test_xor_program_learns_through_web_pipeline(self):
+        source = (PROGRAMS_DIR / "t04_rede_neural_xor.mp").read_text(
+            encoding="utf-8"
+        )
+        response = self.client.post(
+            "/api/executar", json={"code": source, "inputs": []}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertTrue(result["success"], result.get("stderr"))
+        predictions = [
+            float(value)
+            for value in re.findall(
+                r"Predicted Output:\s*([0-9.]+)", result["stdout"]
+            )
+        ]
+        self.assertEqual(len(predictions), 4)
+        self.assertLess(predictions[0], 0.1)
+        self.assertGreater(predictions[1], 0.9)
+        self.assertGreater(predictions[2], 0.9)
+        self.assertLess(predictions[3], 0.1)
+
+    def test_calculadora_compiles_through_web_but_channel_execution_needs_peer(self):
+        source = (PROGRAMS_DIR / "t01_calculadora.mp").read_text(encoding="utf-8")
+        response = self.client.post(
+            "/api/compilar", json={"code": source}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()
+        self.assertTrue(result["success"], result.get("diagnosticos"))
+        self.assertIn("MiniParChannel", result["cpp"])
 
     @patch("interfaces.web.api._run_limited")
     @patch("interfaces.web.api.subprocess.run")

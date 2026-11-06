@@ -30,7 +30,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let execution = null;
     let currentPhase = "code";
     let markers = [];
+    let columnMarkers = [];
     let runInProgress = false;
+    let editorOriginBinding = null;
+    let resultOriginBinding = null;
 
     const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
     const json = value => `<pre class="json-output">${escape(JSON.stringify(value, null, 2))}</pre>`;
@@ -49,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
         navItems.forEach(item => item.classList.toggle("active", item.dataset.page === pageName));
         const pageLabels = { dashboard: "Painel", pipeline: "Pipeline MiniPar", ide: "Editor MiniPar", results: "Resultados", "result-detail": "Resultado selecionado", configuration: "Configurações" };
         document.getElementById("topbar-page").textContent = pageLabels[pageName] || "MiniPar";
-        document.getElementById("compile-button").hidden = pageName === "result-detail";
+        document.getElementById("compile-button").hidden = pageName !== "ide";
         if (pageName === "ide") setTimeout(() => editor.refresh(), 30);
         window.location.hash = pageName;
         if (pageName === "results") renderHistory();
@@ -59,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.body.classList.toggle("light-theme", light);
         const toggle = document.getElementById("theme-toggle");
         if (toggle) {
-            toggle.textContent = light ? "☾ Escuro" : "☼ Claro";
+            toggle.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#icon-${light ? "moon" : "sun"}"></use></svg><span class="button-label">${light ? "Escuro" : "Claro"}</span>`;
             toggle.setAttribute("aria-label", light ? "Mudar para modo escuro" : "Mudar para modo claro");
         }
     }
@@ -99,7 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!detail || !item) return;
         const errorLines = new Set((item.diagnosticos || []).map(diagnostic => Number(diagnostic.line || 1)));
         const sourceLines = String(item.source || "(código não armazenado)").split("\n").map((line, index) => `<div class="readonly-code-line ${errorLines.has(index + 1) ? "readonly-error-line" : ""}"><span>${index + 1}</span><code>${escape(line) || " "}</code></div>`).join("");
-        detail.innerHTML = `<div class="ide-grid result-ide-grid"><article class="editor-panel card readonly-editor-panel"><div class="panel-title"><span><span class="panel-mark">◇</span> Código-fonte</span><small>MINIPAR · SOMENTE LEITURA</small></div><div class="detail-file-label">${escape(item.file)}</div><div class="readonly-code result-source-code" aria-label="Código-fonte somente leitura">${sourceLines}</div><div class="input-area readonly-input"><label>ENTRADAS DO PROGRAMA <span>stdin · preservadas da execução</span></label><pre class="program-input">${escape(item.inputs || "(sem entrada)")}</pre></div></article><article class="phase-panel card result-phase-panel"><div class="panel-title"><span><span class="panel-mark">▣</span> <b id="result-phase-title">Execução</b></span><small>RESULTADO PRESERVADO</small></div><nav class="phase-nav result-phase-nav" aria-label="Fases do resultado">${phaseOrder.map((phase, index) => `<button type="button" class="step ${phase === "execution" ? "active" : ""}" data-result-phase="${phase}"><span>${String(index + 1).padStart(2, "0")}</span><b>${phaseNames[phase]}</b></button>`).join("")}</nav><div id="result-phase-content" class="phase-content" role="region" aria-live="polite"></div></article></div>`;
+        detail.innerHTML = `<div class="ide-grid result-ide-grid"><article class="editor-panel card readonly-editor-panel"><div class="panel-title"><span><span class="panel-mark"><svg class="icon" aria-hidden="true"><use href="#icon-code"></use></svg></span> Código-fonte</span><small>MINIPAR · SOMENTE LEITURA</small></div><div class="detail-file-label">${escape(item.file)}</div><div class="readonly-code result-source-code" aria-label="Código-fonte somente leitura">${sourceLines}</div><div class="input-area readonly-input"><label>ENTRADAS DO PROGRAMA <span>stdin · preservadas da execução</span></label><pre class="program-input">${escape(item.inputs || "(sem entrada)")}</pre></div></article><article class="phase-panel card result-phase-panel"><div class="panel-title"><span><span class="panel-mark"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg></span> <b id="result-phase-title">Execução</b></span><small>RESULTADO PRESERVADO</small></div><nav class="phase-nav result-phase-nav" aria-label="Fases do resultado">${phaseOrder.map((phase, index) => `<button type="button" class="step ${phase === "execution" ? "active" : ""}" data-result-phase="${phase}"><span>${String(index + 1).padStart(2, "0")}</span><b>${phaseNames[phase]}</b></button>`).join("")}</nav><div id="result-phase-content" class="phase-content" role="region" aria-live="polite"></div></article></div>`;
         const resultPhaseContent = document.getElementById("result-phase-content");
         const resultPhaseTitle = document.getElementById("result-phase-title");
         const compileResult = item.compileResult || {};
@@ -108,7 +111,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.querySelectorAll("[data-result-phase]").forEach(step => step.classList.toggle("active", step.dataset.resultPhase === phase));
             if (!resultPhaseContent) return;
             if (phase === "code") resultPhaseContent.innerHTML = diagnosticsOutput(item.diagnosticos || []) || `<div class="phase-placeholder"><strong>Código-fonte preservado</strong><p>Este programa não pode ser editado nesta tela.</p></div>`;
-            else if (phase === "tokens") resultPhaseContent.innerHTML = compileResult.tokens ? `<div class="phase-explainer">${explain.tokens}</div><table class="data-table"><thead><tr><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead><tbody>${compileResult.tokens.map(token => `<tr><td>${escape(token.type)}</td><td><code>${escape(token.lexeme)}</code></td><td>${token.line}</td><td>${token.column}</td></tr>`).join("")}</tbody></table>` : `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
+            else if (phase === "tokens") resultPhaseContent.innerHTML = compileResult.tokens ? `<div class="phase-explainer">${explain.tokens}</div><div class="table-scroll"><table class="data-table"><thead><tr><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead><tbody>${compileResult.tokens.map(token => `<tr><td>${escape(token.type)}</td><td><code>${escape(token.lexeme)}</code></td><td>${token.line}</td><td>${token.column}</td></tr>`).join("")}</tbody></table></div>` : `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
             else if (phase === "ast") resultPhaseContent.innerHTML = compileResult.ast ? `<div class="phase-explainer">${explain.ast}</div>${json(compileResult.ast)}` : `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
             else if (phase === "symbols") resultPhaseContent.innerHTML = compileResult.tabela_simbolos ? `<div class="phase-explainer">${explain.symbols}</div>${json(compileResult.tabela_simbolos)}` : `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
             else if (phase === "tac") {
@@ -131,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             ]);
                             if (!current.success || !compared.success) throw new Error("Falha ao gerar TAC");
                             comparison.innerHTML = `<div class="comparison">${mappedCode(`TAC atual (${currentLevel})`, current.tac_optimized, current.optimized_tac_origin, "tac")}${mappedCode(`TAC comparado (${compareLevel})`, compared.tac_optimized, compared.optimized_tac_origin, "tac")}</div>`;
-                            bindOriginHighlights();
+                            bindOriginHighlights({ scope: resultPhaseContent, source: { type: "readonly", code: item.source, root: detail.querySelector(".result-source-code") } });
                         } catch (error) {
                             comparison.innerHTML = `<p class="hint error">Não foi possível gerar a comparação.</p>`;
                         } finally {
@@ -142,7 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             else if (phase === "cpp") resultPhaseContent.innerHTML = compileResult.cpp ? `<div class="phase-explainer">${explain.cpp}</div>${mappedCode("Código C++ gerado", compileResult.cpp, compileResult.cpp_origin, "cpp")}` : `<div class="phase-placeholder"><strong>Nenhum C++ foi gerado</strong></div>`;
             else resultPhaseContent.innerHTML = `<div class="phase-explainer">${explain.execution}</div><div class="execution"><p class="hint">Tempo: ${item.time.toFixed(3)} s · código de saída: ${item.execution.exit_code ?? "—"}</p><div class="execution-grid"><div class="execution-box"><h3>STDOUT</h3><pre>${escape(item.execution.stdout || "(sem saída)")}</pre></div><div class="execution-box"><h3>STDERR</h3><pre>${escape(item.execution.stderr || "(sem erros)")}</pre></div></div></div>`;
-            bindOriginHighlights();
+            bindOriginHighlights({ scope: resultPhaseContent, source: { type: "readonly", code: item.source, root: detail.querySelector(".result-source-code") } });
         };
         document.querySelectorAll("[data-result-phase]").forEach(step => step.addEventListener("click", () => renderResultPhase(step.dataset.resultPhase)));
         renderResultPhase("execution");
@@ -151,10 +154,24 @@ document.addEventListener("DOMContentLoaded", () => {
     function markDiagnostics(items) {
         markers.forEach(marker => editor.removeLineClass(marker, "background", "cm-error-line"));
         markers = [];
+        columnMarkers.forEach(marker => marker.clear());
+        columnMarkers = [];
         if (diagnostics) diagnostics.innerHTML = "";
         items.forEach(item => {
             const line = Math.max(0, Number(item.line || 1) - 1);
+            const column = Math.max(0, Number(item.column || 1) - 1);
+            const length = Math.max(1, Number(item.length || 1));
+            const lineText = editor.getLine(line) || "";
             markers.push(editor.addLineClass(line, "background", "cm-error-line"));
+            if (lineText.length) {
+                const start = Math.min(column, lineText.length - 1);
+                const end = Math.min(lineText.length, start + length);
+                columnMarkers.push(editor.markText(
+                    { line, ch: start },
+                    { line, ch: end },
+                    { className: "cm-error-token", title: item.message || item.header || "" },
+                ));
+            }
             const button = document.createElement("button");
             button.className = "diagnostic";
             button.textContent = `${item.header || item.message} (linha ${line + 1}, coluna ${item.column || 1})`;
@@ -178,28 +195,171 @@ document.addEventListener("DOMContentLoaded", () => {
         return `<section class="mapped-code" data-mapped-code="${language}"><h3>${title}</h3><div class="mapped-code-lines">${lines.map((line, index) => {
             const generatedLine = index + 1;
             const sourceLine = sourceByLine.get(generatedLine);
-            const origin = sourceLine ? ` data-source-line="${sourceLine}" title="Origem: linha ${sourceLine} do MiniPar"` : "";
+            const origin = sourceLine
+                ? ` data-source-line="${sourceLine}" data-generated-line="${generatedLine}" tabindex="0" role="button" aria-label="Linha ${generatedLine}, origem na linha ${sourceLine} do MiniPar"`
+                : "";
             return `<div class="mapped-code-line"${origin}><span class="mapped-line-number">${generatedLine}</span><code>${escape(line) || " "}</code></div>`;
         }).join("")}</div></section>`;
     }
-    function bindOriginHighlights() {
-        const sourceLines = document.querySelectorAll(".mapped-code-line[data-source-line]");
+    function createOriginSource(source) {
+        if (source?.type === "readonly") {
+            const root = source.root;
+            const lines = String(source.code || "").split("\n");
+            return {
+                highlight(line) {
+                    const target = root?.querySelectorAll(".readonly-code-line")[line - 1];
+                    if (target) target.classList.add("origin-highlight");
+                },
+                clear() {
+                    root?.querySelectorAll(".readonly-code-line.origin-highlight").forEach(item => item.classList.remove("origin-highlight"));
+                },
+                text(line) {
+                    return lines[line - 1] || "";
+                },
+            };
+        }
+        return {
+            highlight(line) {
+                editor.addLineClass(line - 1, "background", "cm-origin-line");
+            },
+            clear() {
+                for (let index = 0; index < editor.lineCount(); index++) {
+                    editor.removeLineClass(index, "background", "cm-origin-line");
+                }
+            },
+            text(line) {
+                return editor.getLine(line - 1) || "";
+            },
+        };
+    }
+    function bindOriginHighlights(options = {}) {
+        const scope = options.scope || document;
+        const originSource = createOriginSource(options.source);
+        originSource.clear();
+        const sourceLines = scope.querySelectorAll(".mapped-code-line[data-source-line]");
+        document.querySelectorAll(".tac-origin-popover").forEach(popover => popover.remove());
+        const originPopover = scope.querySelector(".mapped-code")
+            ? Object.assign(document.createElement("div"), {
+                className: "tac-origin-popover",
+                role: "status",
+                hidden: true,
+            })
+            : null;
+        if (originPopover) document.body.appendChild(originPopover);
+        let activeSourceLine = null;
+        let popoverSourceLine = null;
+        const clear = () => {
+            activeSourceLine = null;
+            popoverSourceLine = null;
+            scope.querySelectorAll(".mapped-code-line.origin-highlight").forEach(item => item.classList.remove("origin-highlight"));
+            if (originPopover) originPopover.hidden = true;
+            originSource.clear();
+        };
+        const highlight = (line, event) => {
+            const sourceLine = Number(line.dataset.sourceLine);
+            if (sourceLine !== activeSourceLine) {
+                activeSourceLine = sourceLine;
+                scope.querySelectorAll(".mapped-code-line.origin-highlight").forEach(item => item.classList.remove("origin-highlight"));
+                scope.querySelectorAll(`.mapped-code-line[data-source-line="${sourceLine}"]`).forEach(item => item.classList.add("origin-highlight"));
+                originSource.clear();
+                originSource.highlight(sourceLine);
+            }
+            if (originPopover && line.closest(".mapped-code")) {
+                if (popoverSourceLine !== sourceLine) {
+                    originPopover.innerHTML = `<strong>Origem: linha ${sourceLine} do MiniPar</strong><code>${escape(originSource.text(sourceLine)) || " "}</code>`;
+                    popoverSourceLine = sourceLine;
+                }
+                originPopover.hidden = false;
+                if (event) {
+                    moveTacPopover(event, originPopover);
+                } else {
+                    const rect = line.getBoundingClientRect();
+                    moveTacPopover({ clientX: rect.right, clientY: rect.bottom }, originPopover);
+                }
+            } else if (originPopover) {
+                originPopover.hidden = true;
+                popoverSourceLine = null;
+            }
+        };
+        const highlightSource = sourceLine => {
+            if (sourceLine === activeSourceLine) return;
+            if (!scope.querySelector(".mapped-code-line[data-source-line]")) return;
+            activeSourceLine = sourceLine;
+            popoverSourceLine = null;
+            scope.querySelectorAll(".mapped-code-line.origin-highlight").forEach(item => item.classList.remove("origin-highlight"));
+            scope.querySelectorAll(`.mapped-code-line[data-source-line="${sourceLine}"]`).forEach(item => item.classList.add("origin-highlight"));
+            originSource.clear();
+            originSource.highlight(sourceLine);
+            if (originPopover) originPopover.hidden = true;
+        };
+        const binding = { highlightSource, clear };
+        if (options.source?.type === "readonly") resultOriginBinding = binding;
+        else editorOriginBinding = binding;
         sourceLines.forEach(line => {
-            const sourceLine = line.dataset.sourceLine;
-            const toggle = () => {
-                document.querySelectorAll(`.mapped-code-line[data-source-line="${sourceLine}"]`).forEach(item => item.classList.add("origin-highlight"));
-                editor.addLineClass(Number(sourceLine) - 1, "background", "cm-origin-line");
-            };
-            const clear = () => {
-                document.querySelectorAll(".mapped-code-line.origin-highlight").forEach(item => item.classList.remove("origin-highlight"));
-                editor.eachLine(handle => editor.removeLineClass(handle, "background", "cm-origin-line"));
-            };
-            line.addEventListener("mouseenter", toggle);
-            line.addEventListener("mouseleave", clear);
-            line.addEventListener("focusin", toggle);
-            line.addEventListener("focusout", clear);
-            line.tabIndex = 0;
+            line.addEventListener("focusin", () => highlight(line, null));
+            line.addEventListener("focusout", event => {
+                if (!line.contains(event.relatedTarget)) clear();
+            });
         });
+        scope.querySelectorAll(".mapped-code").forEach(panel => {
+            panel.addEventListener("pointermove", event => {
+                const hoveredLine = event.target.closest?.(".mapped-code-line[data-source-line]");
+                if (!hoveredLine || !panel.contains(hoveredLine)) {
+                    clear();
+                    return;
+                }
+                highlight(hoveredLine, event);
+            });
+            panel.addEventListener("pointerleave", clear);
+        });
+    }
+    function bindSourceOriginHighlights() {
+        const editorWrapper = editor.getWrapperElement();
+        editorWrapper.addEventListener("mousemove", event => {
+            if (!editorOriginBinding) return;
+            if (!event.target.closest?.(".CodeMirror-line, .CodeMirror-gutters")) {
+                editorOriginBinding.clear();
+                return;
+            }
+            const position = editor.coordsChar({ left: event.clientX, top: event.clientY }, "window");
+            if (position.line < 0 || position.line >= editor.lineCount()) {
+                editorOriginBinding.clear();
+                return;
+            }
+            editorOriginBinding.highlightSource(position.line + 1);
+        });
+        editorWrapper.addEventListener("mouseleave", () => {
+            if (editorOriginBinding) editorOriginBinding.clear();
+        });
+        const resultDetailElement = document.getElementById("result-detail");
+        if (!resultDetailElement) return;
+        resultDetailElement.addEventListener("pointermove", event => {
+            if (!resultOriginBinding) return;
+            const sourceRoot = event.target.closest?.(".result-source-code");
+            if (!sourceRoot) return;
+            const hoveredLine = event.target.closest?.(".readonly-code-line");
+            if (!hoveredLine) {
+                resultOriginBinding.clear();
+                return;
+            }
+            const lines = sourceRoot.querySelectorAll(".readonly-code-line");
+            const index = Array.prototype.indexOf.call(lines, hoveredLine);
+            if (index >= 0) resultOriginBinding.highlightSource(index + 1);
+        });
+        resultDetailElement.addEventListener("pointerout", event => {
+            if (!resultOriginBinding) return;
+            const sourceRoot = event.target.closest?.(".result-source-code");
+            if (sourceRoot && !sourceRoot.contains(event.relatedTarget)) resultOriginBinding.clear();
+        });
+    }
+    bindSourceOriginHighlights();
+    function moveTacPopover(event, popover) {
+        const gap = 14;
+        const width = popover.offsetWidth || 260;
+        const left = Math.min(event.clientX + gap, window.innerWidth - width - gap);
+        const top = Math.min(event.clientY + gap, window.innerHeight - popover.offsetHeight - gap);
+        popover.style.left = `${Math.max(gap, left)}px`;
+        popover.style.top = `${Math.max(gap, top)}px`;
     }
     function renderPhase() {
         const index = phaseOrder.indexOf(currentPhase);
@@ -212,7 +372,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (currentPhase === "code") content.innerHTML = `${result ? diagnosticsOutput(result.diagnosticos || []) : ""}<div class="phase-placeholder"><strong>Seu ponto de partida</strong><p>Edite o programa à esquerda e compile para liberar as próximas fases.</p></div>`;
         else if (!result) content.innerHTML = `<div class="phase-placeholder"><strong>Compile primeiro</strong><p>Os dados desta fase aparecerão aqui.</p></div>`;
-        else if (currentPhase === "tokens") content.innerHTML = `<div class="phase-explainer">${explain.tokens}</div><table class="data-table"><thead><tr><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead><tbody>${result.tokens.map(token => `<tr><td>${escape(token.type)}</td><td><code>${escape(token.lexeme)}</code></td><td>${token.line}</td><td>${token.column}</td></tr>`).join("")}</tbody></table>`;
+        else if (currentPhase === "tokens") content.innerHTML = `<div class="phase-explainer">${explain.tokens}</div><div class="table-scroll"><table class="data-table"><thead><tr><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead><tbody>${result.tokens.map(token => `<tr><td>${escape(token.type)}</td><td><code>${escape(token.lexeme)}</code></td><td>${token.line}</td><td>${token.column}</td></tr>`).join("")}</tbody></table></div>`;
         else if (currentPhase === "ast") content.innerHTML = `<div class="phase-explainer">${explain.ast}</div>${json(result.ast)}`;
         else if (currentPhase === "symbols") content.innerHTML = `<div class="phase-explainer">${explain.symbols}</div>${json(result.tabela_simbolos)}`;
         else if (currentPhase === "tac") content.innerHTML = `<div class="phase-explainer">${explain.tac}</div><div class="tac-toolbar"><span>Nível selecionado: <b>${optimizationLevel}</b></span><button class="btn secondary" id="compare-tac">Comparar antes/depois</button></div>${result.tac ? mappedCode("Código intermediário", result.tac, result.tac_origin, "tac") : `<p class="hint">Nenhum TAC foi gerado porque há erros no programa.</p>`}`;
@@ -220,7 +380,7 @@ document.addEventListener("DOMContentLoaded", () => {
         else content.innerHTML = execution ? `<div class="phase-explainer">${explain.execution}</div><div class="execution"><p class="hint">Tempo: ${Number(execution.tempo || 0).toFixed(3)} s · código de saída: ${execution.exit_code ?? "—"}</p><div class="execution-grid"><div class="execution-box"><h3>STDOUT</h3><pre>${escape(execution.stdout)}</pre></div><div class="execution-box"><h3>STDERR</h3><pre>${escape(execution.stderr)}</pre></div></div></div>` : `<div class="phase-placeholder"><strong>Ainda não executado</strong><p>Clique em Executar para ver stdout, stderr e tempo.</p></div>`;
         const compareButton = document.getElementById("compare-tac");
         if (compareButton) compareButton.addEventListener("click", compareTac);
-        bindOriginHighlights();
+        bindOriginHighlights({ scope: content, source: { type: "editor" } });
         bindPhaseDiagnostics();
     }
     async function compareTac() {
@@ -232,7 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const optimized = await response.json();
             if (!optimized.success) { setStatus("Não foi possível otimizar o TAC", true); return; }
             content.innerHTML = `<div class="phase-explainer">${explain.tac}</div><div class="comparison">${mappedCode("TAC antes", optimized.tac, optimized.tac_origin, "tac")}${mappedCode(`TAC depois (${optimizationLevel})`, optimized.tac_optimized, optimized.optimized_tac_origin, "tac")}</div>`;
-            bindOriginHighlights();
+            bindOriginHighlights({ scope: content, source: { type: "editor" } });
         } catch (error) { setStatus("Falha ao comparar TAC", true); }
         finally { if (compareButton) compareButton.disabled = false; }
     }

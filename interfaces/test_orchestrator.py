@@ -10,6 +10,7 @@ import socket
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from .program_analyzer import get_program_spec
@@ -31,6 +32,24 @@ _PHASE_ACTIVITY = {
 }
 
 
+def resolve_test_file(filename: object) -> Path:
+    """Resolve a test filename without allowing access outside TESTS_DIR."""
+    if not isinstance(filename, str) or not filename:
+        raise ValueError("Nome de arquivo inválido.")
+
+    tests_dir = Path(TESTS_DIR).resolve()
+    candidate = Path(filename)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError("Nome de arquivo inválido.")
+
+    resolved = (tests_dir / candidate).resolve()
+    try:
+        resolved.relative_to(tests_dir)
+    except ValueError as error:
+        raise ValueError("Nome de arquivo inválido.") from error
+    return resolved
+
+
 def get_terminal_id() -> str:
     # hostname + PID identifica cada terminal de forma única na sessão
     hostname = socket.gethostname()
@@ -38,7 +57,10 @@ def get_terminal_id() -> str:
 
 
 def get_test_spec(filename: str) -> dict[str, Any] | None:
-    path = os.path.join(TESTS_DIR, os.path.basename(filename))
+    try:
+        path = resolve_test_file(filename)
+    except ValueError:
+        return None
     if not os.path.isfile(path):
         return None
     return get_program_spec(path)
@@ -492,7 +514,10 @@ def finalize_test_execution(test_path: str, output: str = "") -> None:
 
 
 def get_spec_summary(filename: str) -> dict[str, Any] | None:
-    path = os.path.join(TESTS_DIR, os.path.basename(filename))
+    try:
+        path = resolve_test_file(filename)
+    except ValueError:
+        return None
     if not os.path.isfile(path):
         return None
     spec = get_program_spec(path)
