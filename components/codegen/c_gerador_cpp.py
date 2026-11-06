@@ -15,6 +15,30 @@ _FUNCTION = re.compile(
 _ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(?::([\w<>*]+))?\s*=\s*(.+)")
 _ARRAY_ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)\[(.+)\]\s*=\s*(.+)")
 
+# Builtins do MiniPar que precisam de um nome diferente no runtime C++.
+# Sem este mapa, o TAC "call len, 1" viraria "len(...)" e nao compilaria.
+_BUILTIN_CALLS: dict[str, str] = {
+    "len": "__minipar_len",
+    "format_float": "__minipar_format_float",
+    "parse_ints": "__parse_ints",
+    "range": "__minipar_range",
+    "sum": "__minipar_sum",
+    "max": "__minipar_max",
+    "str": "__to_string",
+    "is_number": "__minipar_is_number",
+    "char_at": "__minipar_char_at",
+    "substring": "__minipar_substring",
+    "is_digit": "__minipar_is_digit",
+    "is_alpha": "__minipar_is_alpha",
+    "is_space": "__minipar_is_space",
+    "write_file": "__minipar_write_file",
+    "matrix": "__make_matrix",
+    "random": "random_val",
+    "clock": "agora",
+    "inf": "__minipar_inf",
+    "exp": "std::exp",
+}
+
 
 @dataclass
 class _Function:
@@ -70,6 +94,7 @@ class CppCodeGenerator:
             "double": "double",
             "bool": "bool",
             "string": "std::string",
+            "char": "std::string",
             "void": "void",
             "c_channel": "std::shared_ptr<MiniParChannel>",
             "channel": "std::shared_ptr<MiniParChannel>",
@@ -82,6 +107,10 @@ class CppCodeGenerator:
             element = CppCodeGenerator._cpp_type(type_name[5:-1])
             return f"std::vector<{element}>"
         return aliases.get(type_name, f"std::shared_ptr<{type_name}>")
+
+    @staticmethod
+    def _call_name(name: str) -> str:
+        return _BUILTIN_CALLS.get(name, name)
 
     @staticmethod
     def _literal_type(expression: str) -> str | None:
@@ -99,7 +128,9 @@ class CppCodeGenerator:
     @staticmethod
     def _expression(expression: str, result_type: str | None = None) -> str:
         text = expression.strip()
-        if text.startswith("'") or text.startswith('"'):
+        if re.fullmatch(r"'(?:\\.|[^'\\])*'", text) or re.fullmatch(
+            r'"(?:\\.|[^"\\])*"', text
+        ):
             try:
                 value = ast.literal_eval(text)
             except (SyntaxError, ValueError):
@@ -113,7 +144,9 @@ class CppCodeGenerator:
             return f"std::vector<{element_type}>{{{values}}}"
         text = re.sub(
             r"'(?:\\.|[^'\\])*'",
-            lambda match: json.dumps(ast.literal_eval(match.group(0))),
+            lambda match: json.dumps(
+                ast.literal_eval(match.group(0)), ensure_ascii=False
+            ),
             text,
         )
         binary = re.fullmatch(r"(.+?)\s+([+\-*/%])\s+(.+)", text)
@@ -390,6 +423,7 @@ class CppCodeGenerator:
     ) -> tuple[list[str], str]:
         types, _, _ = cls._infer_types(lines, parameters, functions, classes)
         variables: set[str] = set()
+        array_refs: dict[str, str] = {}
         for line, _ in lines:
             assignment = _ASSIGNMENT.fullmatch(line)
             if assignment:
@@ -699,6 +733,7 @@ class CppCodeGenerator:
             array_assignment = _ARRAY_ASSIGNMENT.fullmatch(line)
             if assignment:
                 destination, _, expression = assignment.groups()
+                array_refs.pop(destination, None)
                 call = re.fullmatch(r"call\s+([\w.]+)\s*,\s*(\d+)", expression)
                 allocation = re.fullmatch(r"alloc\s+(.+)", expression)
                 getfield = re.fullmatch(r"getfield\s+(.+)", expression)
@@ -707,7 +742,7 @@ class CppCodeGenerator:
                     args = pending_parameters[-count:] if count else []
                     if count:
                         del pending_parameters[-count:]
-                    output.append(f"    {destination} = {call.group(1)}({', '.join(cls._expression(item) for item in args)});")
+                    output.append(f"    {destination} = {cls._call_name(call.group(1))}({', '.join(cls._expression(item) for item in args)});")
                 elif allocation:
                     allocation_type = types.get(destination, "")
                     if allocation_type.startswith("shared_ptr<"):
@@ -715,7 +750,9 @@ class CppCodeGenerator:
                     output.append(f"    {destination} = std::make_shared<{allocation_type}>();")
                 elif getfield:
                     base, offset = cls._split(getfield.group(1))
-                    output.append(f"    {destination} = {cls._expression(base)}->field_{offset};")
+                    rendered_base = cls._expression(base)
+                    output.append(f"    {destination} = {rendered_base}->field_{offset};")
+                    array_refs[destination] = f"{rendered_base}->field_{offset}"
                 elif expression.startswith("recv "):
                     channel = cls._split(expression[5:])[0]
                     receive_type = cls._cpp_type(types.get(destination, "string"))
@@ -730,7 +767,8 @@ class CppCodeGenerator:
                     )
             elif array_assignment:
                 array_name, array_index, value = array_assignment.groups()
-                output.append(f"    __minipar_array_set({array_name}, {cls._expression(array_index)}, {cls._expression(value)});")
+                target = array_refs.get(array_name, array_name)
+                output.append(f"    __minipar_array_set({target}, {cls._expression(array_index)}, {cls._expression(value)});")
             elif line.startswith("setfield "):
                 base, offset, value = cls._split(line[len("setfield "):])
                 output.append(f"    {cls._expression(base)}->field_{offset} = {cls._expression(value)};")
@@ -808,7 +846,7 @@ class CppCodeGenerator:
                 if count:
                     del pending_parameters[-count:]
                 output.append(
-                    f"    {function_name}({', '.join(cls._expression(item) for item in args)});"
+                    f"    {cls._call_name(function_name)}({', '.join(cls._expression(item) for item in args)});"
                 )
             elif line.startswith("fork "):
                 raise ValueError(f"Instrucao fork TAC nao associada a bloco: {line}")

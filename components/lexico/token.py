@@ -17,6 +17,7 @@ class TokenType(Enum):
     INT_LITERAL = auto()
     FLOAT_LITERAL = auto()
     STRING_LITERAL = auto()
+    CHAR_LITERAL = auto()
     BOOL_LITERAL = auto()
 
     # Palavras reservadas
@@ -121,6 +122,7 @@ KEYWORDS: dict[str, TokenType] = {
     "int": TokenType.TYPE,
     "float": TokenType.TYPE,
     "string": TokenType.TYPE,
+    "char": TokenType.TYPE,
     "list": TokenType.TYPE,
     "void": TokenType.TYPE,
 }

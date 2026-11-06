@@ -35,7 +35,7 @@ Cada decisão foi tomada uma vez, por escrito, porque léxico, parser, semântic
 | 16 | Comparação **não** encadeia: `expr_comp = expr_arit [ op_rel expr_arit ]` | Em Python `a < b < c` significa `a < b and b < c`; se o parser aceitasse e montasse `(a < b) < c`, o programa mudaria de significado em silêncio. Como os testes vêm de Python, é melhor dar erro sintático. |
 | 17 | `void` só aparece em retorno (`tipo_retorno`), nunca em parâmetro ou variável | Custa uma produção a mais e elimina uma checagem semântica. |
 | 18 | Blocos e classes não podem ser vazios; não existe `pass` | `suite` e `decl_classe` exigem ao menos um membro/comando. Nenhum teste precisa de bloco vazio, e evita criar uma palavra reservada só para isso. |
-| 19 | Construções do 2026.1 removidas: `do-while`, `for` estilo C, `var`, `dict`, `number`, `matrix`, `c_channel(ip, porta)` | `do-while` e `for` C são cobertos por `while` + `break` e `for … in range(...)`. `var` some porque a declaração é a primeira atribuição. `number` vira `int`/`float`. `matrix` vira lista de listas. `dict` não é usado por nenhum teste. Registrado para quem comparar com o BNF antigo. |
+| 19 | Construções do 2026.1 removidas: `do-while`, `for` estilo C, `dict`, `number`, `c_channel(ip, porta)` | `do-while` e `for` C são cobertos por `while` + `break` e `for … in range(...)`. `var` continua aceito como açúcar para declaração explícita; `number` vira `int`/`float`; `matrix` volta como builtin em 2026.2 (ver §5.2); `dict` não é usado por nenhum teste. Registrado para quem comparar com o BNF antigo. |
 
 ---
 
@@ -52,7 +52,7 @@ class  extends  new  self  def  return
 print  input
 if  elif  else  while  for  in  break  continue
 and  or  not  true  false
-bool  int  float  string  list  void
+bool  int  float  string  char  list  void
 ```
 
 **Literais e identificadores**
@@ -61,6 +61,7 @@ bool  int  float  string  list  void
 INT     = digito { digito } ;
 FLOAT   = digito { digito } "." digito { digito } ;
 STRING  = '"' { caractere | "\n" | "\t" | '\"' | "\\" } '"' ;
+CHAR    = "'" ( caractere | "\n" | "\t" | "\'" | "\\" ) "'" ;
 IDENT   = ( letra | "_" ) { letra | digito | "_" } ;
 ```
 
@@ -88,7 +89,7 @@ decl_funcao    = ("def" | "func") IDENT "(" [ params ] ")"
                  [ "->" tipo_retorno ] suite ;
 params         = param { "," param } ;
 param          = IDENT [ ":" tipo ] [ "=" literal ] ;
-tipo           = "bool" | "int" | "float" | "string" | "list" | IDENT ;
+tipo           = "bool" | "int" | "float" | "string" | "char" | "list" | IDENT ;
 tipo_retorno   = tipo | "void" ;
 
 (* ── Classes ── *)
@@ -144,14 +145,14 @@ expr_termo     = expr_unario { ( "*" | "/" | "%" ) expr_unario } ;
 expr_unario    = "-" expr_unario | expr_posfixo ;
 expr_posfixo   = primario { "." IDENT [ "(" [ args ] ")" ] | "[" expr "]" } ;
 
-primario       = INT | FLOAT | STRING | "true" | "false" | ("self" | "this")
+primario       = INT | FLOAT | STRING | CHAR | "true" | "false" | ("self" | "this")
                | IDENT [ "(" [ args ] ")" ]
                | "new" IDENT "(" [ args ] ")"
                | lista
                | "(" expr ")" ;
 lista          = "[" [ args ] "]" ;
 args           = expr { "," expr } ;
-literal        = [ "-" ] ( INT | FLOAT ) | STRING | "true" | "false" ;
+literal        = [ "-" ] ( INT | FLOAT ) | STRING | CHAR | "true" | "false" ;
 ```
 
 **Chamada de método, envio e recebimento** são todos `expr_posfixo` seguido de `NEWLINE`:
@@ -231,13 +232,28 @@ Escolhi isso em vez de duas produções por não precisar de lookahead ilimitado
 
 ### 5.2 Builtins (não são sintaxe, são nomes pré-definidos no semântico)
 
-`print`, `input`, `len`, `range`, `str`, `int`, `float`, `exp`, `random`, `inf`, `clock`, `format_float(x, casas)`, `is_number(s)`.
+`print`, `input`, `len`, `range`, `str`, `int`, `float`, `exp`, `random`, `random_uniforme(min, max)`, `inf`, `clock`, `agora`, `format_float(x, casas)`, `is_number(s)`, `max`, `sum`, `parse_ints(s)`, `matrix(linhas, colunas, valor)`.
+
+**Builtins de string e arquivo (MiniPar 2026.2):**
+
+| Builtin | Assinatura | Retorno |
+|---|---|---|
+| `char_at(texto, i)` | `string, int` | `char` (1 caractere) |
+| `substring(texto, inicio, fim)` | `string, int, int` | `string` (fim exclusivo) |
+| `is_digit(c)` | `string`/`char` | `bool` |
+| `is_alpha(c)` | `string`/`char` | `bool` |
+| `is_space(c)` | `string`/`char` | `bool` |
+| `write_file(caminho, conteudo)` | `string, string` | `int` (0 = sucesso) |
+
 Métodos: lista → `append`, `pop`; string → `split`, `strip`; `c_channel` → `send`, `receive`.
+
+> **Limitação atual do backend:** `list.append`, `string.split` e `string.strip` são reconhecidos pelo semântico, mas ainda não são baixados para TAC/C++ pelo gerador. Programas novos (incluindo o Teste 11) evitam listas e usam apenas `string`, `int`, `float`, `bool` e `char`. `matrix(...)` é aceito pelo semântico e mapeado para `__make_matrix` no C++, mas a inferência de tipos de listas aninhadas ainda é limitada; o Teste 10 usa a regra dos dígitos na base 3 para desenhar o tapete de Sierpinski sem matriz.
 
 ### 5.3 Regras semânticas de tipos
 
 - Funções e classes são coletadas antes da validação dos corpos, permitindo recursão e chamadas a funções declaradas posteriormente.
 - Literais inteiros e decimais inferem, respectivamente, `int` e `float`; operações numéricas promovem o resultado para `float` quando algum operando é `float` (e `/` sempre produz `float`).
+- Literais de caractere (`'a'`, `'\n'`, `'\''`) e a indexação de string (`texto[i]`) produzem o tipo `char`. `char` e `string` são compatíveis entre si: um `char` pode ser atribuído a `string`, concatenado e comparado, e o backend C++ representa ambos como `std::string`.
 - A conversão implícita `int` → `float` é permitida; `float` → `int` exige conversão explícita.
 - A primeira atribuição declara uma variável no escopo atual. Atribuições seguintes devem respeitar seu tipo.
 - Condições devem ser booleanas; operadores aritméticos, lógicos e comparações validam os tipos dos operandos.
@@ -292,8 +308,11 @@ Métodos: lista → `append`, `pop`; string → `split`, `strip`; `c_channel` �
 | | laços aninhados, `while zx*zx + zy*zy <= 4.0 and it < 100:` | `while_stmt`, `expr_and`, `FLOAT` |
 | | `linha = linha + caracteres[idx]` | `expr_arit`, índice em string |
 | **T10** + Sierpinski (6 núcleos) | 6º `fork … em core(6)` | `fork_stmt` |
-| | recursão `desenhar(x, y, lado, grau)` | `decl_funcao`, chamada recursiva |
-| | tapete em matriz ASCII (substitui `turtle`; ver §6) | `lista` aninhada, índice duplo `m[i][j] = "#"` |
+| | regra dos dígitos na base 3 (substitui `turtle`; ver §6) | `while_stmt`, `%`, `/`, `if` |
+| **T11** Minicompilador ARMv7 | classe `MiniCompiladorARM` com lexer, parser e gerador dentro do programa MiniPar | `decl_classe`, `decl_metodo`, `string`, `char`, `write_file` |
+| | `char_at`, `substring`, `is_digit`, `is_alpha`, `is_space` para tokenizar | builtins de string |
+| | AST serializada em string parentetizada | `string`, concatenação, recursão |
+| | `write_file(".../expr1.arm", asm)` | builtin de arquivo |
 | **Testes adicionais** (repo) | `fork t em host("computador_2"):` | `alocacao` (`host`) |
 | | `PAR` com `send`/`receive` em 3 canais | `bloco_par`, `decl_canal` ×3 |
 
