@@ -36,9 +36,10 @@ def start_interactive():
     print("=" * 45)
     print("\nComo você deseja rodar o sistema?\n")
     print("[1] - Modo Terminal (Menu Interativo)")
-    print("[2] - Modo Web Interface (IDE no Navegador)\n")
+    print("[2] - Modo Web Interface (IDE do desenvolvedor)")
+    print("[3] - Modo Web Didático (alunos iniciantes)\n")
 
-    escolha = input("Digite a sua escolha (1 ou 2): ").strip()
+    escolha = input("Digite a sua escolha (1, 2 ou 3): ").strip()
 
     if escolha == '1':
         print("\nIniciando modo Terminal...\n")
@@ -58,6 +59,23 @@ def start_interactive():
             print(f"[ERRO] Falha ao carregar a interface web: {e}")
         except Exception as e:  # noqa: BLE001
             print(f"[ERRO] Erro ao iniciar o servidor Flask: {e}")
+
+    elif escolha == '3':
+        port = int(os.environ.get("MINIPAR_WEB2_PORT", "5001"))
+        print("\nIniciando Web Interface Didática...")
+        print(f"Servidor inicializado! Acesse no navegador: http://127.0.0.1:{port}\n")
+        try:
+            from interfaces.web2.app import app
+            app.run(
+                host=os.environ.get("MINIPAR_WEB2_HOST", "127.0.0.1"),
+                port=port,
+                debug=False,
+            )
+        except ImportError as e:
+            print(f"[ERRO] Falha ao carregar a interface web didática: {e}")
+        except Exception as e:  # noqa: BLE001
+            print(f"[ERRO] Erro ao iniciar o servidor Flask: {e}")
+
     else:
         print("\n[ERRO] Escolha inválida. Finalizando o sistema.")
 

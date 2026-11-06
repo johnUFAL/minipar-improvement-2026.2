@@ -1,0 +1,84 @@
+@startuml web2_componentes
+title MiniPar 2026.2 - Segunda interface Web (didatica)
+
+skinparam componentStyle uml2
+skinparam shadowing false
+skinparam defaultFontName Monospaced
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #333333
+}
+skinparam package {
+  BackgroundColor #FAFAFA
+  BorderColor #555555
+}
+
+actor "Aluno iniciante" as Aluno
+
+package "Navegador" #E8F0FE {
+  component "index.html\nabas, editor, paineis" as HTML
+  component "app.js\ncontrole das abas e fetch" as AppJS
+  component "ast.js\nlayout SVG, zoom, pan,\ntooltips, exportacao" as ASTJS
+  component "style.css\ntema didatico" as CSS
+}
+
+package "Flask - interfaces/web2" #FFF8DC {
+  component "app.py\nrotas HTTP/JSON\nporta 5001" as FlaskApp
+  component "service.py\nanalisar / compilar /\nexecutar / gerar_arm" as Service
+  component "artefatos em memoria\nTTL de 1 hora" as Artifacts
+}
+
+package "Compilador MiniPar" #F4ECF7 {
+  component "Lexer" as Lexer
+  component "Parser + AST" as Parser
+  component "Semantico +\nTabela de Simbolos" as Semantic
+  component "Gerador TAC" as TAC
+  component "Gerador C++17" as Codegen
+  component "DriverGCC" as Driver
+}
+
+package "Runtime C++" #E8F5E9 {
+  component "minipar_rt.hpp\nbuiltins e helpers" as Runtime
+  component "threads, canais,\nfork/join" as Parallel
+}
+
+artifact "Executavel (.exe)" as Exe
+artifact "Arquivos .arm\nTeste 11" as ARM
+
+Aluno --> HTML
+HTML --> AppJS
+HTML --> ASTJS
+HTML --> CSS
+AppJS --> FlaskApp : fetch /api/*
+ASTJS --> AppJS : AST em JSON
+FlaskApp --> Service
+Service --> Lexer
+Service --> Parser
+Service --> Semantic
+Service --> TAC
+Service --> Codegen
+Service --> Driver
+Service --> Artifacts : executavel compilado
+Driver --> Runtime
+Driver --> Parallel
+Driver --> Exe
+Service --> ARM : gera via Teste 11
+AppJS --> Exe : download
+AppJS --> ARM : download
+
+note right of ASTJS
+  A AST chega como dicionario
+  (Program.para_dict) e e convertida
+  em arvore visual com nos coloridos,
+  recolhiveis e tooltips.
+end note
+
+legend bottom
+  Rotas principais:
+  POST /api/analisar  -> tokens, AST, simbolos, TAC, C++
+  POST /api/compilar  -> executavel + URL de download
+  POST /api/executar  -> stdout/stderr/codigo/tempo
+  POST /api/gerar_arm -> executa o Teste 11 e devolve os .arm
+  GET  /api/artefato/<token> e /api/arm/<nome>
+endlegend
+@enduml

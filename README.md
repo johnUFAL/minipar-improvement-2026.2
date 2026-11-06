@@ -31,13 +31,29 @@ components/
   codegen/         c_gerador_cpp.py, driver_gcc.py
   controle/        c_controle.py
 erros/             diagnosticos.py
-runtime/           minipar_rt.hpp, canal.cpp, paralelo.cpp
-interfaces/        cli.py, web/api.py, web/frontend/
-programas_teste/   programas MiniPar (.mp)
-benchmarks/        t08_..., t09_..., t10_...
+runtime/           minipar_rt.hpp, canal.cpp, paralelo.cpp, worker.cpp
+interfaces/        cli.py, web/api.py, web/frontend/, web2/
+programas_teste/   programas MiniPar (.mp), incluindo t08, t09, t10 e t11
+benchmarks/        versões Python originais de t08, t09 e t10
 docs/              gramatica.md, uml/, relatorio/, backlog.md
 tests/             unitarios/, integracao/, programas/
 ```
+
+## Interfaces
+
+O projeto mantém três interfaces:
+
+| Interface | Como iniciar | Público |
+|---|---|---|
+| Terminal | `python main.py` e escolher a opção 1 | Uso geral e scripts |
+| Web do desenvolvedor | `python -m interfaces.web.api` em `http://127.0.0.1:5000` | Inspeção de TAC, comparação e testes |
+| Web didática (2026.2) | `python -m interfaces.web2.app` em `http://127.0.0.1:5001` | Alunos iniciantes |
+
+A interface didática mostra cada fase em abas separadas (Tokens, AST, Análise
+Semântica, TAC, Código C++), compila e baixa o executável, executa com entrada
+padrão e gera os três arquivos `.arm` do Teste 11. A AST é desenhada em SVG com
+nós coloridos, zoom, pan, recolhimento, tooltips, legenda e exportação SVG/PNG.
+A porta pode ser alterada com `MINIPAR_WEB2_PORT` (padrão `5001`).
 
 ## Requisitos
 
@@ -126,6 +142,45 @@ Para verificar os tipos:
 ```bash
 uv run mypy
 ```
+
+## Testes 8 a 11 (2026.2)
+
+| Teste | Arquivo MiniPar | Núcleos | Saída esperada |
+|---|---|---|---|
+| T8 | `programas_teste/t08_avaliacao_4_nucleos.mp` | 4 | 160 atividades, benchmark e speedup |
+| T9 | `programas_teste/t09_5_nucleos_4_avaliadores_1_fractal.mp` | 5 | 160 atividades + Mandelbrot ASCII |
+| T10 | `programas_teste/t10_6_nucleos_avaliacao_2_fractais.mp` | 6 | 160 atividades + Mandelbrot + Sierpinski ASCII |
+| T11 | `programas_teste/t11_minicompilador_arm.mp` | — | tokens, AST, TAC, Assembly ARMv7 e tabela de símbolos |
+
+Compile e execute os testes 8–10 com:
+
+```bash
+python main.py compilar programas_teste/t08_avaliacao_4_nucleos.mp -O2 -o t08 --executar
+python main.py compilar programas_teste/t09_5_nucleos_4_avaliadores_1_fractal.mp -O2 -o t09 --executar
+python main.py compilar programas_teste/t10_6_nucleos_avaliacao_2_fractais.mp -O2 -o t10 --executar
+```
+
+O Teste 11 é um minicompilador escrito em MiniPar. Ele lê três expressões
+infixadas, imprime tokens, AST, TAC, Assembly ARMv7 e tabela de símbolos, e grava
+`programas_teste/teste11/expr1.arm`, `expr2.arm` e `expr3.arm`:
+
+```bash
+python main.py compilar programas_teste/t11_minicompilador_arm.mp -O0 -o t11 --executar
+```
+
+Resultados esperados: `22.0`, `-84.0` e `22.0`. Os três `.arm` podem ser colados
+no [CPUlator](https://cpulator.01xz.net/?sys=arm-de1soc) e também são validados
+por `clang --target=armv7-none-eabi -x assembler -c`.
+
+## Qualidade
+
+```bash
+python -m pytest -q
+# 226 passed, 1 skipped, 40 subtests passed in 252.26s
+```
+
+Os testes cobrem lexer, parser, semântico, TAC, codegen, runtime, T1–T11 e as
+duas interfaces Web. O único skip é o teste de `taskset`, específico de Linux.
 
 ## Afinidade de CPU em `fork`
 

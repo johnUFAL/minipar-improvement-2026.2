@@ -34,6 +34,12 @@ class StringExpr(ASTNode):
 
 
 @dataclass(frozen=True)
+class CharExpr(ASTNode):
+    value: str = ""
+    line: int = 1
+
+
+@dataclass(frozen=True)
 class BoolExpr(ASTNode):
     value: bool = False
     line: int = 1

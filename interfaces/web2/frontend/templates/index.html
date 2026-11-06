@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniPar Didático — Compilador passo a passo</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-mark">MP</div>
+            <div class="brand-text">
+                <h1>MiniPar <span>Didático</span></h1>
+                <p>Veja cada fase do compilador, do código-fonte ao executável.</p>
+            </div>
+        </div>
+        <nav class="top-actions">
+            <a class="link-button" href="{{ web1_url }}" target="_blank" rel="noopener">
+                Interface do desenvolvedor
+            </a>
+            <span class="version-pill">2026.2</span>
+        </nav>
+    </header>
+
+    <main class="workspace">
+        <section class="editor-card" aria-label="Editor de código MiniPar">
+            <div class="card-header">
+                <div>
+                    <h2>Seu programa</h2>
+                    <p>Escreva em MiniPar ou escolha um exemplo pronto.</p>
+                </div>
+                <div class="header-actions">
+                    <select id="exemplo-select" title="Carregar exemplo">
+                        <option value="">Carregar exemplo…</option>
+                    </select>
+                    <button id="btn-limpar" class="button ghost" type="button">Limpar</button>
+                </div>
+            </div>
+
+            <div class="editor-shell">
+                <div id="line-numbers" class="line-numbers" aria-hidden="true">1</div>
+                <textarea id="editor" spellcheck="false" autocomplete="off" autocapitalize="off"
+                          aria-label="Código MiniPar"></textarea>
+            </div>
+
+            <div id="diagnostics" class="diagnostics hidden" aria-live="polite"></div>
+
+            <div class="editor-footer">
+                <span id="status-text" class="status-text">Pronto para analisar.</span>
+                <span id="cursor-pos" class="cursor-pos">Ln 1, Col 1</span>
+            </div>
+        </section>
+
+        <section class="output-card" aria-label="Resultado das fases">
+            <div class="tabs" role="tablist" aria-label="Fases do compilador">
+                <button class="tab active" data-tab="tokens" role="tab">Tokens <span>Lexer</span></button>
+                <button class="tab" data-tab="ast" role="tab">AST <span>Análise Sintática</span></button>
+                <button class="tab" data-tab="semantica" role="tab">Análise Semântica</button>
+                <button class="tab" data-tab="tac" role="tab">TAC <span>3 endereços</span></button>
+                <button class="tab" data-tab="cpp" role="tab">Código C++</button>
+                <button class="tab action-tab" data-tab="compilar" role="tab">Compilar e baixar</button>
+                <button class="tab action-tab" data-tab="executar" role="tab">Executar</button>
+                <button class="tab" data-tab="arm" role="tab">Assembly ARM</button>
+            </div>
+
+            <div class="panels">
+                <section class="panel active" id="panel-tokens" role="tabpanel">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3>Tokens gerados pelo lexer</h3>
+                            <p id="tokens-summary" class="muted">Execute uma análise para ver os tokens.</p>
+                        </div>
+                        <input id="tokens-filter" class="filter-input" type="search"
+                               placeholder="Filtrar por tipo ou lexema…" aria-label="Filtrar tokens">
+                    </div>
+                    <div class="table-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Tipo</th>
+                                    <th>Lexema</th>
+                                    <th>Linha</th>
+                                    <th>Coluna</th>
+                                    <th>Valor</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tokens-body">
+                                <tr class="empty-row"><td colspan="6">Nenhum token ainda.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="panel" id="panel-ast" role="tabpanel">
+                    <div class="panel-toolbar ast-toolbar">
+                        <div>
+                            <h3>Árvore Sintática Abstrata</h3>
+                            <p class="muted">Clique em um nó para recolher ou expandir. Arraste para mover e use a roda para dar zoom.</p>
+                        </div>
+                        <div class="ast-actions">
+                            <button class="icon-button" id="ast-zoom-out" title="Diminuir zoom" type="button">−</button>
+                            <button class="icon-button" id="ast-zoom-in" title="Aumentar zoom" type="button">+</button>
+                            <button class="button ghost" id="ast-fit" type="button">Ajustar</button>
+                            <button class="button ghost" id="ast-expand" type="button">Expandir tudo</button>
+                            <button class="button ghost" id="ast-collapse" type="button">Recolher tudo</button>
+                            <button class="button ghost" id="ast-export-svg" type="button">SVG</button>
+                            <button class="button ghost" id="ast-export-png" type="button">PNG</button>
+                        </div>
+                    </div>
+                    <div class="ast-legend" id="ast-legend">
+                        <span class="legend-item"><i class="legend-dot block"></i>Blocos</span>
+                        <span class="legend-item"><i class="legend-dot decl"></i>Declarações</span>
+                        <span class="legend-item"><i class="legend-dot stmt"></i>Comandos</span>
+                        <span class="legend-item"><i class="legend-dot expr"></i>Expressões</span>
+                        <span class="legend-item"><i class="legend-dot literal"></i>Literais</span>
+                        <span class="legend-item"><i class="legend-dot ident"></i>Identificadores</span>
+                    </div>
+                    <div class="ast-canvas" id="ast-canvas">
+                        <div class="placeholder">
+                            <strong>A árvore aparece aqui</strong>
+                            <span>Clique em “AST — Análise Sintática” para analisar o programa.</span>
+                        </div>
+                    </div>
+                    <div id="ast-tooltip" class="ast-tooltip hidden"></div>
+                </section>
+
+                <section class="panel" id="panel-semantica" role="tabpanel">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3>Análise Semântica e Tabela de Símbolos</h3>
+                            <p id="semantica-summary" class="muted">Tipos, escopos e diagnósticos do programa.</p>
+                        </div>
+                    </div>
+                    <div id="semantica-content" class="semantica-content">
+                        <div class="placeholder compact">
+                            <strong>Nenhuma análise ainda</strong>
+                            <span>Execute a análise para inspecionar os símbolos.</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel" id="panel-tac" role="tabpanel">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3>Código de Três Endereços (TAC)</h3>
+                            <p id="tac-summary" class="muted">Instruções intermediárias geradas a partir da AST.</p>
+                        </div>
+                        <button class="button ghost" id="tac-copy" type="button">Copiar</button>
+                    </div>
+                    <pre id="tac-code" class="code-block"><span class="placeholder-text">O TAC aparece aqui.</span></pre>
+                </section>
+
+                <section class="panel" id="panel-cpp" role="tabpanel">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3>Código C++ gerado</h3>
+                            <p id="cpp-summary" class="muted">Tradução do TAC para C++17, compilada com g++.</p>
+                        </div>
+                        <div class="ast-actions">
+                            <button class="button ghost" id="cpp-copy" type="button">Copiar</button>
+                            <button class="button ghost" id="cpp-download" type="button">Baixar .cpp</button>
+                        </div>
+                    </div>
+                    <pre id="cpp-code" class="code-block"><span class="placeholder-text">O código C++ aparece aqui.</span></pre>
+                </section>
+
+                <section class="panel" id="panel-compilar" role="tabpanel">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3>Compilar e baixar o executável</h3>
+                            <p class="muted">O compilador gera C++17 e o g++ produz o executável nativo.</p>
+                        </div>
+                    </div>
+                    <div class="action-card">
+                        <div class="action-icon">⚙️</div>
+                        <h4>Gerar executável</h4>
+                        <p>Compila o programa atual com otimização O2 e disponibiliza o download.</p>
+                        <button class="button primary big" id="btn-compilar" type="button">Compilar e baixar o executável</button>
+                        <div id="compilar-status" class="action-status"></div>
+                    </div>
+                </section>
+
+                <section class="panel" id="panel-executar" role="tabpanel">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3>Executar o programa</h3>
+                            <p class="muted">Informe a entrada padrão, se o programa usar <code>input()</code>.</p>
+                        </div>
+                    </div>
+                    <div class="run-grid">
+                        <div class="run-input">
+                            <label for="stdin">Entrada padrão</label>
+                            <textarea id="stdin" spellcheck="false" placeholder="Uma linha por leitura de input()"></textarea>
+                            <button class="button primary" id="btn-executar" type="button">Executar agora</button>
+                        </div>
+                        <div class="run-output">
+                            <div class="run-output-header">
+                                <span>Saída</span>
+                                <span id="run-meta" class="muted"></span>
+                            </div>
+                            <pre id="run-stdout" class="console"><span class="placeholder-text">A saída do programa aparece aqui.</span></pre>
+                            <pre id="run-stderr" class="console error hidden"></pre>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel" id="panel-arm" role="tabpanel">
+                    <div class="panel-toolbar">
+                        <div>
+                            <h3>Teste 11 — Assembly ARMv7</h3>
+                            <p class="muted">Compila o minicompilador em MiniPar e gera os três arquivos <code>.arm</code> para o CPUlator.</p>
+                        </div>
+                        <button class="button primary" id="btn-gerar-arm" type="button">Gerar os três .arm</button>
+                    </div>
+                    <div id="arm-status" class="action-status"></div>
+                    <div id="arm-files" class="arm-files">
+                        <div class="placeholder compact">
+                            <strong>Nenhum Assembly gerado nesta sessão</strong>
+                            <span>Clique em “Gerar os três .arm” para executar o Teste 11.</span>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <span>MiniPar 2026.2 · Compiladores COMP379</span>
+        <span>Servidor didático na porta {{ port }} · <a href="/health">health</a></span>
+    </footer>
+
+    <script src="/static/ast.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

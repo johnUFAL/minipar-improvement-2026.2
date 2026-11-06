@@ -363,5 +363,37 @@ class ProgramTests(unittest.TestCase):
                 self.assertEqual(tokens[-1].type, T.END_OF_FILE)
 
 
+class CharLiteralTests(unittest.TestCase):
+    def test_char_literal_value_and_lexeme(self):
+        tokens, bag = lex("x = 'a'\n")
+        self.assertFalse(bag.has_errors, bag.format_text())
+        char = next(t for t in tokens if t.type is T.CHAR_LITERAL)
+        self.assertEqual(char.value, "a")
+        self.assertEqual(char.lexeme, "'a'")
+
+    def test_char_literal_escapes(self):
+        cases = [("'\\n'", "\n"), ("'\\t'", "\t"), ("'\\\\'", "\\"), ("'\\''", "'")]
+        for source, expected in cases:
+            with self.subTest(source=source):
+                tokens, bag = lex(f"x = {source}\n")
+                self.assertFalse(bag.has_errors, bag.format_text())
+                char = next(t for t in tokens if t.type is T.CHAR_LITERAL)
+                self.assertEqual(char.value, expected)
+
+    def test_char_literal_requires_exactly_one_character(self):
+        for source in ["x = ''\n", "x = 'ab'\n", "x = 'a\n"]:
+            with self.subTest(source=source):
+                messages = errors(source)
+                self.assertTrue(
+                    any("caractere" in message for message in messages), messages
+                )
+
+    def test_char_is_a_type_keyword(self):
+        tokens, bag = lex("char\n")
+        self.assertFalse(bag.has_errors, bag.format_text())
+        self.assertIs(tokens[0].type, T.TYPE)
+        self.assertEqual(tokens[0].lexeme, "char")
+
+
 if __name__ == "__main__":
     unittest.main()

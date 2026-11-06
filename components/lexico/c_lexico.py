@@ -9,7 +9,7 @@ from .token import KEYWORDS, Token, TokenType
 # Gramática 2026.2: 4 espaços por nível de indentação.
 INDENT_WIDTH = 4
 
-_ESCAPES = {"n": "\n", "t": "\t", '"': '"', "\\": "\\"}
+_ESCAPES = {"n": "\n", "t": "\t", '"': '"', "'": "'", "\\": "\\"}
 
 _TWO_CHAR_OPS = {
     "==": TokenType.EQ,
@@ -257,6 +257,8 @@ class Lexer:
             self._scan_number()
         elif ch == '"':
             self._scan_string()
+        elif ch == "'":
+            self._scan_char()
         else:
             self._scan_operator()
 
@@ -355,6 +357,50 @@ class Lexer:
         self._emit(
             TokenType.STRING_LITERAL, self._src[start : self._pos], line, col, "".join(chars)
         )
+        self._line_has_tokens = True
+
+    def _scan_char(self) -> None:
+        line, col = self._line, self._col
+        start = self._pos
+        self._advance()
+        chars: list[str] = []
+        closed = False
+        while True:
+            ch = self._peek_char()
+            if ch in ("", "\n", "\r"):
+                break
+            if ch == "'":
+                self._advance()
+                closed = True
+                break
+            if ch == "\\":
+                esc_line, esc_col = self._line, self._col
+                self._advance()
+                nxt = self._peek_char()
+                if nxt in ("", "\n", "\r"):
+                    break
+                self._advance()
+                if nxt in _ESCAPES:
+                    chars.append(_ESCAPES[nxt])
+                else:
+                    self._error(
+                        f"sequência de escape inválida: '\\{nxt}'", esc_line, esc_col
+                    )
+                    chars.append("\\" + nxt)
+            else:
+                chars.append(self._advance())
+
+        lexeme = self._src[start : self._pos]
+        if not closed:
+            self._error("literal de caractere não fechado", line, col)
+        elif len(chars) != 1:
+            self._error(
+                "literal de caractere deve conter exatamente um caractere",
+                line,
+                col,
+            )
+        value = chars[0] if len(chars) == 1 else ""
+        self._emit(TokenType.CHAR_LITERAL, lexeme, line, col, value)
         self._line_has_tokens = True
 
     def _scan_operator(self) -> None:
