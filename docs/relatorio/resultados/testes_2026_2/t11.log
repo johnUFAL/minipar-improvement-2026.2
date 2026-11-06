@@ -1,0 +1,188 @@
+==== Teste 11: minicompilador MiniPar -> Assembly ARMv7 ====
+
+==================================================
+Expressao: ((2+4)*7)-(5*4)
+
+🔍 Tokens gerados pelo analisador léxico:
+[PARENTESE: '(']
+[PARENTESE: '(']
+[NUMERO: '2']
+[OPERADOR: '+']
+[NUMERO: '4']
+[PARENTESE: ')']
+[OPERADOR: '*']
+[NUMERO: '7']
+[PARENTESE: ')']
+[OPERADOR: '-']
+[PARENTESE: '(']
+[NUMERO: '5']
+[OPERADOR: '*']
+[NUMERO: '4']
+[PARENTESE: ')']
+
+🌳 Árvore Sintática Abstrata (AST):
+    4
+  *
+    5
+-
+    7
+  *
+      4
+    +
+      2
+
+📦 Código de Três Endereços (TAC):
+t1 = 2 + 4
+t2 = t1 * 7
+t3 = 5 * 4
+t4 = t2 - t3
+
+⚙️ Assembly ARMv7 (CPUlator):
+.global _start
+.text
+_start:
+    MOV    r0, #2
+    MOV    r1, #4
+    ADD    r2, r0, r1    @ resultado de '(2 + 4)'
+    MOV    r3, #7
+    MUL    r4, r2, r3    @ resultado de '((2 + 4) * 7)'
+    MOV    r5, #5
+    MOV    r6, #4
+    MUL    r7, r5, r6    @ resultado de '(5 * 4)'
+    SUB    r8, r4, r7    @ resultado de '(((2 + 4) * 7) - (5 * 4))'
+    b .    @ loop infinito para parar o programa
+
+📚 Tabela de Símbolos:
+🔹 2 → CONST
+🔹 4 → CONST
+🔹 5 → CONST
+🔹 7 → CONST
+
+🧮 Resultado final da expressão:
+➡️  22.0
+[OK] Assembly salvo em programas_teste/teste11/expr1.arm
+
+==================================================
+Expressao: ((10 -8*7)+4)*2
+
+🔍 Tokens gerados pelo analisador léxico:
+[PARENTESE: '(']
+[PARENTESE: '(']
+[NUMERO: '10']
+[OPERADOR: '-']
+[NUMERO: '8']
+[OPERADOR: '*']
+[NUMERO: '7']
+[PARENTESE: ')']
+[OPERADOR: '+']
+[NUMERO: '4']
+[PARENTESE: ')']
+[OPERADOR: '*']
+[NUMERO: '2']
+
+🌳 Árvore Sintática Abstrata (AST):
+  2
+*
+    4
+  +
+        7
+      *
+        8
+    -
+      10
+
+📦 Código de Três Endereços (TAC):
+t1 = 8 * 7
+t2 = 10 - t1
+t3 = t2 + 4
+t4 = t3 * 2
+
+⚙️ Assembly ARMv7 (CPUlator):
+.global _start
+.text
+_start:
+    MOV    r0, #10
+    MOV    r1, #8
+    MOV    r2, #7
+    MUL    r3, r1, r2    @ resultado de '(8 * 7)'
+    SUB    r4, r0, r3    @ resultado de '(10 - (8 * 7))'
+    MOV    r5, #4
+    ADD    r6, r4, r5    @ resultado de '((10 - (8 * 7)) + 4)'
+    MOV    r7, #2
+    MUL    r8, r6, r7    @ resultado de '(((10 - (8 * 7)) + 4) * 2)'
+    b .    @ loop infinito para parar o programa
+
+📚 Tabela de Símbolos:
+🔹 2 → CONST
+🔹 4 → CONST
+🔹 7 → CONST
+🔹 8 → CONST
+🔹 10 → CONST
+
+🧮 Resultado final da expressão:
+➡️  -84.0
+[OK] Assembly salvo em programas_teste/teste11/expr2.arm
+
+==================================================
+Expressao: ((2+4)*7)-(5*4)
+
+🔍 Tokens gerados pelo analisador léxico:
+[PARENTESE: '(']
+[PARENTESE: '(']
+[NUMERO: '2']
+[OPERADOR: '+']
+[NUMERO: '4']
+[PARENTESE: ')']
+[OPERADOR: '*']
+[NUMERO: '7']
+[PARENTESE: ')']
+[OPERADOR: '-']
+[PARENTESE: '(']
+[NUMERO: '5']
+[OPERADOR: '*']
+[NUMERO: '4']
+[PARENTESE: ')']
+
+🌳 Árvore Sintática Abstrata (AST):
+    4
+  *
+    5
+-
+    7
+  *
+      4
+    +
+      2
+
+📦 Código de Três Endereços (TAC):
+t1 = 2 + 4
+t2 = t1 * 7
+t3 = 5 * 4
+t4 = t2 - t3
+
+⚙️ Assembly ARMv7 (CPUlator):
+.global _start
+.text
+_start:
+    MOV    r0, #2
+    MOV    r1, #4
+    ADD    r2, r0, r1    @ resultado de '(2 + 4)'
+    MOV    r3, #7
+    MUL    r4, r2, r3    @ resultado de '((2 + 4) * 7)'
+    MOV    r5, #5
+    MOV    r6, #4
+    MUL    r7, r5, r6    @ resultado de '(5 * 4)'
+    SUB    r8, r4, r7    @ resultado de '(((2 + 4) * 7) - (5 * 4))'
+    b .    @ loop infinito para parar o programa
+
+📚 Tabela de Símbolos:
+🔹 2 → CONST
+🔹 4 → CONST
+🔹 5 → CONST
+🔹 7 → CONST
+
+🧮 Resultado final da expressão:
+➡️  22.0
+[OK] Assembly salvo em programas_teste/teste11/expr3.arm
+
+==== Fim do Teste 11 ====

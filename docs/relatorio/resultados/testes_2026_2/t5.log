@@ -1,0 +1,19 @@
+==== Teste 5: recomendacao e-commerce com rede neural ====
+Informe o historico de compras (1 = comprou, 0 = nao comprou):
+Smartphone - comprou? (0/1):
+Laptop - comprou? (0/1):
+Tablet - comprou? (0/1):
+Fones de ouvido - comprou? (0/1):
+Camisa - comprou? (0/1):
+Jeans - comprou? (0/1):
+Jaqueta - comprou? (0/1):
+Sapatos - comprou? (0/1):
+Geladeira - comprou? (0/1):
+Micro-ondas - comprou? (0/1):
+Maquina de lavar - comprou? (0/1):
+Ar condicionado - comprou? (0/1):
+Ficcao - comprou? (0/1):
+Nao-ficcao - comprou? (0/1):
+Ficcao cientifica - comprou? (0/1):
+Fantasia - comprou? (0/1):
+Produtos recomendados para voce:

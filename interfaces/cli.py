@@ -75,6 +75,16 @@ def _exibir_info_teste(test_path: str) -> None:
 
 
 def rodar_teste(test_path: str) -> None:
+    spec = get_program_spec(test_path)
+    if spec.get("multi_computer"):
+        print("\n  [INFO] Teste multi-terminal detectado.")
+        print("  O menu interativo apenas monitora a sessao; ele nao inicia os")
+        print("  dois processos nem passa --como/--hosts.")
+        print("  Para executar a troca real de mensagens use:")
+        print("    python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5")
+        print("  Documentacao: programas_teste/t01_multiterminal/README.md")
+        return
+
     base_name = os.path.splitext(os.path.basename(test_path))[0]
 
     _exibir_info_teste(test_path)
