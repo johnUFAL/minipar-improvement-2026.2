@@ -170,7 +170,16 @@ class WebCompileTests(unittest.TestCase):
         self.assertFalse(response.get_json()["success"])
 
     def test_get_test_rejects_path_traversal(self):
-        for filename in ("../README.md", "..\\README.md", "C:\\README.md"):
+        for filename in (
+            "../README.md",
+            "..\\README.md",
+            "C:\\README.md",
+            "C:README.md",
+            "\\\\server\\share\\x.mp",
+            "/etc/passwd",
+            "foo/../../README.md",
+            "foo\\..\\README.md",
+        ):
             with self.subTest(filename=filename):
                 response = self.client.post(
                     "/api/get_test",

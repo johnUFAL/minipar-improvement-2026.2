@@ -10,7 +10,7 @@ import socket
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .program_analyzer import get_program_spec
@@ -37,8 +37,16 @@ def resolve_test_file(filename: object) -> str:
     if not isinstance(filename, str) or not filename:
         raise ValueError("Nome de arquivo inválido.")
 
+    windows_candidate = PureWindowsPath(filename)
+    if (
+        windows_candidate.drive
+        or windows_candidate.root
+        or ".." in windows_candidate.parts
+    ):
+        raise ValueError("Nome de arquivo inválido.")
+
     tests_dir = Path(TESTS_DIR).resolve()
-    candidate = Path(filename)
+    candidate = Path(filename.replace("\\", "/"))
     if candidate.is_absolute() or ".." in candidate.parts:
         raise ValueError("Nome de arquivo inválido.")
 
