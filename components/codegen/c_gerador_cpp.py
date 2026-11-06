@@ -75,8 +75,9 @@ class CppCodeGenerator:
             "channel": "std::shared_ptr<MiniParChannel>",
             "Canal*": "std::shared_ptr<MiniParChannel>",
             "canal*": "std::shared_ptr<MiniParChannel>",
-            "list": "std::vector<std::int64_t>",
+            "list": "std::vector<double>",
             "matrix": "std::vector<std::vector<double>>",
+            "var": "std::int64_t",
         }
         if type_name.startswith("list<") and type_name.endswith(">"):
             element = CppCodeGenerator._cpp_type(type_name[5:-1])
@@ -97,19 +98,67 @@ class CppCodeGenerator:
         return None
 
     @staticmethod
-    def _expression(expression: str, result_type: str | None = None) -> str:
-        text = expression.strip()
-        if text.startswith("'") or text.startswith('"'):
+    def _code_string(value: str) -> str:
+        return (
+            '"'
+            + value.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\t", "\\t")
+            + '"'
+        )
+
+    @staticmethod
+    def _convert_literals(text: str) -> str:
+        result: list[str] = []
+        index = 0
+        while index < len(text):
+            character = text[index]
+            if character not in ("'", '"'):
+                result.append(character)
+                index += 1
+                continue
+            quote = character
+            end = index + 1
+            escaped = False
+            while end < len(text):
+                current = text[end]
+                if escaped:
+                    escaped = False
+                elif current == "\\":
+                    escaped = True
+                elif current == quote:
+                    break
+                end += 1
+            if end >= len(text):
+                result.append(character)
+                index += 1
+                continue
+            literal = text[index:end + 1]
             try:
-                value = ast.literal_eval(text)
+                value = ast.literal_eval(literal)
             except (SyntaxError, ValueError):
-                value = text[1:-1]
+                value = literal[1:-1]
             if isinstance(value, str):
-                return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t") + '"'
+                result.append(CppCodeGenerator._code_string(value))
+                index = end + 1
+                continue
+            result.append(character)
+            index += 1
+        return "".join(result)
+
+    @staticmethod
+    def _expression(expression: str, result_type: str | None = None) -> str:
+        text = CppCodeGenerator._convert_literals(expression.strip())
+        if re.fullmatch(r'"(?:\\.|[^"\\])*"', text):
+            return text
         if text.startswith("[") and text.endswith("]"):
             elements = CppCodeGenerator._split(text[1:-1])
             values = ", ".join(CppCodeGenerator._expression(item) for item in elements)
-            element_type = "double" if any("." in item for item in elements) else "std::int64_t"
+            if result_type and result_type.startswith("list<") and result_type.endswith(">"):
+                element_type = CppCodeGenerator._cpp_type(result_type[5:-1])
+            else:
+                element_type = "double"
             return f"std::vector<{element_type}>{{{values}}}"
         binary = re.fullmatch(r"(.+?)\s+([+\-*/%])\s+(.+)", text)
         if binary:
@@ -129,11 +178,30 @@ class CppCodeGenerator:
         text = re.sub(r"(?<![=!<>])=(?!=)", "==", text) if "if " in text else text
         text = re.sub(r"\blen\(", "__minipar_len(", text)
         text = re.sub(r"\bto_number\(", "__minipar_to_float(", text)
+        text = re.sub(r"\bparse_ints\(", "__parse_ints(", text)
+        text = re.sub(r"\bsum\(", "__minipar_sum(", text)
+        text = re.sub(r"\bmax\(", "__minipar_max(", text)
+        text = re.sub(r"\brange\(", "__minipar_range(", text)
+        text = re.sub(r"\bstr\(", "__to_string(", text)
+        text = re.sub(r"\bformat_float\(", "__minipar_format_float(", text)
         text = re.sub(r"\binput\(", "input(", text)
         text = re.sub(r"\bc_channel\(", "std::make_shared<MiniParChannel>(", text)
         text = re.sub(r"\bmatrix\(", "__make_matrix(", text)
         text = re.sub(r"\b([A-Za-z_]\w*)\[([^\[\]]+)\]", r"__minipar_array_at(\1, \2)", text)
         return text
+
+    @staticmethod
+    def _runtime_call(name: str) -> str:
+        return {
+            "len": "__minipar_len",
+            "to_number": "__minipar_to_float",
+            "parse_ints": "__parse_ints",
+            "sum": "__minipar_sum",
+            "max": "__minipar_max",
+            "range": "__minipar_range",
+            "str": "__to_string",
+            "format_float": "__minipar_format_float",
+        }.get(name, name)
 
     @staticmethod
     def _rename_identifiers(text: str, names: dict[str, str]) -> str:
@@ -252,11 +320,18 @@ class CppCodeGenerator:
         cls, lines: list[tuple[str, int | None]], parameters: list[tuple[str, str]],
         functions: dict[str, _Function], classes: dict[str, list[str]],
     ) -> tuple[dict[str, str], list[tuple[str, str]], str]:
-        types = {name: type_name for name, type_name in parameters if type_name}
+        def normalize_type(type_name: str | None) -> str:
+            return "" if type_name in (None, "var") else type_name
+
+        types = {
+            name: normalize_type(type_name)
+            for name, type_name in parameters
+            if normalize_type(type_name)
+        }
         for line, _ in lines:
             assignment = _ASSIGNMENT.fullmatch(line)
-            if assignment and assignment.group(2):
-                types[assignment.group(1)] = assignment.group(2)
+            if assignment and normalize_type(assignment.group(2)):
+                types[assignment.group(1)] = normalize_type(assignment.group(2))
 
         def expression_type(expression: str) -> str | None:
             expression = expression.strip()
@@ -266,12 +341,7 @@ class CppCodeGenerator:
             if literal:
                 return literal
             if expression.startswith("["):
-                elements = cls._split(expression[1:-1])
-                if elements and all(cls._literal_type(item) == "float" for item in elements):
-                    return "list<float>"
-                if elements and cls._literal_type(elements[0]) == "string":
-                    return "list<string>"
-                return "list<int>"
+                return "list"
             index = re.fullmatch(r"([A-Za-z_]\w*)\[(.+)\]", expression)
             if index:
                 collection_type = types.get(index.group(1), "")
@@ -333,25 +403,33 @@ class CppCodeGenerator:
                 if function is None:
                     continue
                 for index, expression in enumerate(arguments):
-                    if index < len(function.parameters) and not function.parameters[index][1]:
+                    if index < len(function.parameters) and not normalize_type(
+                        function.parameters[index][1]
+                    ):
                         inferred = expression_type(expression)
-                        if inferred and function.parameters[index][1] != inferred:
+                        if inferred and normalize_type(
+                            function.parameters[index][1]
+                        ) != inferred:
                             function.parameters[index] = (function.parameters[index][0], inferred)
                             changed = True
             for body, parameters in [(function.lines, function.parameters) for function in functions.values()] + [(lines, [])]:
                 local_types = dict(types)
-                local_types.update({name: kind for name, kind in parameters if kind})
+                local_types.update({
+                    name: normalize_type(kind)
+                    for name, kind in parameters
+                    if normalize_type(kind)
+                })
                 for line, _ in body:
                     assignment = _ASSIGNMENT.fullmatch(line)
                     if assignment:
                         destination, explicit_type, expression = assignment.groups()
-                        inferred = explicit_type or expression_type(expression)
+                        inferred = normalize_type(explicit_type) or expression_type(expression)
                         if inferred and local_types.get(destination) != inferred:
                             local_types[destination] = inferred
                             changed = True
                 types.update(local_types)
             for function in functions.values():
-                if function.return_type:
+                if normalize_type(function.return_type):
                     continue
                 returns = [
                     expression_type(match.group(1))
@@ -542,6 +620,7 @@ class CppCodeGenerator:
                         f"    [[maybe_unused]] {cls._cpp_type(type_names[name])} "
                         f"{result_name}{{}};"
                     )
+        array_aliases: dict[str, str] = {}
         pending_parameters: list[str] = []
         pending_forks: list[int] = []
         index = 0
@@ -691,6 +770,7 @@ class CppCodeGenerator:
             array_assignment = _ARRAY_ASSIGNMENT.fullmatch(line)
             if assignment:
                 destination, _, expression = assignment.groups()
+                array_aliases.pop(destination, None)
                 call = re.fullmatch(r"call\s+([\w.]+)\s*,\s*(\d+)", expression)
                 allocation = re.fullmatch(r"alloc\s+(.+)", expression)
                 getfield = re.fullmatch(r"getfield\s+(.+)", expression)
@@ -699,7 +779,8 @@ class CppCodeGenerator:
                     args = pending_parameters[-count:] if count else []
                     if count:
                         del pending_parameters[-count:]
-                    output.append(f"    {destination} = {call.group(1)}({', '.join(cls._expression(item) for item in args)});")
+                    callee = cls._runtime_call(call.group(1))
+                    output.append(f"    {destination} = {callee}({', '.join(cls._expression(item) for item in args)});")
                 elif allocation:
                     allocation_type = types.get(destination, "")
                     if allocation_type.startswith("shared_ptr<"):
@@ -707,7 +788,9 @@ class CppCodeGenerator:
                     output.append(f"    {destination} = std::make_shared<{allocation_type}>();")
                 elif getfield:
                     base, offset = cls._split(getfield.group(1))
-                    output.append(f"    {destination} = {cls._expression(base)}->field_{offset};")
+                    container = f"{cls._expression(base)}->field_{offset}"
+                    array_aliases[destination] = container
+                    output.append(f"    {destination} = {container};")
                 elif expression.startswith("recv "):
                     channel = cls._split(expression[5:])[0]
                     receive_type = cls._cpp_type(types.get(destination, "string"))
@@ -722,7 +805,8 @@ class CppCodeGenerator:
                     )
             elif array_assignment:
                 array_name, array_index, value = array_assignment.groups()
-                output.append(f"    __minipar_array_set({array_name}, {cls._expression(array_index)}, {cls._expression(value)});")
+                container = array_aliases.get(array_name, array_name)
+                output.append(f"    __minipar_array_set({container}, {cls._expression(array_index)}, {cls._expression(value)});")
             elif line.startswith("setfield "):
                 base, offset, value = cls._split(line[len("setfield "):])
                 output.append(f"    {cls._expression(base)}->field_{offset} = {cls._expression(value)};")
@@ -799,8 +883,9 @@ class CppCodeGenerator:
                 args = pending_parameters[-count:] if count else []
                 if count:
                     del pending_parameters[-count:]
+                callee = cls._runtime_call(function_name)
                 output.append(
-                    f"    {function_name}({', '.join(cls._expression(item) for item in args)});"
+                    f"    {callee}({', '.join(cls._expression(item) for item in args)});"
                 )
             elif line.startswith("fork "):
                 raise ValueError(f"Instrucao fork TAC nao associada a bloco: {line}")

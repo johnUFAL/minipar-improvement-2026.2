@@ -63,6 +63,9 @@ class TACGenerator:
         self.class_methods: dict[str, dict[str, tuple[str, FuncDecl]]] = {}
         self.current_class: str | None = None
         self.parameter_types: dict[str, tuple[str, ...]] = {}
+        self._return_type_cache: dict[int, str | None] = {}
+        self._return_type_stack: set[int] = set()
+        self._declaration_parameter_types: dict[int, tuple[str, ...]] = {}
 
     def _temp(self, type_: str | None = None) -> str:
         name = f"t{self.temp_count}"
@@ -80,6 +83,23 @@ class TACGenerator:
     def _type_of(self, node: ASTNode | None) -> str | None:
         if node is None:
             return None
+        if isinstance(node, FuncCallExpr) and node.name in self.functions:
+            return self._declaration_return_type(self.functions[node.name])
+        if isinstance(node, MethodCall):
+            class_name = self._class_of(node.object)
+            method = self._method(class_name, node.method_name)
+            if method:
+                return self._declaration_return_type(method[1])
+        if isinstance(node, IndexExpr):
+            container_type = self._type_of(node.object)
+            if container_type == "list":
+                return "float"
+            if (
+                container_type
+                and container_type.startswith("list<")
+                and container_type.endswith(">")
+            ):
+                return container_type[5:-1]
         if node.tipo_inferido and node.tipo_inferido not in ("unknown", "var"):
             return node.tipo_inferido
         if isinstance(node, NumberExpr):
@@ -102,8 +122,7 @@ class TACGenerator:
             class_name = self._class_of(node.object)
             method = self._method(class_name, node.method_name)
             if method:
-                declaration = method[1]
-                return declaration.return_type
+                return self._declaration_return_type(method[1])
         if isinstance(node, UnaryExpr):
             return "bool" if node.op in ("!", "not") else self._type_of(node.operand)
         if isinstance(node, BinaryExpr):
@@ -118,10 +137,43 @@ class TACGenerator:
                 return "int"
         if isinstance(node, FuncCallExpr):
             if node.name in self.functions:
-                return self.functions[node.name].return_type
+                return self._declaration_return_type(self.functions[node.name])
         if isinstance(node, InputExpr):
             return "string"
         return None
+
+    def _declaration_return_type(self, declaration: FuncDecl) -> str | None:
+        if declaration.return_type and declaration.return_type != "var":
+            return declaration.return_type
+        key = id(declaration)
+        if key in self._return_type_cache:
+            return self._return_type_cache[key]
+        if key in self._return_type_stack:
+            return None
+        self._return_type_stack.add(key)
+        previous_types = self.variable_types
+        parameter_types = self._declaration_parameter_types.get(key, ())
+        self.variable_types = {
+            parameter.name: (
+                parameter.type
+                if parameter.type != "var"
+                else parameter_types[index]
+                if index < len(parameter_types)
+                else "int"
+            )
+            for index, parameter in enumerate(declaration.params)
+        }
+        inferred: str | None
+        try:
+            inferred = self._function_return_type(declaration.body)
+        finally:
+            self.variable_types = previous_types
+            self._return_type_stack.discard(key)
+        if inferred == "void":
+            inferred = None
+        if key in self._declaration_parameter_types:
+            self._return_type_cache[key] = inferred
+        return inferred
 
     def _class_of(self, node: ASTNode | None) -> str | None:
         if isinstance(node, ThisExpr):
@@ -435,6 +487,8 @@ class TACGenerator:
         return_type = declaration.return_type or self._function_return_type(
             declaration.body
         )
+        if return_type and return_type != "void":
+            self._return_type_cache[id(declaration)] = return_type
         self._emit(f"# source: {declaration.line}")
         self._emit(
             f"func {name}({', '.join(parameters)}) -> {return_type}:"
@@ -501,7 +555,10 @@ class TACGenerator:
                     }
                 )
         source_types: dict[str, str] = {}
-        calls: dict[str, list[tuple[ASTNode | None, ...]]] = {}
+        calls: dict[
+            str,
+            list[tuple[tuple[ASTNode | None, ...], tuple[str | None, ...]]],
+        ] = {}
 
         def visit(node: object) -> None:
             if isinstance(node, ClassDecl):
@@ -516,9 +573,13 @@ class TACGenerator:
             if isinstance(node, VarDecl) and node.init_value is not None:
                 source_types[node.name] = self._type_of(node.init_value) or node.type
             if isinstance(node, FuncCallExpr):
-                calls.setdefault(node.name, []).append(node.arguments)
+                calls.setdefault(node.name, []).append(
+                    (node.arguments, tuple(self._type_of(arg) for arg in node.arguments))
+                )
             if isinstance(node, MethodCall):
-                calls.setdefault(node.method_name, []).append(node.arguments)
+                calls.setdefault(node.method_name, []).append(
+                    (node.arguments, tuple(self._type_of(arg) for arg in node.arguments))
+                )
             if is_dataclass(node):
                 for field in fields(node):
                     child = getattr(node, field.name)
@@ -540,19 +601,23 @@ class TACGenerator:
                     inferred.append(parameter.type)
                     continue
                 argument_type = None
-                for arguments in call_arguments:
+                for arguments, argument_types in call_arguments:
                     if index >= len(arguments):
                         continue
                     argument = arguments[index]
-                    argument_type = self._type_of(argument)
+                    argument_type = argument_types[index]
                     if argument_type in ("unknown", "var"):
                         argument_type = None
                     if argument_type is None and isinstance(argument, IdentifierExpr):
                         argument_type = source_types.get(argument.name)
+                    if argument_type in ("unknown", "var"):
+                        argument_type = None
                     if argument_type:
                         break
                 inferred.append(argument_type or "int")
             self.parameter_types[name] = tuple(inferred)
+            self._declaration_parameter_types[id(declaration)] = tuple(inferred)
+        self._return_type_cache = {}
 
     def _stmt(self, node: ASTNode | None) -> None:
         if node is None:
@@ -752,6 +817,9 @@ class TACGenerator:
         self.break_stack = []
         self.continue_stack = []
         self.variable_types = {}
+        self._return_type_cache = {}
+        self._return_type_stack = set()
+        self._declaration_parameter_types = {}
         self.functions = {
             statement.name: statement
             for statement in program.statements

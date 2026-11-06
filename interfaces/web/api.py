@@ -1,5 +1,6 @@
 import glob
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -8,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from components.lexico.c_lexico import Lexer
 from components.codegen.c_gerador_cpp import CppCodeGenerator
@@ -33,6 +34,7 @@ from ..test_orchestrator import (
     get_terminal_id,
     join_session,
     record_execution_output,
+    resolve_test_file,
     set_session_phase,
 )
 
@@ -40,6 +42,13 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "interfaces", "web", "frontend")
+REFERENCE_DIR = os.path.join(FRONTEND_DIR, "reference")
+LEGACY_REFERENCE_IMAGES = {
+    "painel": "Painel de Benchmark - IC UFAL.jpg",
+    "resultados": "Resultados do Benchmark - IC UFAL.jpg",
+    "configuracoes": "Configurações do Sistema - IC UFAL.jpg",
+    "minipar": "MiniPar 2026.2.jpg",
+}
 app = Flask(
     __name__,
     template_folder=os.path.join(FRONTEND_DIR, "templates"),
@@ -70,6 +79,23 @@ def _serialize_diagnostic(diagnostic: Any) -> dict[str, object]:
         "severity": severity,
         "header": diagnostic.header,
     }
+
+
+def _source_line_map(text: str, marker_pattern: str) -> list[dict[str, int]]:
+    current_source_line: int | None = None
+    result: list[dict[str, int]] = []
+    marker = re.compile(marker_pattern)
+    for generated_line, content in enumerate(text.splitlines(), start=1):
+        match = marker.fullmatch(content.strip())
+        if match:
+            current_source_line = int(match.group(1))
+            continue
+        if current_source_line is not None and content.strip():
+            result.append({
+                "generated_line": generated_line,
+                "source_line": current_source_line,
+            })
+    return result
 
 
 def _compile_phases(source: str) -> dict[str, object]:
@@ -122,6 +148,8 @@ def _compile_phases(source: str) -> dict[str, object]:
         "tabela_simbolos": analyzer.symbol_table.export(),
         "tac": tac,
         "cpp": cpp,
+        "tac_origin": _source_line_map(tac, r"#\s*source:\s*(\d+)"),
+        "cpp_origin": _source_line_map(cpp, r"//\s*MiniPar line\s+(\d+)"),
         "diagnosticos": serialized_diagnostics,
         "success": not diagnostics.has_errors,
     }
@@ -228,6 +256,38 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/modelo-antigo')
+def legacy_model():
+    """Serve a interface anterior real, preservada a partir do branch main."""
+    return render_template('legacy/index.html')
+
+
+@app.route('/modelo-antigo/referencias')
+def legacy_model_references():
+    """Exibe as imagens de referência da interface anterior."""
+    return render_template(
+        'legacy_model.html',
+        images=LEGACY_REFERENCE_IMAGES,
+    )
+
+
+@app.route('/modelo-antigo/referencias/imagem/<path:image_name>')
+def legacy_model_image(image_name: str):
+    if image_name not in LEGACY_REFERENCE_IMAGES.values():
+        return jsonify({"error": "Referência visual não encontrada."}), 404
+    return send_from_directory(REFERENCE_DIR, image_name)
+
+
+@app.route('/modelo-antigo/static/<path:asset_name>')
+def legacy_model_asset(asset_name: str):
+    if asset_name not in {"style.css", "script.js"}:
+        return jsonify({"error": "Asset da interface anterior não encontrado."}), 404
+    return send_from_directory(
+        os.path.join(FRONTEND_DIR, "legacy"),
+        asset_name,
+    )
+
+
 @app.route('/api/tests', methods=['GET'])
 def get_tests():
     # Retorna os testes ordenados alfabeticamente
@@ -237,8 +297,12 @@ def get_tests():
 
 @app.route('/api/get_test', methods=['POST'])
 def get_test():
-    filename = request.json.get('filename')
-    filepath = os.path.join(TESTS_DIR, filename)
+    data = request.get_json(silent=True)
+    filename = data.get("filename") if isinstance(data, dict) else None
+    try:
+        filepath = resolve_test_file(filename)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     if os.path.exists(filepath):
         with open(filepath, 'r', encoding='utf-8') as f:
             return jsonify({"code": f.read()})
@@ -248,11 +312,16 @@ def get_test():
 @app.route('/api/test_spec', methods=['POST'])
 def get_test_spec_api():
     """Requisitos detectados automaticamente pelo program_analyzer."""
-    filename = request.json.get('filename')
+    data = request.get_json(silent=True)
+    filename = data.get("filename") if isinstance(data, dict) else None
+    try:
+        resolve_test_file(filename)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
     spec = get_spec_summary(filename)
     if spec:
         return jsonify(spec)
-    return jsonify({"requires_input": False, "multi_computer": None})
+    return jsonify({"error": "Arquivo não encontrado"}), 404
 
 
 @app.route('/api/session', methods=['GET'])
@@ -279,8 +348,12 @@ def session_join():
 
 @app.route('/api/session/create', methods=['POST'])
 def session_create():
-    filename = request.json.get('filename')
-    path = os.path.join(TESTS_DIR, filename)
+    data = request.get_json(silent=True)
+    filename = data.get("filename") if isinstance(data, dict) else None
+    try:
+        path = resolve_test_file(filename)
+    except ValueError as error:
+        return jsonify({"success": False, "error": str(error)}), 400
     if not os.path.exists(path):
         return jsonify({"success": False, "error": "Arquivo não encontrado"}), 404
     spec = get_program_spec(path)
@@ -337,6 +410,43 @@ def compile_phases():
             "error": "O campo 'code' deve ser texto.", "success": False
         }), 400
     return jsonify(_compile_phases(data["code"]))
+
+
+@app.route('/api/otimizar', methods=['POST'])
+def optimize_phases():
+    """Retorna o TAC original e o resultado da otimização para a interface didática."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("code"), str):
+        return jsonify({
+            "error": "O campo 'code' deve ser texto.", "success": False
+        }), 400
+
+    level = data.get("optimization_level", "O1")
+    if level not in {"O0", "O1", "O2", "O3"}:
+        return jsonify({
+            "error": "optimization_level deve ser O0, O1, O2 ou O3.",
+            "success": False,
+        }), 400
+
+    compilation = _compile_phases(data["code"])
+    tac = str(compilation["tac"])
+    optimized = ""
+    if compilation["success"]:
+        optimized = tac if level == "O0" else TACOptimizer().optimize(tac, level)
+    return jsonify({
+        "success": compilation["success"],
+        "tac": tac,
+        "tac_optimized": optimized,
+        "tac_origin": _source_line_map(tac, r"#\s*source:\s*(\d+)"),
+        "optimized_tac_origin": _source_line_map(
+            optimized, r"#\s*source:\s*(\d+)"
+        ),
+        "tac_instruction_counts": {
+            "original": TACOptimizer.instruction_count(tac),
+            "optimized": TACOptimizer.instruction_count(optimized),
+        },
+        "diagnosticos": compilation["diagnosticos"],
+    })
 
 
 @app.route('/api/executar', methods=['POST'])

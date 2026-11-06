@@ -107,12 +107,22 @@ e execução do binário C++ permanecem inalteradas.
 
 A API web também oferece `POST /api/compilar`, que recebe
 `{"code": "<fonte MiniPar>"}` e retorna `tokens`, `ast`,
-`tabela_simbolos`, `tac`, `cpp` e `diagnosticos`. `POST /api/executar`
+`tabela_simbolos`, `tac`, `cpp`, `tac_origin`, `cpp_origin` e `diagnosticos`.
+Os mapas de origem relacionam cada `generated_line` do TAC/C++ à
+`source_line` correspondente no código MiniPar; a IDE usa essa relação para
+destacar a origem ao passar o mouse ou navegar por teclado.
+`POST /api/executar`
 recebe o mesmo código e uma lista opcional `inputs`, compila e executa em
 subprocesso e retorna `stdout`, `stderr`, `exit_code` e `tempo` (em segundos).
 A execução é interrompida após 30 segundos ou ao ultrapassar 1 MiB de saída
 combinada. A rota legada `POST /api/compile`, usada pela IDE atual, continua
 disponível e mantém o contrato de compilar e executar em uma única chamada.
+
+As rotas que carregam programas de `programas_teste` (`POST /api/get_test`,
+`POST /api/test_spec` e `POST /api/session/create`) aceitam somente caminhos
+relativos dentro desse diretório. Caminhos absolutos, componentes `..`, nomes
+vazios, valores que não sejam texto e arquivos inexistentes são rejeitados;
+entradas inválidas retornam `400` e arquivos ausentes retornam `404`.
 
 Para executar os testes unitários:
 
