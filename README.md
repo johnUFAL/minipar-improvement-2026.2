@@ -124,6 +124,29 @@ relativos dentro desse diretório. Caminhos absolutos, componentes `..`, nomes
 vazios, valores que não sejam texto e arquivos inexistentes são rejeitados;
 entradas inválidas retornam `400` e arquivos ausentes retornam `404`.
 
+## Testes 1 a 11 (2026.2)
+
+Os programas T8–T11 e o par multi-terminal do T1 estão em `programas_teste/`.
+Para executar todos os 11 testes de forma reproduzível:
+
+```bash
+python scripts/run_testes_2026_2.py
+```
+
+O runner compila cada programa em um diretório temporário, fornece as entradas
+fixas de T1/T5/T6, executa T1 como dois processos reais e valida T11 com
+`clang`. Os logs ficam em
+`docs/relatorio/resultados/testes_2026_2/`.
+
+Para executar somente o T1 multi-terminal:
+
+```bash
+python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5
+```
+
+O menu interativo apenas monitora sessões multi-terminal; ele não inicia os
+dois processos. Por isso, o runner scriptado é a forma recomendada.
+
 Para executar os testes unitários:
 
 ```bash
