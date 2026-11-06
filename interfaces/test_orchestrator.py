@@ -32,7 +32,7 @@ _PHASE_ACTIVITY = {
 }
 
 
-def resolve_test_file(filename: object) -> Path:
+def resolve_test_file(filename: object) -> str:
     """Resolve a test filename without allowing access outside TESTS_DIR."""
     if not isinstance(filename, str) or not filename:
         raise ValueError("Nome de arquivo inválido.")
@@ -47,7 +47,7 @@ def resolve_test_file(filename: object) -> Path:
         resolved.relative_to(tests_dir)
     except ValueError as error:
         raise ValueError("Nome de arquivo inválido.") from error
-    return resolved
+    return str(resolved)
 
 
 def get_terminal_id() -> str:
