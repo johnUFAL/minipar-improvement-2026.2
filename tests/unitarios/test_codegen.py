@@ -126,3 +126,22 @@ send_typed typed, 42, true
 
     assert "legacy->sendData(__to_string(42));" in generated
     assert "typed->enviar(42, true);" in generated
+
+
+def test_cpp_generator_infers_var_parameter_from_numeric_call() -> None:
+    tac = """goto MAIN
+func derivada_sigmoid(saida:var) -> int:
+t0 = saida * (1 - saida)
+ret t0
+endfunc
+MAIN:
+valor:float = 0.5
+param valor
+resultado = call derivada_sigmoid, 1
+print resultado
+"""
+
+    generated = CppCodeGenerator._generate_cpp(tac)
+
+    assert "std::int64_t derivada_sigmoid([[maybe_unused]] double saida);" in generated
+    assert "std::shared_ptr<var>" not in generated

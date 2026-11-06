@@ -111,6 +111,11 @@ class CppCodeGenerator:
             values = ", ".join(CppCodeGenerator._expression(item) for item in elements)
             element_type = "double" if any("." in item for item in elements) else "std::int64_t"
             return f"std::vector<{element_type}>{{{values}}}"
+        text = re.sub(
+            r"'(?:\\.|[^'\\])*'",
+            lambda match: json.dumps(ast.literal_eval(match.group(0))),
+            text,
+        )
         binary = re.fullmatch(r"(.+?)\s+([+\-*/%])\s+(.+)", text)
         if binary:
             left, operator, right = binary.groups()
@@ -333,7 +338,10 @@ class CppCodeGenerator:
                 if function is None:
                     continue
                 for index, expression in enumerate(arguments):
-                    if index < len(function.parameters) and not function.parameters[index][1]:
+                    if (
+                        index < len(function.parameters)
+                        and function.parameters[index][1] in ("", "var", "unknown")
+                    ):
                         inferred = expression_type(expression)
                         if inferred and function.parameters[index][1] != inferred:
                             function.parameters[index] = (function.parameters[index][0], inferred)
@@ -830,6 +838,7 @@ class CppCodeGenerator:
     def _generate_cpp(cls, tac: str) -> str:
         functions, main_lines, classes = cls._parse(tac)
         function_map = {function.name: function for function in functions}
+        cls._infer_types(main_lines, [], function_map, classes)
         for function in functions:
             cls._infer_types(function.lines, function.parameters, function_map, classes)
 

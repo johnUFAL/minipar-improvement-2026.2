@@ -45,7 +45,7 @@ tests/             unitarios/, integracao/, programas/
 - `g++` com suporte a C++17
 - Flask para a IDE Web
 
-No Windows, instale uma distribuição GCC/MinGW-w64 e adicione a pasta `bin`
+No Windows, instale uma distribuição GCC/MinGW-w64 e adicione a pasta `bin`'
 ao `PATH`. Se o compilador tiver outro nome ou caminho, configure `CXX` antes
 de iniciar o compilador MiniPar.
 

@@ -130,6 +130,16 @@ class SemanticAnalyzerTests(unittest.TestCase):
         self.assertTrue(any("Condicao deve ser bool" in message for message in messages))
         self.assertTrue(any("nao declarada" in message for message in messages))
 
+    def test_inferred_channel_variable_can_be_used_by_send_and_receive(self) -> None:
+        analyzer, _ = analyze(
+            "SEQ\n"
+            '    var requisicao = c_channel("127.0.0.1", 5101)\n'
+            "    receive(requisicao)\n"
+            '    send(requisicao, "valor")\n'
+        )
+
+        self.assertFalse(analyzer.diagnostics, analyzer.diagnostics)
+
 
 if __name__ == "__main__":
     unittest.main()
