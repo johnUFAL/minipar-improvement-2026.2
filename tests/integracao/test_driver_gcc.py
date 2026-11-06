@@ -185,7 +185,8 @@ class DriverGCCIntegrationTests(unittest.TestCase):
             output_path = Path(temp_dir) / "program"
 
             def fake_run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-                Path(command[command.index("-o") + 1]).touch()
+                output = Path(str(_kwargs["cwd"])) / command[command.index("-o") + 1]
+                output.touch()
                 return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
             with (
@@ -201,6 +202,29 @@ class DriverGCCIntegrationTests(unittest.TestCase):
         self.assertIn("-O0", command)
         self.assertIn("-pthread", command)
         self.assertNotIn("-lws2_32", command)
+
+    def test_compiler_creates_missing_output_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp = Path(temp_dir)
+            cpp_path = temp / "source.cpp"
+            cpp_path.write_text("int main() { return 0; }\n", encoding="utf-8")
+            output_path = temp / "nested" / "program"
+
+            def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                output = Path(str(kwargs["cwd"])) / command[command.index("-o") + 1]
+                output.touch()
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+            with (
+                patch.object(driver_gcc.shutil, "which", return_value="g++"),
+                patch.object(driver_gcc.subprocess, "run", side_effect=fake_run),
+                patch.object(driver_gcc.sys, "platform", "linux"),
+            ):
+                succeeded = driver_gcc.compilar(cpp_path, output_path, "O0")
+                output_exists = output_path.is_file()
+
+        self.assertTrue(succeeded)
+        self.assertTrue(output_exists)
 
     def test_invalid_optimization_level_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "O0, O1, O2 ou O3"):

@@ -3,11 +3,13 @@
 #include <chrono>
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -356,6 +358,80 @@ auto __minipar_divide(Left left, Right right) {
     return left / right;
 }
 
+// ---------------------------------------------------------------------------
+// Builtins de string e arquivo (MiniPar 2026.2)
+// "char" e representado por uma string de exatamente um caractere, o que
+// mantem indexacao, concatenacao e comparacao uniformes no C++ gerado.
+// ---------------------------------------------------------------------------
+
+inline std::string __minipar_char_at(const std::string& text, std::int64_t index) {
+    if (index < 0 || static_cast<std::size_t>(index) >= text.size()) {
+        throw std::out_of_range("char_at: indice fora da string.");
+    }
+    return std::string(1, text[static_cast<std::size_t>(index)]);
+}
+
+inline std::string __minipar_substring(
+    const std::string& text, std::int64_t start, std::int64_t end
+) {
+    if (start < 0) {
+        start = 0;
+    }
+    if (end < start) {
+        end = start;
+    }
+    const auto size = static_cast<std::int64_t>(text.size());
+    if (start > size) {
+        start = size;
+    }
+    if (end > size) {
+        end = size;
+    }
+    return text.substr(
+        static_cast<std::size_t>(start),
+        static_cast<std::size_t>(end - start)
+    );
+}
+
+inline bool __minipar_is_digit(const std::string& text) {
+    return text.size() == 1 &&
+           std::isdigit(static_cast<unsigned char>(text[0])) != 0;
+}
+
+inline bool __minipar_is_alpha(const std::string& text) {
+    return text.size() == 1 &&
+           std::isalpha(static_cast<unsigned char>(text[0])) != 0;
+}
+
+inline bool __minipar_is_space(const std::string& text) {
+    return text.size() == 1 &&
+           std::isspace(static_cast<unsigned char>(text[0])) != 0;
+}
+
+inline bool __minipar_is_number(const std::string& text) {
+    if (text.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    std::strtod(text.c_str(), &end);
+    return end != text.c_str() && end != nullptr && *end == '\0';
+}
+
+inline int __minipar_write_file(
+    const std::string& path, const std::string& content
+) {
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        return 1;
+    }
+    output.write(content.data(), static_cast<std::streamsize>(content.size()));
+    return output ? 0 : 1;
+}
+
+inline double __minipar_inf() {
+    return std::numeric_limits<double>::infinity();
+}
+
 template<typename Container, typename Index>
 decltype(auto) __minipar_array_at(Container& values, Index index) {
     bool invalid = false;
@@ -378,7 +454,11 @@ decltype(auto) __minipar_array_at(Container& values, Index index) {
                   << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    return values[converted];
+    if constexpr (std::is_same_v<std::decay_t<Container>, std::string>) {
+        return std::string(1, values[converted]);
+    } else {
+        return (values[converted]);
+    }
 }
 
 template<typename Container, typename Index, typename Value>

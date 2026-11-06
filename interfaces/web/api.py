@@ -326,7 +326,7 @@ def get_test_spec_api():
 
 @app.route('/api/session', methods=['GET'])
 def get_session():
-    action, session = check_active_session_for_new_terminal()
+    action, session = check_active_session_for_new_terminal(prompt_user=False)
     if session:
         return jsonify({
             "active": session.get("status") not in ("completed", "cancelled"),
@@ -339,7 +339,7 @@ def get_session():
 
 @app.route('/api/session/join', methods=['POST'])
 def session_join():
-    _, session = check_active_session_for_new_terminal()
+    _, session = check_active_session_for_new_terminal(prompt_user=False)
     if session:
         join_session(session)
         return jsonify({"success": True, "session": session})

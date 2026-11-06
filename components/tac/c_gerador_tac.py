@@ -14,6 +14,7 @@ from ..sintatico.ast import (
     ChannelDecl,
     ClassDecl,
     ContinueStmt,
+    CharExpr,
     DoWhileStmt,
     ForStmt,
     FuncCallExpr,
@@ -106,6 +107,8 @@ class TACGenerator:
             return "float" if "." in node.value else "int"
         if isinstance(node, StringExpr):
             return "string"
+        if isinstance(node, CharExpr):
+            return "char"
         if isinstance(node, BoolExpr):
             return "bool"
         if isinstance(node, ListLiteral):
@@ -131,6 +134,11 @@ class TACGenerator:
             ):
                 return "bool"
             left, right = self._type_of(node.left), self._type_of(node.right)
+            if node.op == "+" and left in ("string", "char") and right in (
+                "string",
+                "char",
+            ):
+                return "string"
             if left == "float" or right == "float":
                 return "float"
             if left == right == "int":
@@ -255,6 +263,8 @@ class TACGenerator:
             return node.value
         if isinstance(node, StringExpr):
             return repr(node.value)
+        if isinstance(node, CharExpr):
+            return repr(node.value)
         if isinstance(node, BoolExpr):
             return "true" if node.value else "false"
         return "0"
@@ -262,7 +272,7 @@ class TACGenerator:
     def _expr(self, node: ASTNode | None) -> str:
         if node is None:
             return "0"
-        if isinstance(node, (NumberExpr, StringExpr, BoolExpr)):
+        if isinstance(node, (NumberExpr, StringExpr, CharExpr, BoolExpr)):
             return self._literal(node)
         if isinstance(node, IdentifierExpr):
             return node.name

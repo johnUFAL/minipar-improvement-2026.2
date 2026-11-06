@@ -71,6 +71,7 @@ def compilar(
         raise ValueError(
             "nivel_otimizacao deve ser um dos valores O0, O1, O2 ou O3"
         )
+    executable.parent.mkdir(parents=True, exist_ok=True)
 
     root = Path(__file__).resolve().parents[2]
     runtime_dir = root / "runtime"
@@ -97,7 +98,7 @@ def compilar(
         "-I",
         str(runtime_dir),
         "-o",
-        str(executable),
+        executable.name,
     ]
     command.extend(_platform_link_flags(sys.platform, os.name))
 
@@ -108,6 +109,7 @@ def compilar(
             capture_output=True,
             text=True,
             errors="replace",
+            cwd=str(executable.parent),
         )
     except OSError as error:
         print(

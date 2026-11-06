@@ -15,6 +15,31 @@ _FUNCTION = re.compile(
 _ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)(?::([\w<>*]+))?\s*=\s*(.+)")
 _ARRAY_ASSIGNMENT = re.compile(r"([A-Za-z_]\w*)\[(.+)\]\s*=\s*(.+)")
 
+# Builtins do MiniPar que precisam de um nome diferente no runtime C++.
+# Sem este mapa, o TAC "call len, 1" viraria "len(...)" e nao compilaria.
+_BUILTIN_CALLS: dict[str, str] = {
+    "len": "__minipar_len",
+    "format_float": "__minipar_format_float",
+    "parse_ints": "__parse_ints",
+    "range": "__minipar_range",
+    "sum": "__minipar_sum",
+    "max": "__minipar_max",
+    "str": "__to_string",
+    "to_number": "__minipar_to_float",
+    "is_number": "__minipar_is_number",
+    "char_at": "__minipar_char_at",
+    "substring": "__minipar_substring",
+    "is_digit": "__minipar_is_digit",
+    "is_alpha": "__minipar_is_alpha",
+    "is_space": "__minipar_is_space",
+    "write_file": "__minipar_write_file",
+    "matrix": "__make_matrix",
+    "random": "random_val",
+    "clock": "agora",
+    "inf": "__minipar_inf",
+    "exp": "std::exp",
+}
+
 
 @dataclass
 class _Function:
@@ -70,6 +95,7 @@ class CppCodeGenerator:
             "double": "double",
             "bool": "bool",
             "string": "std::string",
+            "char": "std::string",
             "void": "void",
             "c_channel": "std::shared_ptr<MiniParChannel>",
             "channel": "std::shared_ptr<MiniParChannel>",
@@ -83,6 +109,10 @@ class CppCodeGenerator:
             element = CppCodeGenerator._cpp_type(type_name[5:-1])
             return f"std::vector<{element}>"
         return aliases.get(type_name, f"std::shared_ptr<{type_name}>")
+
+    @staticmethod
+    def _call_name(name: str) -> str:
+        return _BUILTIN_CALLS.get(name, name)
 
     @staticmethod
     def _literal_type(expression: str) -> str | None:
@@ -160,6 +190,13 @@ class CppCodeGenerator:
             else:
                 element_type = "double"
             return f"std::vector<{element_type}>{{{values}}}"
+        text = re.sub(
+            r"'(?:\\.|[^'\\])*'",
+            lambda match: json.dumps(
+                ast.literal_eval(match.group(0)), ensure_ascii=False
+            ),
+            text,
+        )
         binary = re.fullmatch(r"(.+?)\s+([+\-*/%])\s+(.+)", text)
         if binary:
             left, operator, right = binary.groups()
@@ -184,6 +221,17 @@ class CppCodeGenerator:
         text = re.sub(r"\brange\(", "__minipar_range(", text)
         text = re.sub(r"\bstr\(", "__to_string(", text)
         text = re.sub(r"\bformat_float\(", "__minipar_format_float(", text)
+        text = re.sub(r"\bis_number\(", "__minipar_is_number(", text)
+        text = re.sub(r"\bchar_at\(", "__minipar_char_at(", text)
+        text = re.sub(r"\bsubstring\(", "__minipar_substring(", text)
+        text = re.sub(r"\bis_digit\(", "__minipar_is_digit(", text)
+        text = re.sub(r"\bis_alpha\(", "__minipar_is_alpha(", text)
+        text = re.sub(r"\bis_space\(", "__minipar_is_space(", text)
+        text = re.sub(r"\bwrite_file\(", "__minipar_write_file(", text)
+        text = re.sub(r"\brandom\(", "random_val(", text)
+        text = re.sub(r"\bclock\(", "agora(", text)
+        text = re.sub(r"\binf\(", "__minipar_inf(", text)
+        text = re.sub(r"\bexp\(", "std::exp(", text)
         text = re.sub(r"\binput\(", "input(", text)
         text = re.sub(r"\bc_channel\(", "std::make_shared<MiniParChannel>(", text)
         text = re.sub(r"\bmatrix\(", "__make_matrix(", text)
@@ -192,16 +240,7 @@ class CppCodeGenerator:
 
     @staticmethod
     def _runtime_call(name: str) -> str:
-        return {
-            "len": "__minipar_len",
-            "to_number": "__minipar_to_float",
-            "parse_ints": "__parse_ints",
-            "sum": "__minipar_sum",
-            "max": "__minipar_max",
-            "range": "__minipar_range",
-            "str": "__to_string",
-            "format_float": "__minipar_format_float",
-        }.get(name, name)
+        return _BUILTIN_CALLS.get(name, name)
 
     @staticmethod
     def _rename_identifiers(text: str, names: dict[str, str]) -> str:
@@ -915,6 +954,7 @@ class CppCodeGenerator:
     def _generate_cpp(cls, tac: str) -> str:
         functions, main_lines, classes = cls._parse(tac)
         function_map = {function.name: function for function in functions}
+        cls._infer_types(main_lines, [], function_map, classes)
         for function in functions:
             cls._infer_types(function.lines, function.parameters, function_map, classes)
 

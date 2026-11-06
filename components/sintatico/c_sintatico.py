@@ -15,6 +15,7 @@ from .ast import (
     BreakStmt,
     CChannelExpr,
     ChannelDecl,
+    CharExpr,
     ClassDecl,
     ContinueStmt,
     ForStmt,
@@ -319,6 +320,10 @@ class Parser:
             )
         if self._match(TokenType.STRING_LITERAL):
             return StringExpr(
+                value=str(token.value), line=token.line, column=token.column
+            )
+        if self._match(TokenType.CHAR_LITERAL):
+            return CharExpr(
                 value=str(token.value), line=token.line, column=token.column
             )
         if self._match(TokenType.BOOL_LITERAL):
@@ -783,6 +788,10 @@ class Parser:
             )
         if self._match(TokenType.STRING_LITERAL):
             return StringExpr(
+                value=str(token.value), line=token.line, column=token.column
+            )
+        if self._match(TokenType.CHAR_LITERAL):
+            return CharExpr(
                 value=str(token.value), line=token.line, column=token.column
             )
         if self._match(TokenType.BOOL_LITERAL):

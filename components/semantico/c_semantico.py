@@ -11,6 +11,7 @@ from ..sintatico.ast import (
     BreakStmt,
     CChannelExpr,
     ChannelDecl,
+    CharExpr,
     ClassDecl,
     ContinueStmt,
     DoWhileStmt,
@@ -52,6 +53,7 @@ from erros.diagnosticos import Diagnostic, DiagnosticBag, Phase
 _EXPRESSION_NODES = (
     NumberExpr,
     StringExpr,
+    CharExpr,
     BoolExpr,
     IdentifierExpr,
     BinaryExpr,
@@ -68,6 +70,103 @@ _EXPRESSION_NODES = (
     MatrixCreateExpr,
     IndexExpr,
 )
+
+# Builtins reconhecidos pelo semantico. A lista fica num unico lugar para
+# evitar divergencia entre a checagem de "funcao declarada" e a de assinatura.
+_BUILTIN_NAMES = frozenset(
+    {
+        "exp",
+        "random",
+        "random_uniforme",
+        "agora",
+        "max",
+        "sum",
+        "println",
+        "range",
+        "len",
+        "to_number",
+        "parse_ints",
+        "str",
+        "int",
+        "float",
+        "inf",
+        "clock",
+        "format_float",
+        "is_number",
+        "receive",
+        "send",
+        "c_channel",
+        "char_at",
+        "substring",
+        "is_digit",
+        "is_alpha",
+        "is_space",
+        "write_file",
+        "matrix",
+    }
+)
+
+# Assinaturas: (tipos dos parametros, quantidade minima de argumentos).
+_BUILTIN_SIGNATURES: dict[str, tuple[tuple[str, ...], int]] = {
+    "exp": (("float",), 1),
+    "random": ((), 0),
+    "random_uniforme": (("float", "float"), 2),
+    "agora": ((), 0),
+    "max": (("var", "var"), 1),
+    "sum": (("var",), 1),
+    "range": (("int", "int", "int"), 1),
+    "len": (("var",), 1),
+    "to_number": (("string",), 1),
+    "parse_ints": (("string",), 1),
+    "str": (("var",), 1),
+    "int": (("var",), 1),
+    "float": (("var",), 1),
+    "inf": ((), 0),
+    "clock": ((), 0),
+    "format_float": (("float", "int"), 2),
+    "is_number": (("string",), 1),
+    "receive": (("c_channel",), 1),
+    "send": (("c_channel",) + ("var",) * 7, 2),
+    "c_channel": (("string", "int"), 2),
+    "char_at": (("string", "int"), 2),
+    "substring": (("string", "int", "int"), 3),
+    "is_digit": (("string",), 1),
+    "is_alpha": (("string",), 1),
+    "is_space": (("string",), 1),
+    "write_file": (("string", "string"), 2),
+    "matrix": (("int", "int", "var"), 3),
+}
+
+# Tipo de retorno dos builtins. "string"/"char" compartilham o mesmo backend.
+_BUILTIN_RETURN_TYPES: dict[str, str] = {
+    "exp": "float",
+    "random": "float",
+    "random_uniforme": "float",
+    "agora": "float",
+    "clock": "float",
+    "inf": "float",
+    "len": "int",
+    "int": "int",
+    "float": "float",
+    "max": "float",
+    "sum": "float",
+    "to_number": "float",
+    "parse_ints": "list",
+    "range": "list",
+    "str": "string",
+    "format_float": "string",
+    "is_number": "bool",
+    "is_digit": "bool",
+    "is_alpha": "bool",
+    "is_space": "bool",
+    "char_at": "char",
+    "substring": "string",
+    "write_file": "int",
+    "receive": "string",
+    "send": "void",
+    "c_channel": "c_channel",
+    "matrix": "list",
+}
 
 
 class SemanticAnalyzer:
@@ -257,6 +356,8 @@ class SemanticAnalyzer:
             return "float" if "." in node.value else "int"
         if isinstance(node, StringExpr):
             return "string"
+        if isinstance(node, CharExpr):
+            return "char"
         if isinstance(node, BoolExpr):
             return "bool"
         if isinstance(node, InputExpr):
@@ -293,7 +394,10 @@ class SemanticAnalyzer:
                 "||",
             ):
                 return "bool"
-            if node.op == "+" and lt == rt == "string":
+            if node.op == "+" and lt in ("string", "char") and rt in (
+                "string",
+                "char",
+            ):
                 return "string"
             if node.op == "+" and lt == rt == "list":
                 return "list"
@@ -325,13 +429,6 @@ class SemanticAnalyzer:
             function = self._function_symbol(node.name)
             if function is not None:
                 return function.type
-            if node.name == "c_channel":
-                return "c_channel"
-            if node.name in (
-                "random", "exp", "float", "to_number", "clock", "inf",
-                "random_uniforme", "agora", "sum",
-            ):
-                return "float"
             if node.name == "max":
                 if len(node.arguments) == 2:
                     argument_types = tuple(
@@ -340,28 +437,18 @@ class SemanticAnalyzer:
                     if argument_types == ("int", "int"):
                         return "int"
                 return "float"
-            if node.name == "receive":
-                return "string"
-            if node.name == "send":
-                return "void"
-            if node.name in ("int", "len", "parse_ints", "str", "format_float"):
-                return "string" if node.name in ("str", "format_float") else (
-                    "list" if node.name == "parse_ints" else "int"
-                )
-            if node.name in ("range",):
-                return "list"
-            if node.name in ("is_number",):
-                return "bool"
-            return "unknown"
+            return _BUILTIN_RETURN_TYPES.get(node.name, "unknown")
         if isinstance(node, IndexExpr):
             object_type = self._infer_type(node.object)
             if object_type == "string":
-                return "string"
+                return "char"
             return "unknown"
         return "unknown"
 
     def _types_compatible(self, declared: str, actual: str) -> bool:
         if declared in ("var", "unknown") or actual in ("var", "unknown"):
+            return True
+        if declared in ("string", "char") and actual in ("string", "char"):
             return True
         if declared == "float" and actual == "int":
             return True
@@ -435,29 +522,7 @@ class SemanticAnalyzer:
         )
 
     def _check_builtin_call(self, node: FuncCallExpr) -> None:
-        signatures: dict[str, tuple[tuple[str, ...], int]] = {
-            "exp": (("float",), 1),
-            "random": ((), 0),
-            "random_uniforme": (("float", "float"), 2),
-            "agora": ((), 0),
-            "max": (("var", "var"), 1),
-            "sum": (("var",), 1),
-            "range": (("int", "int", "int"), 1),
-            "len": (("var",), 1),
-            "to_number": (("string",), 1),
-            "parse_ints": (("string",), 1),
-            "str": (("var",), 1),
-            "int": (("var",), 1),
-            "float": (("var",), 1),
-            "inf": ((), 0),
-            "clock": ((), 0),
-            "format_float": (("float", "int"), 2),
-            "is_number": (("string",), 1),
-            "receive": (("c_channel",), 1),
-            "send": (("c_channel",) + ("var",) * 7, 2),
-            "c_channel": (("string", "int"), 2),
-        }
-        signature = signatures.get(node.name)
+        signature = _BUILTIN_SIGNATURES.get(node.name)
         if signature is not None:
             parameter_types, required_params = signature
             self._check_call_arguments(
@@ -636,7 +701,7 @@ class SemanticAnalyzer:
                 node.name,
                 declared_type,
                 node.line,
-                "channel" if declared_type == "c_channel" else "variable",
+                category="channel" if declared_type == "c_channel" else "variable",
                 column=node.column,
             )
 
@@ -708,8 +773,9 @@ class SemanticAnalyzer:
                 )
                 if node.op == "+":
                     valid = valid or (
-                        left_type == right_type and left_type in ("string", "list")
-                    )
+                        left_type in ("string", "char")
+                        and right_type in ("string", "char")
+                    ) or (left_type == right_type == "list")
                 if not valid:
                     self._report(
                         node.line,
@@ -730,7 +796,8 @@ class SemanticAnalyzer:
                 compatible = (
                     self._is_numeric(left_type) and self._is_numeric(right_type)
                 ) or (
-                    left_type == right_type and left_type in ("string", "var", "unknown")
+                    left_type in ("string", "char")
+                    and right_type in ("string", "char")
                 ) or left_type in ("var", "unknown") or right_type in (
                     "var", "unknown"
                 )
@@ -1038,13 +1105,7 @@ class SemanticAnalyzer:
                 )
         elif isinstance(node, FuncCallExpr):
             function = self._function_symbol(node.name)
-            if function is None and node.name not in (
-                "exp", "random", "random_uniforme", "agora", "max", "sum",
-                "println",
-                "range", "len", "to_number", "parse_ints",
-                "str", "int", "float", "inf", "clock", "format_float",
-                "is_number", "receive", "send", "c_channel",
-            ):
+            if function is None and node.name not in _BUILTIN_NAMES:
                 self._report(
                     node.line,
                     f"Funcao '{node.name}' nao declarada.",
@@ -1092,13 +1153,7 @@ class SemanticAnalyzer:
                     function.required_params or 0,
                     node.name,
                 )
-            elif node.name in (
-                "exp", "random", "random_uniforme", "agora", "max", "sum",
-                "println",
-                "range", "len", "to_number", "parse_ints",
-                "str", "int", "float", "inf", "clock", "format_float",
-                "is_number", "receive", "send", "c_channel",
-            ):
+            elif node.name in _BUILTIN_NAMES:
                 self._check_builtin_call(node)
         elif isinstance(node, PropertyAccess):
             self.validate_node(node.object)

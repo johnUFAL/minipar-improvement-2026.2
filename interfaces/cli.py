@@ -10,6 +10,7 @@ from .test_orchestrator import (
     _load_session,
     append_session_log,
     check_active_session_for_new_terminal,
+    clear_session,
     finalize_test_execution,
     get_terminal_id,
     join_session,
@@ -74,6 +75,16 @@ def _exibir_info_teste(test_path: str) -> None:
 
 
 def rodar_teste(test_path: str) -> None:
+    spec = get_program_spec(test_path)
+    if spec.get("multi_computer"):
+        print("\n  [INFO] Teste multi-terminal detectado.")
+        print("  O menu interativo apenas monitora a sessao; ele nao inicia os")
+        print("  dois processos nem passa --como/--hosts.")
+        print("  Para executar a troca real de mensagens use:")
+        print("    python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5")
+        print("  Documentacao: programas_teste/t01_multiterminal/README.md")
+        return
+
     base_name = os.path.splitext(os.path.basename(test_path))[0]
 
     _exibir_info_teste(test_path)
@@ -98,6 +109,7 @@ def rodar_teste(test_path: str) -> None:
     else:
         append_session_log("Erro na compilação.")
         print(f"[AVISO] Pulando execucao de {test_path} devido a erro de compilacao.")
+        finalize_test_execution(test_path)
 
 
 def obter_testes() -> list:
@@ -153,6 +165,7 @@ def _verificar_sessao_ao_iniciar() -> None:
         print(f"\n  [OK] Participante conectado: {get_terminal_id()}\n")
         run_joiner_progress_monitor(session)
     elif action == "independent":
+        clear_session()
         print("\n  [INFO] Modo independente.\n")
 
 

@@ -1,5 +1,13 @@
 # Execucao de programas MiniPar em rede
 
+> **Teste 1 (2026.2):** o par `programas_teste/t01_multiterminal/` usa um canal
+> lógico bidirecional e deve ser executado com dois processos. Use
+> `python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5` ou siga o
+> procedimento manual em `programas_teste/t01_multiterminal/README.md`.
+> O menu interativo apenas monitora sessões; ele não inicia os dois processos
+> nem passa `--como`/`--hosts`. Por isso, testes multi-terminal são executados
+> pelo runner scriptado.
+
 Os nomes usados na declaracao `c_channel` sao logicos. O endereco e a porta de
 cada computador ficam em `minipar.hosts`, portanto a topologia pode mudar sem
 recompilar o programa.

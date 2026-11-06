@@ -130,6 +130,61 @@ class SemanticAnalyzerTests(unittest.TestCase):
         self.assertTrue(any("Condicao deve ser bool" in message for message in messages))
         self.assertTrue(any("nao declarada" in message for message in messages))
 
+    def test_inferred_channel_variable_can_be_used_by_send_and_receive(self) -> None:
+        analyzer, _ = analyze(
+            "SEQ\n"
+            '    var requisicao = c_channel("127.0.0.1", 5101)\n'
+            "    receive(requisicao)\n"
+            '    send(requisicao, "valor")\n'
+        )
+
+        self.assertFalse(analyzer.diagnostics, analyzer.diagnostics)
+
+    def test_string_and_file_builtins_infer_their_return_types(self) -> None:
+        analyzer, program = analyze(
+            "SEQ\n"
+            '    var texto = "MiniPar"\n'
+            "    var letra = char_at(texto, 0)\n"
+            "    var pedaco = substring(texto, 0, 3)\n"
+            "    var digito = is_digit(letra)\n"
+            "    var letra_ok = is_alpha(letra)\n"
+            "    var espaco = is_space(\" \")\n"
+            '    var status = write_file("saida.txt", pedaco)\n'
+            "    print(letra, pedaco, digito, letra_ok, espaco, status)\n"
+        )
+
+        self.assertFalse(analyzer.diagnostics, analyzer.diagnostics)
+        declarations = program.statements[0].statements[:7]
+        self.assertEqual(
+            [declaration.init_value.tipo_inferido for declaration in declarations],
+            ["string", "char", "string", "bool", "bool", "bool", "int"],
+        )
+
+    def test_char_literal_is_compatible_with_string(self) -> None:
+        analyzer, program = analyze(
+            "SEQ\n"
+            "    var letra: char = 'x'\n"
+            "    var texto: string = letra\n"
+            "    var juntas: string = texto + letra\n"
+            "    print(juntas)\n"
+        )
+
+        self.assertFalse(analyzer.diagnostics, analyzer.diagnostics)
+        self.assertEqual(
+            program.statements[0].statements[0].init_value.tipo_inferido, "char"
+        )
+
+    def test_char_builtins_reject_wrong_arity(self) -> None:
+        analyzer, _ = analyze(
+            "SEQ\n"
+            '    print(char_at("abc"))\n'
+        )
+
+        self.assertTrue(
+            any("argumento" in diagnostic.message
+                for diagnostic in analyzer.diagnostics)
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,22 @@
+[T1] Diretorio de trabalho: C:\Users\RianGaião\AppData\Local\Temp\minipar-t1-ifm3qh25
+[SUCESSO] Executavel: C:\Users\RianGaião\AppData\Local\Temp\minipar-t1-ifm3qh25\t01_calculadora_servidor.exe
+[SUCESSO] Executavel: C:\Users\RianGaião\AppData\Local\Temp\minipar-t1-ifm3qh25\t01_calculadora_cliente.exe
+[T1] Aguardando o servidor na porta 51057...
+[T1] Servidor pronto; executando o cliente.
+
+===== SAIDA DO SERVIDOR =====
+==== T1 Calculadora - servidor (computador_2) ====
+Servidor recebeu: + 7.0 5.0
+Servidor calculou: 12.0
+Servidor enviou a resposta.
+
+===== SAIDA DO CLIENTE =====
+==== T1 Calculadora - cliente (computador_1) ====
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: + 7.0 5.0
+Resultado: 12.0
+
+===== VERIFICACOES =====
+  [OK] cliente retornou 0
+  [OK] servidor retornou 0
+  [OK] servidor recebeu a requisicao
+  [OK] cliente exibiu 'Resultado: 12.0'

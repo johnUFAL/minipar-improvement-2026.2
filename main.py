@@ -12,6 +12,7 @@ def start_interactive():
         get_terminal_id,
         join_session,
         run_joiner_progress_monitor,
+        clear_session,
     )
 
     # Segundo terminal detectou sessão ativa — entra como participante antes do menu
@@ -27,6 +28,7 @@ def start_interactive():
         print("\n  Monitor de progresso iniciado...\n")
         run_joiner_progress_monitor(session)
     elif action == "independent":
+        clear_session()
         print("\n  [INFO] Sessão em andamento ignorada — modo independente.\n")
 
     print("\n" + "=" * 45)

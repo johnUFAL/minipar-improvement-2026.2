@@ -1,0 +1,300 @@
+{
+  "tests": [
+    {
+      "id": "t1",
+      "name": "Calculadora cliente-servidor (2 terminais)",
+      "ok": true,
+      "elapsed": 23.99,
+      "checks": [
+        {
+          "label": "script multi-terminal retornou 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Resultado: 12.0'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Servidor recebeu: + 7.0 5.0'",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "name": "Fatorial e Fibonacci em PAR",
+      "ok": true,
+      "elapsed": 12.69,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Fatorial de 5: 120'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Fibonacci:'",
+          "ok": true
+        },
+        {
+          "label": "saida contem '0'",
+          "ok": true
+        },
+        {
+          "label": "saida contem '13'",
+          "ok": true
+        },
+        {
+          "label": "saida confere com t02_fatorial_fibonacci_par.expected.txt",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t3",
+      "name": "Neuronio com classes",
+      "ok": true,
+      "elapsed": 12.33,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Neuronio aprendeu'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Iteracoes totais:'",
+          "ok": true
+        },
+        {
+          "label": "saida confere com t03_neuronio.expected.txt",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t4",
+      "name": "Rede neural XOR",
+      "ok": true,
+      "elapsed": 13.41,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Input: [0, 0]'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Input: [1, 1]'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Predicted Output:'",
+          "ok": true
+        },
+        {
+          "label": "saida confere com t04_rede_neural_xor.expected.txt",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t5",
+      "name": "Sistema de recomendacao",
+      "ok": true,
+      "elapsed": 11.7,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Produtos recomendados'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Laptop'",
+          "ok": true
+        },
+        {
+          "label": "saida confere com t05_recomendacao.expected.txt",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t6",
+      "name": "Quicksort com classes",
+      "ok": true,
+      "elapsed": 13.68,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Vetor ordenado: [-100, -40, -3, 10, 70, 80]'",
+          "ok": true
+        },
+        {
+          "label": "saida confere com t06_quicksort_classes.expected.txt",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t7",
+      "name": "Quicksort iterativo",
+      "ok": true,
+      "elapsed": 11.94,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Array ordenado: [5, 12, 33, 61, 98]'",
+          "ok": true
+        },
+        {
+          "label": "saida confere com t07_quicksort_iterativo_tac.expected.txt",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t8",
+      "name": "Avaliacao em 4 nucleos",
+      "ok": true,
+      "elapsed": 13.82,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Total de Atividades a Avaliar: 160'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'BENCHMARK DE DESEMPENHO'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Nucleos Utilizados (Paralelo) : 4'",
+          "ok": true
+        },
+        {
+          "label": "saida contem '[Professor] Concluiu 160 atividades'",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t9",
+      "name": "5 nucleos com Mandelbrot",
+      "ok": true,
+      "elapsed": 14.84,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'FRACTAL DE MANDELBROT'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Nucleos Utilizados (Paralelo) : 5'",
+          "ok": true
+        },
+        {
+          "label": "saida contem '[Monitor 3] Concluiu 40 atividades'",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t10",
+      "name": "6 nucleos com dois fractais",
+      "ok": true,
+      "elapsed": 12.98,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'FRACTAL DE MANDELBROT'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'TAPETE DE SIERPINSKI'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'Nucleos Utilizados (Paralelo) : 6'",
+          "ok": true
+        }
+      ]
+    },
+    {
+      "id": "t11",
+      "name": "Minicompilador ARMv7",
+      "ok": true,
+      "elapsed": 12.78,
+      "checks": [
+        {
+          "label": "codigo de saida 0",
+          "ok": true
+        },
+        {
+          "label": "saida contem 't1 = 2 + 4'",
+          "ok": true
+        },
+        {
+          "label": "saida contem 'SUB    r8, r4, r7'",
+          "ok": true
+        },
+        {
+          "label": "saida contem '➡️  22.0'",
+          "ok": true
+        },
+        {
+          "label": "saida contem '➡️  -84.0'",
+          "ok": true
+        },
+        {
+          "label": "artefato expr1.arm",
+          "ok": true
+        },
+        {
+          "label": "artefato expr2.arm",
+          "ok": true
+        },
+        {
+          "label": "artefato expr3.arm",
+          "ok": true
+        },
+        {
+          "label": "clang monta expr1.arm",
+          "ok": true
+        },
+        {
+          "label": "clang monta expr2.arm",
+          "ok": true
+        },
+        {
+          "label": "clang monta expr3.arm",
+          "ok": true
+        }
+      ]
+    }
+  ]
+}

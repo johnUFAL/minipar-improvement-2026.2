@@ -410,13 +410,21 @@ def _announce_input_requirement(spec: dict[str, Any]) -> None:
     print()
 
 
-def check_active_session_for_new_terminal() -> tuple[str | None, dict | None]:
+def check_active_session_for_new_terminal(
+    *,
+    prompt_user: bool = True,
+) -> tuple[str | None, dict | None]:
     session = _load_session()
     if session is None or session.get("status") in ("completed", "cancelled"):
         return None, session
 
     if session.get("status") == "running":
-        return prompt_new_user_on_active_session(session), session
+        action = (
+            prompt_new_user_on_active_session(session)
+            if prompt_user
+            else "choice_required"
+        )
+        return action, session
 
     if session.get("status") in ("waiting", "ready"):
         terminal_id = get_terminal_id()
@@ -424,7 +432,12 @@ def check_active_session_for_new_terminal() -> tuple[str | None, dict | None]:
         if any(p["terminal_id"] == terminal_id for p in participants):
             return None, session
         if len(participants) < session.get("required_participants", 0):
-            return prompt_new_user_on_active_session(session), session
+            action = (
+                prompt_new_user_on_active_session(session)
+                if prompt_user
+                else "choice_required"
+            )
+            return action, session
 
     return None, session
 
@@ -449,7 +462,7 @@ def prepare_test_execution(test_path: str) -> tuple[bool, bool, bool]:
                 return False, False, True
             return True, False, True
         if action == "independent":
-            pass
+            clear_session()
 
     multi = spec.get("multi_computer")
     if multi and multi.get("required"):
