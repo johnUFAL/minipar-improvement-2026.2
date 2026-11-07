@@ -33,7 +33,7 @@ Os tempos incluem compilação e execução. A soma é de aproximadamente 1 min 
 ### 1.1 Suíte automatizada
 
 ```text
-231 passed, 3 skipped, 62 subtests passed in 182.70s
+230 passed, 3 skipped, 61 subtests passed in 198.24s
 ```
 
 Os skips incluem o teste de `taskset` (Linux) e testes de navegador que exigem
@@ -161,14 +161,6 @@ As saídas de T2–T7 foram congeladas em
 CRLF.
 
 ---
-
-### 5.1 Teste de erro proposital
-
-`programas_teste/t02_fibonacci_erro_proposital.mp` é uma cópia do T2 com um
-erro semântico no meio do bloco Fibonacci: `var resultado_invalido: int = "isto
-nao e um numero";` na linha 35. A API `/api/compilar` retorna tokens e AST,
-diagnóstico com linha/coluna e TAC/C++ vazios. O teste automatizado está em
-`tests/integracao/test_erro_proposital.py`.
 
 ## 6. T8–T10 — fork/join em núcleos
 

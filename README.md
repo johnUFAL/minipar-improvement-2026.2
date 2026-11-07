@@ -31,13 +31,12 @@ components/
   codegen/         c_gerador_cpp.py, driver_gcc.py
   controle/        c_controle.py
 erros/             diagnosticos.py
-runtime/           minipar_rt.hpp, canal.cpp, paralelo.cpp, worker.cpp
-interfaces/        cli.py, web/api.py, web/frontend/ (static, templates, legacy)
-programas_teste/   T1-T11, t01_multiterminal/, teste11/, teste_builtins_string.mp
+runtime/           minipar_rt.hpp, canal.cpp, paralelo.cpp
+interfaces/        cli.py, web/api.py, web/frontend/
+programas_teste/   programas MiniPar (.mp)
 benchmarks/        t08_..., t09_..., t10_...
-scripts/           run_testes_2026_2.py, run_multiterminal.py
 docs/              gramatica.md, uml/, relatorio/, backlog.md
-tests/             unitarios/, integracao/, runtime/, programas/
+tests/             unitarios/, integracao/, programas/
 ```
 
 ## Requisitos
@@ -102,10 +101,9 @@ mesmas operações. `--tac` grava e imprime o TAC sem gerar C++ ou executável;
 Falhas léxicas, sintáticas, semânticas, de geração, de build e de execução usam
 códigos de saída `2`, `3`, `4`, `5`, `6` e `7`, respectivamente. Erros de uso
 ou de leitura do arquivo retornam `1`.
-Na IDE web, escolha o nível de TAC (`O0`–`O3`) e use **Comparar antes/depois**
-para ver o TAC original e o otimizado lado a lado. A opção afeta apenas a
-visualização/otimização do TAC; a geração e execução do binário C++ seguem o
-fluxo normal.
+Na IDE web, marque **Otimizar TAC** para comparar o TAC original e o otimizado
+lado a lado. Essa opção afeta apenas a visualização didática do TAC; a geração
+e execução do binário C++ permanecem inalteradas.
 
 A API web também oferece `POST /api/compilar`, que recebe
 `{"code": "<fonte MiniPar>"}` e retorna `tokens`, `ast`,
@@ -149,13 +147,6 @@ python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5
 O menu interativo apenas monitora sessões multi-terminal; ele não inicia os
 dois processos. Por isso, o runner scriptado é a forma recomendada.
 
-## Teste de erro proposital
-
-`programas_teste/t02_fibonacci_erro_proposital.mp` é uma cópia do T2 com um
-erro semântico no meio do bloco Fibonacci (`int` recebendo `string`, linha 35).
-Use-o para conferir se a interface mostra tokens, AST e o diagnóstico com linha
-e coluna, sem gerar TAC/C++.
-
 Para executar os testes unitários:
 
 ```bash
@@ -194,7 +185,7 @@ pelo menos quatro CPUs disponíveis para avaliar o critério de `> 2,5x`.
 1. Análise léxica e sintática: `components/lexico/` e `components/sintatico/`.
 2. Análise semântica e tabela de símbolos: `components/semantico/` e `components/tabela_simbolos/`.
 3. Geração e otimização opcional de TAC: `components/tac/`.
-4. Geração C++ e compilação/link via `g++`: `components/codegen/` e `runtime/`.
+4. Geração C++ e compilação/linkedição via `g++`: `components/codegen/` e `runtime/`.
 
 O fluxo principal executa o binário C++ gerado. O TAC também pode ser executado
 diretamente para funções, classes (incluindo herança), atribuições indexadas,
@@ -238,23 +229,9 @@ gerado pelo compilador.
 
 `sendData`/`receiveData` permanecem disponíveis como adaptadores para uma
 mensagem de string. A declaração MiniPar `c_channel nome computador1
-computador2` cria um canal lógico: o papel de cada processo é escolhido por
-`--como <nome>` e os endereços/portas vêm de `minipar.hosts` (ou `--hosts`).
-A forma antiga `c_channel("host", porta)` cria apenas um cliente e não escuta;
-o T1 válido é o par `programas_teste/t01_multiterminal/`. A execução simulada
-de TAC continua usando filas em memória.
-
-## Limitações conhecidas
-
-- T11: o Assembly ARMv7 não implementa divisão; emite `@ divisão não suportada`
-  (igual ao gabarito Java). A avaliação numérica calcula `/` normalmente.
-- `list.append`, `string.split` e `string.strip` são reconhecidos pelo semântico,
-  mas ainda não são baixados para TAC/C++.
-- O menu multi-terminal apenas monitora sessões; use
-  `scripts/run_multiterminal.py`.
-- `t01_calculadora.mp` é histórico; o T1 válido é o par
-  `programas_teste/t01_multiterminal/`.
-- A execução no CPUlator é manual.
+computador2` continua aceita por compatibilidade, mas não escolhe papel nem
+porta; a configuração TCP ainda deve ser feita pela API C++ acima. A execução
+simulada de TAC continua usando filas em memória.
 
 ## Sintaxe MiniPar
 
