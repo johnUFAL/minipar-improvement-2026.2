@@ -1,10 +1,9 @@
 # Relatório de execução — 11 testes do MiniPar 2026.2
 
-**Branch:** `testes-e-nova-ui` (merge da branch `testes` com a nova interface Web)
-
+**Branch:** `testes`  
 **Data da execução:** 06/11/2026  
 **Ambiente:** Windows 10, Python 3.11.15, GCC 16.2.0 (MSYS2 UCRT64), clang 23.1.4  
-**Escopo:** Testes 1 a 11 do compilador MiniPar, integrados à nova interface Web.
+**Escopo:** Testes 1 a 11 do compilador MiniPar. A interface didática **não** faz parte deste relatório.
 
 ---
 
@@ -16,29 +15,29 @@
 
 | Teste | Descrição | Modo | Tempo |
 |---|---|---|---|
-| T1 | Calculadora cliente-servidor | 2 processos, canal lógico | 17,60 s |
-| T2 | Fatorial e Fibonacci em `par` | local | 8,38 s |
-| T3 | Neurônio com classes | local | 8,45 s |
-| T4 | Rede neural XOR | local | 8,26 s |
-| T5 | Sistema de recomendação | local, 16 entradas | 8,60 s |
-| T6 | Quicksort com classes | local, 1 entrada | 8,63 s |
-| T7 | Quicksort iterativo | local | 8,13 s |
-| T8 | Avaliação em 4 núcleos | local, `fork/core` | 9,15 s |
-| T9 | 5 núcleos com Mandelbrot | local, `fork/core` | 10,30 s |
-| T10 | 6 núcleos com dois fractais | local, `fork/core` | 9,89 s |
-| T11 | Minicompilador ARMv7 | local | 9,83 s |
+| T1 | Calculadora cliente-servidor | 2 processos, canal lógico | 23,99 s |
+| T2 | Fatorial e Fibonacci em `par` | local | 12,69 s |
+| T3 | Neurônio com classes | local | 12,33 s |
+| T4 | Rede neural XOR | local | 13,41 s |
+| T5 | Sistema de recomendação | local, 16 entradas | 11,70 s |
+| T6 | Quicksort com classes | local, 1 entrada | 13,68 s |
+| T7 | Quicksort iterativo | local | 11,94 s |
+| T8 | Avaliação em 4 núcleos | local, `fork/core` | 13,82 s |
+| T9 | 5 núcleos com Mandelbrot | local, `fork/core` | 14,84 s |
+| T10 | 6 núcleos com dois fractais | local, `fork/core` | 12,98 s |
+| T11 | Minicompilador ARMv7 | local | 12,78 s |
 
-Os tempos incluem compilação e execução. A soma é de aproximadamente 1 min 47 s.
+Os tempos incluem compilação e execução. A soma é de aproximadamente 2 min 34 s.
 
 ### 1.1 Suíte automatizada
 
 ```text
-230 passed, 3 skipped, 61 subtests passed in 198.24s
+216 passed, 1 skipped, 40 subtests passed in 245.57s
 ```
 
-Os skips incluem o teste de `taskset` (Linux) e testes de navegador que exigem
-dependências opcionais. A suíte inclui os testes unitários, T1 multi-terminal,
-T8–T11, a nova interface Web e os testes de integração do compilador.
+O único teste ignorado é o de `taskset`, específico de Linux. A suíte inclui
+os testes unitários, T1 multi-terminal, T8–T11 e os testes de integração do
+compilador.
 
 ---
 

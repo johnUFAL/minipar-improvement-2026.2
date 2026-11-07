@@ -2,7 +2,7 @@ Carga de Trabalho: 160 atividades + Mandelbrot (ASCII) + Sierpinski (ASCII)
 
 --- 1. Executando Modo Sequencial (Apenas 1 Nucleo) ---
 [Professor] Concluiu 160 atividades (checksum 344428884.99)
-Tempo Sequencial Concluido em: 0.39 segundos
+Tempo Sequencial Concluido em: 0.47 segundos
 
 --- 2. Executando Modo Paralelo (6 Nucleos Dedicados) ---
 
@@ -60,18 +60,18 @@ Tempo Sequencial Concluido em: 0.39 segundos
                                                   
 ====================================================
 
-[Monitor 1] Concluiu 40 atividades (checksum 89790627.22)
-[Professor] Concluiu 40 atividades (checksum 91664234.80)
-[Monitor 3] Concluiu 40 atividades (checksum 84486704.58)
-[Monitor 2] Concluiu 40 atividades (checksum 90037355.83)
-Tempo Paralelo Concluido em:   0.12 segundos
+[Professor] Concluiu 40 atividades (checksum 88878374.11)
+[Monitor 1] Concluiu 40 atividades (checksum 92073842.29)
+[Monitor 3] Concluiu 40 atividades (checksum 88468966.55)
+[Monitor 2] Concluiu 40 atividades (checksum 86557739.47)
+Tempo Paralelo Concluido em:   0.14 segundos
 
 ==========================================
          BENCHMARK DE DESEMPENHO          
 ==========================================
 Nucleos Utilizados (Paralelo) : 6
-Tempo Sequencial : 0.39 s
-Tempo Paralelo   : 0.12 s
-Aceleracao       : 3.14 x mais rapido!
-Reducao no tempo : 68.2 % de economia
+Tempo Sequencial : 0.47 s
+Tempo Paralelo   : 0.14 s
+Aceleracao       : 3.43 x mais rapido!
+Reducao no tempo : 70.8 % de economia
 ==========================================

@@ -2,21 +2,21 @@ Total de Atividades a Avaliar: 160 (40 alunos x 4 atividades)
 
 --- 1. Executando Modo Sequencial (Apenas 1 Nucleo / Professor) ---
 [Professor] Concluiu 160 atividades (checksum 344428884.99)
-Tempo Sequencial Concluido em: 0.38 segundos
+Tempo Sequencial Concluido em: 0.71 segundos
 
 --- 2. Executando Modo Paralelo (4 Nucleos Dedicados) ---
-[Monitor 1] Concluiu 40 atividades (checksum 91454778.18)
-[Professor] Concluiu 40 atividades (checksum 91208300.57)
-[Monitor 3] Concluiu 40 atividades (checksum 85285046.40)
-[Monitor 2] Concluiu 40 atividades (checksum 88030797.28)
-Tempo Paralelo Concluido em:   0.12 segundos
+[Monitor 1] Concluiu 40 atividades (checksum 92994442.57)
+[Professor] Concluiu 40 atividades (checksum 90361299.87)
+[Monitor 2] Concluiu 40 atividades (checksum 83146533.12)
+[Monitor 3] Concluiu 40 atividades (checksum 89476646.86)
+Tempo Paralelo Concluido em:   0.22 segundos
 
 ==========================================
          BENCHMARK DE DESEMPENHO          
 ==========================================
 Nucleos Utilizados (Paralelo) : 4
-Tempo Sequencial : 0.38 s
-Tempo Paralelo   : 0.12 s
-Aceleracao       : 3.13 x mais rapido!
-Reducao no tempo : 68.1 % de economia
+Tempo Sequencial : 0.71 s
+Tempo Paralelo   : 0.22 s
+Aceleracao       : 3.22 x mais rapido!
+Reducao no tempo : 68.9 % de economia
 ==========================================

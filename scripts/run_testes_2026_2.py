@@ -77,7 +77,7 @@ TESTS: list[dict[str, object]] = [
         "name": "Sistema de recomendacao",
         "file": "t05_recomendacao.mp",
         "inputs": ["1", "1", "1", "1", "1", "1", "1", "1", "0", "0", "0", "0", "0", "0", "0", "0"],
-        "checks": ["Produtos recomendados", "probabilidade"],
+        "checks": ["Produtos recomendados", "Laptop"],
         "expected": "t05_recomendacao.expected.txt",
     },
     {

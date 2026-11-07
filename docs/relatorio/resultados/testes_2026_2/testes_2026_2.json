@@ -4,7 +4,7 @@
       "id": "t1",
       "name": "Calculadora cliente-servidor (2 terminais)",
       "ok": true,
-      "elapsed": 17.6,
+      "elapsed": 23.99,
       "checks": [
         {
           "label": "script multi-terminal retornou 0",
@@ -24,7 +24,7 @@
       "id": "t2",
       "name": "Fatorial e Fibonacci em PAR",
       "ok": true,
-      "elapsed": 8.38,
+      "elapsed": 12.69,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -56,7 +56,7 @@
       "id": "t3",
       "name": "Neuronio com classes",
       "ok": true,
-      "elapsed": 8.45,
+      "elapsed": 12.33,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -80,7 +80,7 @@
       "id": "t4",
       "name": "Rede neural XOR",
       "ok": true,
-      "elapsed": 8.26,
+      "elapsed": 13.41,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -108,7 +108,7 @@
       "id": "t5",
       "name": "Sistema de recomendacao",
       "ok": true,
-      "elapsed": 8.6,
+      "elapsed": 11.7,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -119,7 +119,7 @@
           "ok": true
         },
         {
-          "label": "saida contem 'probabilidade'",
+          "label": "saida contem 'Laptop'",
           "ok": true
         },
         {
@@ -132,7 +132,7 @@
       "id": "t6",
       "name": "Quicksort com classes",
       "ok": true,
-      "elapsed": 8.63,
+      "elapsed": 13.68,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -152,7 +152,7 @@
       "id": "t7",
       "name": "Quicksort iterativo",
       "ok": true,
-      "elapsed": 8.13,
+      "elapsed": 11.94,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -172,7 +172,7 @@
       "id": "t8",
       "name": "Avaliacao em 4 nucleos",
       "ok": true,
-      "elapsed": 9.15,
+      "elapsed": 13.82,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -200,7 +200,7 @@
       "id": "t9",
       "name": "5 nucleos com Mandelbrot",
       "ok": true,
-      "elapsed": 10.3,
+      "elapsed": 14.84,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -224,7 +224,7 @@
       "id": "t10",
       "name": "6 nucleos com dois fractais",
       "ok": true,
-      "elapsed": 9.89,
+      "elapsed": 12.98,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -248,7 +248,7 @@
       "id": "t11",
       "name": "Minicompilador ARMv7",
       "ok": true,
-      "elapsed": 9.83,
+      "elapsed": 12.78,
       "checks": [
         {
           "label": "codigo de saida 0",

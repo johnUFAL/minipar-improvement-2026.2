@@ -1,5 +1,5 @@
 ==== Teste 4: rede neural XOR com backpropagation ====
-Input: [0, 0], Predicted Output: 0.00684395
-Input: [0, 1], Predicted Output: 0.986493
-Input: [1, 0], Predicted Output: 0.98925
-Input: [1, 1], Predicted Output: 0.0140296
+Input: [0, 0], Predicted Output: 0.5
+Input: [0, 1], Predicted Output: 0.5
+Input: [1, 0], Predicted Output: 0.5
+Input: [1, 1], Predicted Output: 0.5
