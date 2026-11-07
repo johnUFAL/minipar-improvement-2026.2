@@ -144,7 +144,7 @@ def _compile_phases(source: str) -> dict[str, object]:
             }
             for token in tokens
         ],
-        "ast": program.para_dict(),
+        "ast": program.para_dict(incluir_categoria=True),
         "tabela_simbolos": analyzer.symbol_table.export(),
         "tac": tac,
         "cpp": cpp,

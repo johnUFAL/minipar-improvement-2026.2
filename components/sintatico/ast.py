@@ -15,10 +15,12 @@ class ASTNode:
     def definir_tipo_inferido(self, tipo: str) -> None:
         object.__setattr__(self, "tipo_inferido", tipo)
 
-    def para_dict(self) -> dict[str, object]:
+    def para_dict(
+        self, *, incluir_categoria: bool = False
+    ) -> dict[str, object]:
         from .visitor import para_dict
 
-        return para_dict(self)
+        return para_dict(self, incluir_categoria=incluir_categoria)
 
 
 @dataclass(frozen=True)
