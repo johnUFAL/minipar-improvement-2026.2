@@ -3,10 +3,13 @@
 # Executar no terminal servidor (computador_2):
 #   t01_servidor.exe --hosts minipar.hosts --como computador_2
 #
-# O cliente (t01_cliente.mp) envia (operacao, operando1, operando2) pelo
-# mesmo canal bidirecional e recebe o resultado. O payload tem sempre quatro
-# campos (string, float, float, float) para manter aridade e tipos iguais nas
-# duas direcoes.
+# Protocolo (quatro campos em ambas as direcoes):
+#   requisicao: (op, v1, v2, 0.0)
+#   resposta:   (status, resultado, 0.0, 0.0)
+#
+# O servidor continua em loop ate receber "sair". Assim, um erro de divisao
+# por zero nao derruba o servico: ele responde o erro e atende a proxima
+# requisicao.
 
 func calcular(op: string, v1: float, v2: float) -> float {
     if (op == "+") {
@@ -19,9 +22,6 @@ func calcular(op: string, v1: float, v2: float) -> float {
         return v1 * v2;
     }
     if (op == "/") {
-        if (v2 == 0.0) {
-            return 0.0;
-        }
         return v1 / v2;
     }
     return 0.0;
@@ -36,18 +36,15 @@ seq {
     var v1 = 0.0;
     var v2 = 0.0;
     var ignorado = 0.0;
-    dados.receive(op, v1, v2, ignorado);
+    var continuar = true;
+
+    while (continuar) {
+        dados.receive(op, v1, v2, ignorado);
 
     print("Servidor recebeu:", op, format_float(v1, 1), format_float(v2, 1));
-    var status = "";
-    var resultado = 0.0;
-    if (op == "/" && v2 == 0.0) {
-        status = "DIVISAO_POR_ZERO";
-    } else {
-        resultado = calcular(op, v1, v2);
-    }
+    var resultado = calcular(op, v1, v2);
     print("Servidor calculou:", format_float(resultado, 1));
 
-    dados.send(status, 0.0, 0.0, resultado);
+    dados.send("", 0.0, 0.0, resultado);
     print("Servidor enviou a resposta.");
 }

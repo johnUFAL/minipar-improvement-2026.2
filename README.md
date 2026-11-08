@@ -62,6 +62,29 @@ Instale as dependências com:
 uv sync --extra dev
 ```
 
+## Assets offline
+
+A IDE web não carrega recursos de CDNs. O CodeMirror 5.65.13 é servido
+localmente a partir de
+`interfaces/web/frontend/static/vendor/codemirror/5.65.13/`:
+
+- `codemirror.min.css`
+- `codemirror.min.js`
+- `mode/clike/clike.min.js`
+- `theme/dracula.min.css` (usado apenas pelo modelo antigo)
+- `LICENSE` (licença MIT do CodeMirror)
+
+As fontes usam pilhas locais do sistema (`Segoe UI`, `Cascadia Code`,
+`JetBrains Mono`, `Consolas`), com fallback genérico, e os ícones são um sprite
+SVG embutido nos templates. Nenhum desses itens gera requisição externa. O logo
+é uma marca textual (`MP`/`IC`); não há imagem de logo embutida.
+
+Não há etapa de build de CSS: `static/style.css` é CSS puro servido diretamente
+pelo Flask. Para atualizar o CodeMirror, substitua os arquivos acima pela versão
+desejada mantendo o mesmo caminho, atualize a versão no caminho e nos templates
+e mantenha o arquivo `LICENSE` correspondente. Depois valide com a rede
+desativada no navegador e execute os testes de integração.
+
 ## Uso
 
 Abra o menu interativo (terminal ou IDE web):

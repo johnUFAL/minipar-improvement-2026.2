@@ -2,11 +2,40 @@
 
 > **Teste 1 (2026.2):** o par `programas_teste/t01_multiterminal/` usa um canal
 > lógico bidirecional e deve ser executado com dois processos. Use
-> `python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5` ou siga o
-> procedimento manual em `programas_teste/t01_multiterminal/README.md`.
+> `python scripts/run_multiterminal.py --scenario all` para validar as quatro
+> operações, divisão por zero e operação inválida. O procedimento manual está em
+> `programas_teste/t01_multiterminal/README.md`.
 > O menu interativo apenas monitora sessões; ele não inicia os dois processos
 > nem passa `--como`/`--hosts`. Por isso, testes multi-terminal são executados
 > pelo runner scriptado.
+
+## Teste 1 — protocolo da calculadora
+
+O canal `dados` troca quatro campos em ambas as direções:
+
+```text
+requisição: (op, v1, v2, 0.0)
+resposta:   (status, resultado, 0.0, 0.0)
+```
+
+- `status = "OK"` em sucesso;
+- `status = "ERRO: divisao por zero"` em `/0`;
+- `status = "ERRO: operacao invalida"` para operador desconhecido.
+
+O servidor fica em loop até receber `"sair"`. Assim, um erro de divisão por zero
+não derruba o serviço: ele responde o erro e atende a próxima requisição.
+
+Exemplo de execução local completa:
+
+```powershell
+python scripts/run_multiterminal.py --scenario all
+```
+
+Exemplo com requisições explícitas:
+
+```powershell
+python scripts/run_multiterminal.py --requests "/,5,0;+,12,30;sair"
+```
 
 Os nomes usados na declaracao `c_channel` sao logicos. O endereco e a porta de
 cada computador ficam em `minipar.hosts`, portanto a topologia pode mudar sem

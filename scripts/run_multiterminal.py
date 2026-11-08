@@ -4,15 +4,17 @@ O menu interativo do MiniPar apenas monitora sessoes; ele nao inicia os dois
 processos. Este script faz a orquestracao real:
 
 1. compila servidor e cliente em um diretorio temporario;
-2. aloca uma porta livre e escreve um minipar.hosts temporario;
+2. aloca portas livres e escreve um minipar.hosts temporario;
 3. inicia o servidor com --como computador_2;
 4. espera a porta entrar em LISTENING;
-5. executa o cliente com --como computador_1 e as entradas informadas;
-6. compara as saidas e encerra os processos.
+5. executa o cliente com --como computador_1 e as requisicoes informadas;
+6. valida as respostas e encerra os processos.
 
 Uso:
     python scripts/run_multiterminal.py
-    python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5
+    python scripts/run_multiterminal.py --scenario all
+    python scripts/run_multiterminal.py --requests "/,5,0;+,12,30;sair"
+    python scripts/run_multiterminal.py --operacao + --v1 12 --v2 30
     python scripts/run_multiterminal.py --keep-temp
 """
 
@@ -42,6 +44,23 @@ from erros.diagnosticos import DiagnosticBag  # noqa: E402
 PROGRAMS = ROOT / "programas_teste" / "t01_multiterminal"
 SERVER_SOURCE = PROGRAMS / "t01_calculadora_servidor.mp"
 CLIENT_SOURCE = PROGRAMS / "t01_calculadora_cliente.mp"
+
+Request = tuple[str, str, str]
+
+SCENARIOS: dict[str, list[Request]] = {
+    "basic": [("+", "12", "30")],
+    "error": [("/", "5", "0"), ("+", "12", "30")],
+    "invalid": [("%", "2", "3")],
+    "all": [
+        ("+", "12", "30"),
+        ("-", "30", "12"),
+        ("*", "6", "7"),
+        ("/", "7", "2"),
+        ("/", "5", "0"),
+        ("+", "12", "30"),
+        ("%", "2", "3"),
+    ],
+}
 
 
 def build_program(source_path: Path, work: Path, optimization: str = "O2") -> Path:
@@ -105,9 +124,46 @@ def wait_for_listening(port: int, timeout: float = 15.0) -> None:
     raise SystemExit(f"Servidor nao entrou em LISTENING na porta {port}.")
 
 
-def run_t1(operacao: str, v1: str, v2: str, keep_temp: bool, timeout: float) -> int:
+def parse_requests(text: str) -> list[Request]:
+    requests: list[Request] = []
+    for item in text.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        parts = [part.strip() for part in item.split(",")]
+        if len(parts) != 3:
+            raise SystemExit(
+                f"Requisicao invalida: '{item}'. Use op,v1,v2 separados por ';'."
+            )
+        requests.append((parts[0], parts[1], parts[2]))
+    if not requests:
+        raise SystemExit("Nenhuma requisicao informada.")
+    return requests
+
+
+def requests_to_input(requests: list[Request]) -> str:
+    lines: list[str] = []
+    for operacao, v1, v2 in requests:
+        lines.extend([operacao, v1, v2])
+    lines.append("sair")
+    return "\n".join(lines) + "\n"
+
+
+def expected_outcome(operacao: str, v1: str, v2: str) -> tuple[str, str | None]:
+    if operacao not in {"+", "-", "*", "/"}:
+        return "ERRO: operacao invalida", None
+    if operacao == "/" and float(v2) == 0.0:
+        return "ERRO: divisao por zero", None
+    a = float(v1)
+    b = float(v2)
+    result = {"+": a + b, "-": a - b, "*": a * b, "/": a / b}[operacao]
+    return "OK", f"{result:.1f}"
+
+
+def run_t1(requests: list[Request], keep_temp: bool, timeout: float) -> int:
     work = Path(tempfile.mkdtemp(prefix="minipar-t1-"))
     print(f"[T1] Diretorio de trabalho: {work}")
+    print(f"[T1] Requisicoes: {requests}")
 
     server_exe = build_program(SERVER_SOURCE, work)
     client_exe = build_program(CLIENT_SOURCE, work)
@@ -151,7 +207,7 @@ def run_t1(operacao: str, v1: str, v2: str, keep_temp: bool, timeout: float) -> 
                 "computador_1",
             ],
             cwd=str(work),
-            input=f"{operacao}\n{v1}\n{v2}\n",
+            input=requests_to_input(requests),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -182,29 +238,12 @@ def run_t1(operacao: str, v1: str, v2: str, keep_temp: bool, timeout: float) -> 
         print("--- stderr do cliente ---")
         print(client.stderr.rstrip())
 
-    division_by_zero = operacao == "/" and float(v2) == 0
-    expected_result = {
-        "+": float(v1) + float(v2),
-        "-": float(v1) - float(v2),
-        "*": float(v1) * float(v2),
-        "/": (float(v1) / float(v2)) if float(v2) != 0 else 0.0,
-    }.get(operacao)
-    if expected_result is None:
-        print(f"[T1] ERRO: operacao invalida '{operacao}'.", file=sys.stderr)
-        return 1
-
-    checks = {
+    checks: dict[str, bool] = {
         "cliente retornou 0": client.returncode == 0,
         "servidor retornou 0": server.returncode == 0,
         "servidor recebeu a requisicao": "Servidor recebeu:" in server_stdout,
+        f"cliente exibiu '{expected_text}'": expected_text in client.stdout,
     }
-    if division_by_zero:
-        checks["cliente exibiu o erro de divisao por zero"] = (
-            "Erro: divisao por zero." in client.stdout
-        )
-    else:
-        expected_text = f"Resultado: {expected_result:.1f}"
-        checks[f"cliente exibiu '{expected_text}'"] = expected_text in client.stdout
 
     print("\n===== VERIFICACOES =====")
     for label, ok in checks.items():
@@ -222,13 +261,31 @@ def run_t1(operacao: str, v1: str, v2: str, keep_temp: bool, timeout: float) -> 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Runner multi-terminal do T1")
-    parser.add_argument("--operacao", default="+", choices=["+", "-", "*", "/"])
+    parser.add_argument(
+        "--scenario",
+        choices=sorted(SCENARIOS),
+        default="basic",
+        help="cenario pronto (basic, error, invalid, all)",
+    )
+    parser.add_argument(
+        "--requests",
+        help="requisicoes no formato op,v1,v2;op,v1,v2 (ex.: '/,5,0;+,12,30')",
+    )
+    parser.add_argument("--operacao", choices=["+", "-", "*", "/"])
     parser.add_argument("--v1", default="7")
     parser.add_argument("--v2", default="5")
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--keep-temp", action="store_true")
     args = parser.parse_args()
-    return run_t1(args.operacao, args.v1, args.v2, args.keep_temp, args.timeout)
+
+    if args.requests:
+        requests = parse_requests(args.requests)
+    elif args.operacao:
+        requests = [(args.operacao, args.v1, args.v2)]
+    else:
+        requests = SCENARIOS[args.scenario]
+
+    return run_t1(requests, args.keep_temp, args.timeout)
 
 
 if __name__ == "__main__":
