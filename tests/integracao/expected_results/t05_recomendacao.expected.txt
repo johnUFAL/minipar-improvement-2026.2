@@ -10,18 +10,22 @@ Jaqueta - comprou? (0/1):
 Sapatos - comprou? (0/1):
 Geladeira - comprou? (0/1):
 Micro-ondas - comprou? (0/1):
-Maquina de lavar - comprou? (0/1):
+Máquina de lavar - comprou? (0/1):
 Ar condicionado - comprou? (0/1):
-Ficcao - comprou? (0/1):
-Nao-ficcao - comprou? (0/1):
-Ficcao cientifica - comprou? (0/1):
+Ficção - comprou? (0/1):
+Não-ficção - comprou? (0/1):
+Ficção científica - comprou? (0/1):
 Fantasia - comprou? (0/1):
 Produtos recomendados para voce:
-Geladeira probabilidade: 0.85371
-Micro-ondas probabilidade: 0.626212
-Maquina de lavar probabilidade: 0.84264
-Ar condicionado probabilidade: 0.858149
-Ficcao probabilidade: 0.837807
-Nao-ficcao probabilidade: 0.85371
-Ficcao cientifica probabilidade: 0.626212
-Fantasia probabilidade: 0.84264
+Laptop probabilidade: 0.723522
+Tablet probabilidade: 0.711771
+Fones de ouvido probabilidade: 0.716263
+Camisa probabilidade: 0.564145
+Jaqueta probabilidade: 0.723522
+Sapatos probabilidade: 0.711771
+Geladeira probabilidade: 0.716263
+Máquina de lavar probabilidade: 0.7191
+Ar condicionado probabilidade: 0.723522
+Não-ficção probabilidade: 0.716263
+Ficção científica probabilidade: 0.564145
+Fantasia probabilidade: 0.7191

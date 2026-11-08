@@ -515,8 +515,12 @@ class WebCompileTests(unittest.TestCase):
                 ],
             ),
             "t05_recomendacao.mp": (
-                ["1", "0", "1", "0", "0", "0", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0"],
-                ["Produtos recomendados para voce:", "probabilidade:"],
+                ["1", "0", "0", "0", "0", "1", "0", "0", "0", "1", "0", "0", "1", "0", "0", "0"],
+                [
+                    "Produtos recomendados para voce:",
+                    "Máquina de lavar",
+                    "Não-ficção",
+                ],
             ),
             "t06_quicksort_classes.mp": (
                 ["10 -3 -40 80 70 -100"],
