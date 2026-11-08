@@ -112,8 +112,22 @@ validação independente de todos os critérios da milestone.
 - **Issues:** #28–#31 Feito; #47–#50 Em andamento.
 - **Incremento registrado:** CLI, API do pipeline, interface didática e
   visualização da AST. O backend de benchmark com medições reais foi
-  implementado localmente nesta branch (#47); a migração de telas e a
-  remoção de dependências externas permanecem em andamento (#48–#50).
+  implementado localmente nesta branch (#47), assim como o T48 (#49): as telas
+  Painel, Benchmark, Resultados e Configurações compartilham `base.html` e rotas
+  próprias. O Painel apenas configura o benchmark e navega para
+  `/benchmark?autorun=1`; a página `/benchmark` executa, acompanha o progresso,
+  exporta resultados, mantém um histórico restaurável de até 10 medições e
+  pagina a tabela de tarefas com uma janela de 5 páginas por vez. A carga também
+  ajusta automaticamente o número de atividades quando o total ultrapassa o limite
+  de 2.000. `/resultados` lista o histórico do compilador e abre cada execução em
+  `/resultados/<run_id>` com as 7 fases preservadas em modo somente leitura;
+  `compileResult` fica no histórico para restaurar tokens, AST, símbolos, TAC, C++
+  e origens, e entradas antigas usam o C++ salvo como fallback. O endereço antigo
+  `/#result-detail` redireciona para a execução mais recente. Configurações e
+  medições persistem em `localStorage`. A migração completa de
+  IDE/terminal/sessões (#50) e a remoção integral de dependências externas
+  (#48) permanecem em andamento. A partição de núcleos do benchmark foi corrigida
+  para distribuir tarefas de forma balanceada entre os núcleos solicitados.
 
 ### Sprint 8 — Testes, Documentação e Entrega
 - **Issues:** #32–#44 e #46 — todas Em andamento.

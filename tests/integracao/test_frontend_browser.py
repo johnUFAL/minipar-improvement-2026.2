@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import shutil
 import tempfile
@@ -65,7 +66,7 @@ class FrontendBrowserTests(unittest.TestCase):
             self.playwright.stop()
 
     def _open_ide(self):
-        self.page.goto(f"{self.base_url}/#ide", wait_until="domcontentloaded")
+        self.page.goto(f"{self.base_url}/editor", wait_until="domcontentloaded")
         self.page.wait_for_function("typeof CodeMirror === 'function'")
         self.page.wait_for_function(
             "document.querySelectorAll('#example-select option').length > 1"
@@ -170,38 +171,14 @@ class FrontendBrowserTests(unittest.TestCase):
             '#page-ide .CodeMirror-linebackground.cm-origin-line',
         )
 
-        self.page.click('.nav-item[data-page="results"]')
-        self.page.wait_for_selector("#results-list .history-row")
-        self.assertFalse(self.page.locator("#compile-button").is_visible())
-        self.page.locator("#results-list .history-row").first.click()
-        self.page.wait_for_selector("#page-result-detail.active-page")
-        self.assertFalse(self.page.locator("#compile-button").is_visible())
-
-        self.page.click('[data-result-phase="tac"]')
-        self.page.click("#result-compare-tac")
-        self.page.wait_for_selector(
-            "#result-tac-comparison .mapped-code-line[data-source-line]"
-        )
-        self._assert_popover_and_highlight(
-            "#result-tac-comparison .mapped-code-line[data-source-line]",
-            ".readonly-code-line.origin-highlight",
-        )
-
-        self.page.click('[data-result-phase="cpp"]')
-        self.page.wait_for_selector(
-            "#result-phase-content .mapped-code-line[data-source-line]"
-        )
-        self._assert_popover_and_highlight(
-            "#result-phase-content .mapped-code-line[data-source-line]",
-            ".readonly-code-line.origin-highlight",
-        )
+        self.assertFalse(self.page.locator("#compile-button").is_hidden())
 
     def test_responsiveness_and_accessibility_contract(self):
-        self.page.goto(f"{self.base_url}/#dashboard", wait_until="domcontentloaded")
-        self.page.wait_for_function("typeof CodeMirror === 'function'")
+        self.page.goto(f"{self.base_url}/", wait_until="domcontentloaded")
+        self.page.wait_for_selector("#page-dashboard.active-page")
         self.assertFalse(self.page.locator("#compile-button").is_visible())
 
-        for width, height in ((820, 1000), (390, 844)):
+        for width, height in ((1280, 800), (820, 1000), (390, 844)):
             self.page.set_viewport_size({"width": width, "height": height})
             self.page.wait_for_timeout(200)
             overflow = self.page.evaluate(
@@ -224,7 +201,12 @@ class FrontendBrowserTests(unittest.TestCase):
         )
         self.assertEqual(labels, {"full": "none", "short": "block"})
 
+        self.page.click('.nav-item[data-page="benchmark"]')
+        self.page.wait_for_selector("#page-benchmark.active-page")
+        self.assertFalse(self.page.locator("#compile-button").is_visible())
+
         self.page.click('.nav-item[data-page="results"]')
+        self.page.wait_for_selector("#page-results.active-page")
         self.assertFalse(self.page.locator("#compile-button").is_visible())
 
         audit = self.page.evaluate(
@@ -318,6 +300,435 @@ class FrontendBrowserTests(unittest.TestCase):
         )
         self.assertEqual(audit, [])
 
+    def test_benchmark_state_machine_updates_results_and_persists_settings(self):
+        result = {
+            "parameters": {
+                "alunos": 1,
+                "atividades": 2,
+                "total_atividades": 2,
+                "nucleos_solicitados": 1,
+                "nucleos_utilizados": 1,
+                "fractais": 0,
+                "repeticoes": 1,
+            },
+            "warnings": [],
+            "sequential_seconds": 0.2,
+            "parallel_seconds": 0.1,
+            "speedup": 2.0,
+            "efficiency": 2.0,
+            "efficiency_percent": 200.0,
+            "sequential_samples": [0.2],
+            "parallel_samples": [0.1],
+            "cores": [
+                {
+                    "core": 1,
+                    "busy_seconds": 0.1,
+                    "utilization_percent": 100.0,
+                    "task_count": 2,
+                }
+            ],
+            "tasks": [
+                {
+                    "task_id": 0,
+                    "task": "activity",
+                    "core": 1,
+                    "units": 1,
+                    "median_seconds": 0.05,
+                }
+            ],
+        }
+
+        def handle_benchmark(route):
+            url = route.request.url
+            if route.request.method == "POST" and url.endswith("/api/benchmark"):
+                route.fulfill(
+                    status=202,
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "job_id": "job-test",
+                            "status_url": "/api/benchmark/job-test",
+                            "csv_url": "/api/benchmark/job-test/csv",
+                        }
+                    ),
+                )
+                return
+            if "/api/benchmark/job-test" in url:
+                route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps(
+                        {
+                            "job_id": "job-test",
+                            "status": "completed",
+                            "state": "concluído",
+                            "progress": 100,
+                            "message": "Benchmark concluído",
+                            "result": result,
+                            "csv_url": "/api/benchmark/job-test/csv",
+                        }
+                    ),
+                )
+                return
+            route.continue_()
+
+        self.page.route("**/api/benchmark**", handle_benchmark)
+        try:
+            self.page.goto(f"{self.base_url}/", wait_until="domcontentloaded")
+            self.page.wait_for_function(
+                "!document.getElementById('benchmark-hardware').textContent.includes('Detectando')"
+            )
+            self.assertFalse(self.page.locator("#benchmark-run").count())
+            self.page.fill("#benchmark-students", "1")
+            self.page.fill("#benchmark-activities", "2")
+            self.page.fill("#benchmark-repetitions", "1")
+            self.page.click("#panel-run-benchmark")
+            self.page.wait_for_selector("#page-benchmark.active-page")
+            self.page.wait_for_function(
+                "document.getElementById('benchmark-state').textContent === 'Concluído'"
+            )
+            self.assertNotEqual(
+                self.page.locator("#metric-speedup").text_content(), "—"
+            )
+            self.assertFalse(self.page.locator("#benchmark-results").is_hidden())
+            self.assertGreaterEqual(
+                self.page.locator("#benchmark-cores-bars .core-bar-row").count(), 1
+            )
+            self.assertGreaterEqual(
+                self.page.locator("#benchmark-tasks-result tr").count(), 1
+            )
+            stored_history = self.page.evaluate(
+                "() => JSON.parse(localStorage.getItem('minipar-benchmark-history'))"
+            )
+            self.assertGreaterEqual(len(stored_history), 1)
+            self.assertFalse(self.page.locator("#benchmark-history").is_hidden())
+            self.assertGreaterEqual(
+                self.page.locator("#benchmark-history-list .benchmark-history-row").count(),
+                1,
+            )
+
+            self.page.reload(wait_until="domcontentloaded")
+            self.page.wait_for_selector("#benchmark-history:not([hidden])")
+            self.page.wait_for_function(
+                "document.getElementById('benchmark-state').textContent === 'Concluído'"
+            )
+            self.assertGreaterEqual(
+                self.page.locator("#benchmark-history-list .benchmark-history-row").count(),
+                1,
+            )
+
+            self.page.goto(
+                f"{self.base_url}/configuracoes", wait_until="domcontentloaded"
+            )
+            self.page.wait_for_function(
+                "document.getElementById('settings-students')?.value === '1'"
+            )
+
+            self.page.goto(f"{self.base_url}/", wait_until="domcontentloaded")
+            self.page.wait_for_function(
+                "document.getElementById('panel-benchmark-speedup')?.textContent !== '—'"
+            )
+            self.assertIn(
+                "2.000",
+                self.page.locator("#panel-benchmark-speedup").text_content(),
+            )
+        finally:
+            self.page.unroute("**/api/benchmark**", handle_benchmark)
+
+    def test_benchmark_tasks_paginate_15_rows(self):
+        tasks = [
+            {
+                "task_id": index,
+                "task": "activity",
+                "core": (index % 2) + 1,
+                "units": 1,
+                "median_seconds": 0.01,
+            }
+            for index in range(140)
+        ]
+        result = {
+            "parameters": {
+                "alunos": 35,
+                "atividades": 4,
+                "total_atividades": 140,
+                "nucleos_solicitados": 2,
+                "nucleos_utilizados": 2,
+                "fractais": 0,
+                "repeticoes": 1,
+            },
+            "warnings": [],
+            "sequential_seconds": 0.4,
+            "parallel_seconds": 0.2,
+            "speedup": 2.0,
+            "efficiency": 1.0,
+            "efficiency_percent": 100.0,
+            "cores": [
+                {
+                    "core": 1,
+                    "busy_seconds": 0.1,
+                    "utilization_percent": 50.0,
+                    "task_count": 70,
+                },
+                {
+                    "core": 2,
+                    "busy_seconds": 0.1,
+                    "utilization_percent": 50.0,
+                    "task_count": 70,
+                },
+            ],
+            "tasks": tasks,
+        }
+
+        self.page.goto(f"{self.base_url}/benchmark", wait_until="domcontentloaded")
+        self.page.evaluate(
+            """(result) => {
+                localStorage.setItem('minipar-benchmark-history', JSON.stringify([
+                    {id: 'bench-pagination', result, csv_url: null, completed_at: 1760000000000}
+                ]));
+                localStorage.removeItem('minipar-benchmark-last');
+            }""",
+            result,
+        )
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_selector("#benchmark-results:not([hidden])")
+
+        self.assertEqual(self.page.locator("#benchmark-tasks-result tr").count(), 15)
+        self.assertFalse(self.page.locator("#benchmark-tasks-pagination").is_hidden())
+        self.assertIn("1 de 10", self.page.locator("#benchmark-tasks-page").text_content())
+        self.assertEqual(self.page.locator("#benchmark-tasks-pages .pagination-page").count(), 5)
+        self.assertEqual(
+            self.page.locator("#benchmark-tasks-pages .pagination-page").nth(0).text_content(),
+            "1",
+        )
+        self.assertEqual(
+            self.page.locator("#benchmark-tasks-pages .pagination-page").nth(4).text_content(),
+            "5",
+        )
+
+        self.page.click("#benchmark-tasks-next")
+        self.assertEqual(self.page.locator("#benchmark-tasks-result tr").count(), 15)
+        self.assertIn("2 de 10", self.page.locator("#benchmark-tasks-page").text_content())
+        self.assertEqual(
+            self.page.locator("#benchmark-tasks-pages .pagination-page").nth(0).text_content(),
+            "2",
+        )
+        self.assertEqual(
+            self.page.locator("#benchmark-tasks-pages .pagination-page").nth(4).text_content(),
+            "6",
+        )
+
+        self.page.click("#benchmark-tasks-next")
+        self.assertEqual(self.page.locator("#benchmark-tasks-result tr").count(), 15)
+        self.assertIn("3 de 10", self.page.locator("#benchmark-tasks-page").text_content())
+        self.assertEqual(
+            self.page.locator("#benchmark-tasks-pages .pagination-page").nth(0).text_content(),
+            "3",
+        )
+        self.assertEqual(
+            self.page.locator("#benchmark-tasks-pages .pagination-page").nth(4).text_content(),
+            "7",
+        )
+
+    def test_benchmark_activity_limit_adjusts_pair(self):
+        self.page.goto(f"{self.base_url}/benchmark", wait_until="domcontentloaded")
+        self.page.wait_for_selector("#benchmark-run")
+        self.page.evaluate(
+            """() => {
+                const range = document.getElementById('benchmark-students-range');
+                range.value = '2000';
+                range.dispatchEvent(new Event('input', {bubbles: true}));
+            }"""
+        )
+        self.assertEqual(self.page.locator("#benchmark-students").input_value(), "2000")
+        self.assertEqual(self.page.locator("#benchmark-activities").input_value(), "1")
+        self.assertEqual(self.page.locator("#benchmark-activities-range").input_value(), "1")
+
+        self.page.evaluate(
+            """() => {
+                const range = document.getElementById('benchmark-activities-range');
+                range.value = '2000';
+                range.dispatchEvent(new Event('input', {bubbles: true}));
+            }"""
+        )
+        self.assertEqual(self.page.locator("#benchmark-students").input_value(), "1")
+        self.assertEqual(self.page.locator("#benchmark-activities").input_value(), "2000")
+
+        self.page.goto(f"{self.base_url}/configuracoes", wait_until="domcontentloaded")
+        self.page.wait_for_selector("#save-settings")
+        self.page.evaluate(
+            """() => {
+                const range = document.getElementById('settings-activities-range');
+                range.value = '2000';
+                range.dispatchEvent(new Event('input', {bubbles: true}));
+            }"""
+        )
+        self.assertEqual(self.page.locator("#settings-students").input_value(), "1")
+        self.assertEqual(self.page.locator("#settings-activities").input_value(), "2000")
+
+    def test_settings_persist_after_reload(self):
+        self.page.goto(f"{self.base_url}/configuracoes", wait_until="domcontentloaded")
+        self.page.fill("#settings-students", "7")
+        self.page.fill("#settings-activities", "3")
+        self.page.select_option("#settings-fractals", "1")
+        self.page.fill("#settings-repetitions", "2")
+        self.page.select_option("#settings-optimization", "O2")
+        self.page.click("#save-settings")
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_function(
+            """() => {
+                return document.getElementById('settings-students')?.value === '7' &&
+                    document.getElementById('settings-activities')?.value === '3' &&
+                    document.getElementById('settings-fractals')?.value === '1' &&
+                    document.getElementById('settings-repetitions')?.value === '2' &&
+                    document.getElementById('settings-optimization')?.value === 'O2';
+            }"""
+        )
+        stored = self.page.evaluate(
+            "() => JSON.parse(localStorage.getItem('minipar-settings'))"
+        )
+        self.assertEqual(stored["students"], 7)
+        self.assertEqual(stored["optimization"], "O2")
+
+    def test_compiler_results_page_reads_persisted_history(self):
+        history = [
+            {
+                "file": "programa-a.mp",
+                "source": "SEQ\n    print(42)\n",
+                "inputs": "",
+                "optimization": "O0",
+                "success": True,
+                "time": 0.125,
+                "diagnosticos": [],
+                "execution": {"stdout": "42\n", "stderr": "", "exit_code": 0},
+                "cpp": "int main() { return 0; }",
+                "compileResult": {
+                    "tokens": [
+                        {"type": "KEYWORD", "lexeme": "SEQ", "line": 1, "column": 1},
+                        {"type": "IDENT", "lexeme": "print", "line": 2, "column": 5},
+                    ],
+                    "ast": {"tipo": "Programa", "line": 1, "column": 1},
+                    "tabela_simbolos": {"symbols": []},
+                    "tac": "t0 = 42\nprint t0",
+                    "tac_origin": [{"generated_line": 1, "source_line": 2}],
+                    "cpp": "int main() { return 0; }",
+                    "cpp_origin": [{"generated_line": 1, "source_line": 2}],
+                },
+                "created_at": 1_760_000_000_000,
+            },
+            {
+                "file": "programa-b.mp",
+                "source": "SEQ\n    var x = \n",
+                "inputs": "7",
+                "optimization": "O2",
+                "success": False,
+                "time": 0.0,
+                "diagnosticos": [
+                    {"header": "Erro sintático", "line": 2, "column": 5}
+                ],
+                "execution": None,
+                "cpp": "",
+                "created_at": 1_760_000_100_000,
+            },
+        ]
+        self.page.goto(f"{self.base_url}/resultados", wait_until="domcontentloaded")
+        self.page.evaluate(
+            "(history) => localStorage.setItem('minipar-compiler-history', JSON.stringify(history))",
+            history,
+        )
+        self.page.reload(wait_until="domcontentloaded")
+        self.page.wait_for_selector("#compiler-content:not([hidden])")
+        self.assertEqual(self.page.locator("#compiler-total").text_content(), "2")
+        self.assertEqual(self.page.locator("#compiler-success").text_content(), "1")
+        self.assertEqual(self.page.locator("#compiler-errors").text_content(), "1")
+        self.assertEqual(
+            self.page.locator("#compiler-history-list .history-row").count(), 2
+        )
+        self.page.locator("#compiler-history-list .history-row").nth(1).click()
+        self.page.wait_for_url(
+            f"{self.base_url}/resultados/1760000100000", wait_until="domcontentloaded"
+        )
+        self.page.wait_for_selector("#result-detail .result-ide-grid")
+        detail = self.page.locator("#result-detail").text_content()
+        self.assertIn("programa-b.mp", detail)
+        self.assertIn("SOMENTE LEITURA", detail)
+        self.page.click('[data-result-phase="code"]')
+        self.page.wait_for_selector("#result-detail .phase-diagnostics")
+        self.assertIn(
+            "Erro sintático",
+            self.page.locator("#result-detail .phase-diagnostics").text_content(),
+        )
+
+        self.page.goto(
+            f"{self.base_url}/resultados/1760000000000", wait_until="domcontentloaded"
+        )
+        self.page.wait_for_selector("#result-detail .result-ide-grid")
+        self.assertIn("42", self.page.locator("#result-detail").text_content())
+        for phase, title, expected in (
+            ("tokens", "Tokens", "KEYWORD"),
+            ("ast", "AST", "Programa"),
+            ("symbols", "Tabela de símbolos", "symbols"),
+            ("tac", "TAC", "Comparar TAC"),
+            ("cpp", "C++", "Código C++ gerado"),
+            ("execution", "Execução", "STDOUT"),
+        ):
+            with self.subTest(phase=phase):
+                self.page.click(f'[data-result-phase="{phase}"]')
+                self.page.wait_for_selector(f'[data-result-phase="{phase}"].active')
+                self.assertEqual(
+                    self.page.locator("#result-phase-title").text_content(), title
+                )
+                self.assertIn(
+                    expected,
+                    self.page.locator("#result-phase-content").text_content(),
+                )
+
+        self.page.goto(f"{self.base_url}/#result-detail", wait_until="domcontentloaded")
+        self.page.wait_for_url(
+            f"{self.base_url}/resultados/1760000000000", wait_until="domcontentloaded"
+        )
+        self.page.wait_for_selector("#result-detail .result-ide-grid")
+
+    def test_compiled_run_keeps_all_detail_phases(self):
+        self._open_ide()
+        self._run_simple_program()
+        self.page.goto(f"{self.base_url}/resultados", wait_until="domcontentloaded")
+        self.page.wait_for_selector("#compiler-history-list .history-row")
+        self.page.locator("#compiler-history-list .history-row").first.click()
+        self.page.wait_for_selector("#result-detail .result-ide-grid")
+        self.assertIn("/resultados/run-", self.page.url)
+
+        for phase, title, expected in (
+            ("tokens", "Tokens", "total"),
+            ("ast", "AST", "Program"),
+            ("symbols", "Tabela de símbolos", "total"),
+            ("tac", "TAC", "Comparar TAC"),
+            ("cpp", "C++", "Código C++ gerado"),
+            ("execution", "Execução", "STDOUT"),
+        ):
+            with self.subTest(phase=phase):
+                self.page.click(f'[data-result-phase="{phase}"]')
+                self.page.wait_for_selector(f'[data-result-phase="{phase}"].active')
+                self.assertEqual(
+                    self.page.locator("#result-phase-title").text_content(), title
+                )
+                content = self.page.locator("#result-phase-content").text_content()
+                self.assertIn(expected, content)
+                self.assertNotIn("Dados não armazenados", content)
+
+    def test_benchmark_screens_fit_1280_and_tablet(self):
+        for path in ("/", "/benchmark", "/resultados", "/configuracoes"):
+            self.page.goto(f"{self.base_url}{path}", wait_until="domcontentloaded")
+            for width, height in ((1280, 800), (820, 1000)):
+                with self.subTest(path=path, width=width):
+                    self.page.set_viewport_size({"width": width, "height": height})
+                    self.page.wait_for_timeout(200)
+                    overflow = self.page.evaluate(
+                        "document.documentElement.scrollWidth - window.innerWidth"
+                    )
+                    self.assertLessEqual(
+                        overflow, 1, f"overflow horizontal em {path} @ {width}px"
+                    )
+
     def test_pages_load_without_external_requests(self):
         external_requests = []
 
@@ -334,13 +745,16 @@ class FrontendBrowserTests(unittest.TestCase):
 
         self.page.route("**/*", handle_route)
         try:
-            for path in ("/", "/modelo-antigo"):
+            for path in ("/", "/benchmark", "/resultados", "/configuracoes", "/editor", "/modelo-antigo"):
                 self.page.goto(
                     f"{self.base_url}{path}", wait_until="domcontentloaded"
                 )
-                self.page.wait_for_function(
-                    "typeof CodeMirror === 'function'"
-                )
+                if path == "/editor":
+                    self.page.wait_for_function(
+                        "typeof CodeMirror === 'function'"
+                    )
+                else:
+                    self.page.wait_for_selector("body")
         finally:
             self.page.unroute("**/*", handle_route)
 

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Editor MiniPar — Laboratório de Compiladores{% endblock %}
+{% block page_label %}Editor MiniPar{% endblock %}
+{% block current_file %}nenhum programa{% endblock %}
+
+{% block topbar_actions %}
+<button id="compile-button" class="button button-primary compile-button" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg><span class="button-label">Compilar e executar</span><span class="button-label-short">Executar</span></button>
+{% endblock %}
+
+{% block content %}
+<section id="page-ide" class="page active-page ide-page">
+    <div class="page-intro ide-intro">
+        <div><p class="kicker">AMBIENTE DE APRENDIZAGEM</p><h1>Editor MiniPar</h1><p class="intro-copy">Compile o programa e avance por uma fase de cada vez.</p></div>
+        <div class="ide-toolbar">
+            <label for="example-select">EXEMPLO</label>
+            <select id="example-select" class="select-control"><option>Carregando...</option></select>
+            <label for="optimization">TAC</label>
+            <select id="optimization" class="select-control compact"><option value="O0">O0</option><option value="O1">O1</option><option value="O2">O2</option><option value="O3">O3</option></select>
+            <button id="clear-button" class="button button-outline"><svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>Limpar</button>
+            <a class="button button-outline" href="/resultados">Resultados</a>
+        </div>
+    </div>
+    <div class="ide-grid">
+        <article class="editor-panel card">
+            <div class="panel-title"><span><span class="panel-mark"><svg class="icon" aria-hidden="true"><use href="#icon-code"></use></svg></span> Código-fonte</span><small>MINIPAR · EDITÁVEL</small></div>
+            <textarea id="source-editor" aria-label="Editor de código MiniPar"></textarea>
+            <div class="input-area"><label for="program-input">ENTRADAS DO PROGRAMA <span>stdin · uma por linha</span></label><textarea id="program-input" class="program-input" placeholder="42"></textarea></div>
+            <div class="editor-actions"><button class="button button-primary compile-button" id="editor-compile" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg><span class="button-label">Compilar e executar</span><span class="button-label-short">Executar</span></button><span>Ctrl + Enter</span></div>
+        </article>
+        <article class="phase-panel card">
+            <div class="panel-title"><span><span class="panel-mark"><svg class="icon" aria-hidden="true"><use href="#icon-layers"></use></svg></span> <b id="phase-title">Código</b></span><small id="phase-count">1 de 7</small></div>
+            <nav class="phase-nav" aria-label="Fases do compilador">
+                <button type="button" class="step active" data-phase="code" aria-controls="phase-content"><span>01</span><b>Código</b></button>
+                <button type="button" class="step" data-phase="tokens" aria-controls="phase-content"><span>02</span><b>Tokens</b></button>
+                <button type="button" class="step" data-phase="ast" aria-controls="phase-content"><span>03</span><b>AST</b></button>
+                <button type="button" class="step" data-phase="symbols" aria-controls="phase-content"><span>04</span><b>Símbolos</b></button>
+                <button type="button" class="step" data-phase="tac" aria-controls="phase-content"><span>05</span><b>TAC</b></button>
+                <button type="button" class="step" data-phase="cpp" aria-controls="phase-content"><span>06</span><b>C++</b></button>
+                <button type="button" class="step" data-phase="execution" aria-controls="phase-content"><span>07</span><b>Execução</b></button>
+            </nav>
+            <div id="phase-content" class="phase-content" role="region" aria-live="polite" aria-labelledby="phase-title"></div>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/codemirror/5.65.13/codemirror.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/codemirror/5.65.13/mode/clike/clike.min.js') }}"></script>
+<script src="{{ url_for('static', filename='ast_view.js') }}"></script>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+{% endblock %}

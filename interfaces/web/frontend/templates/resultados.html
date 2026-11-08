@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Resultados do compilador — MiniPar 2026.2{% endblock %}
+{% block page_label %}Resultados do compilador{% endblock %}
+{% block current_file %}execuções de código{% endblock %}
+
+{% block content %}
+<section id="page-results" class="page active-page">
+    <div class="page-intro">
+        <div>
+            <p class="kicker">EXECUÇÕES DO COMPILADOR</p>
+            <h1>Resultados do compilador</h1>
+            <p class="intro-copy">Consulte o histórico das compilações e execuções feitas no editor, com código-fonte, diagnósticos e saída do programa.</p>
+        </div>
+        <div class="intro-actions">
+            <a class="button button-primary" href="/editor">Abrir editor <span>→</span></a>
+            <button id="compiler-clear" class="button button-outline" type="button">Limpar histórico</button>
+        </div>
+    </div>
+
+    <div class="metric-grid">
+        <div class="metric-card"><span>EXECUÇÕES</span><strong id="compiler-total">—</strong><small>no histórico local</small></div>
+        <div class="metric-card"><span>SUCESSOS</span><strong id="compiler-success" class="success-text">—</strong><small>programas concluídos</small></div>
+        <div class="metric-card"><span>COM ERRO</span><strong id="compiler-errors" class="danger-text">—</strong><small>diagnósticos ou falhas</small></div>
+        <div class="metric-card"><span>ÚLTIMO TEMPO</span><strong id="compiler-last-time">—</strong><small>execução mais recente</small></div>
+    </div>
+
+    <div id="compiler-empty" class="card results-empty">
+        <strong>Nenhuma execução do compilador</strong>
+        <p>Abra o <a href="/editor">Editor MiniPar</a>, compile e execute um programa para preencher este histórico.</p>
+    </div>
+
+    <div id="compiler-content" hidden>
+        <article class="card results-list-card results-list-wide">
+            <div class="card-head"><div><p class="card-eyebrow">HISTÓRICO</p><h2>Execuções recentes</h2></div><span id="compiler-count" class="tag">0</span></div>
+            <p class="card-copy">Selecione uma execução para abrir o resultado preservado em uma página própria.</p>
+            <div id="compiler-history-list"></div>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='compiler-results.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Resultado selecionado — MiniPar 2026.2{% endblock %}
+{% block page_label %}Resultados do compilador{% endblock %}
+{% block current_file %}resultado selecionado{% endblock %}
+
+{% block content %}
+<section id="page-result-detail" class="page active-page">
+    <div class="page-intro ide-intro">
+        <div>
+            <p class="kicker">RESULTADO PRESERVADO</p>
+            <h1>Resultado selecionado</h1>
+            <p class="intro-copy">A mesma visão do Editor MiniPar, sem edição ou execução.</p>
+        </div>
+        <div class="ide-toolbar">
+            <span class="tag">SOMENTE LEITURA</span>
+            <a id="back-to-results" class="button button-outline" href="/resultados"><svg class="icon" aria-hidden="true"><use href="#icon-arrow-left"></use></svg>Voltar ao histórico</a>
+        </div>
+    </div>
+    <div id="result-detail" class="result-detail" data-run-id="{{ run_id }}"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='ast_view.js') }}"></script>
+<script src="{{ url_for('static', filename='compiler-result.js') }}"></script>
+{% endblock %}

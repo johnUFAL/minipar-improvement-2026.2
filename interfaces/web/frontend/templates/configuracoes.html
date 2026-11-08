@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Configurações — MiniPar 2026.2{% endblock %}
+{% block page_label %}Configurações{% endblock %}
+{% block current_file %}parâmetros{% endblock %}
+
+{% block content %}
+<section id="page-configuration" class="page active-page">
+    <div class="page-intro">
+        <div>
+            <p class="kicker">PARÂMETROS DO PROJETO</p>
+            <h1>Configurações</h1>
+            <p class="intro-copy">Organize os parâmetros do benchmark, o nível de otimização do TAC e consulte o hardware detectado.</p>
+        </div>
+        <span class="runtime-chip"><span class="live-dot"></span> Ambiente local</span>
+    </div>
+
+    <article class="card hardware-card">
+        <div class="card-head"><div><p class="card-eyebrow">HARDWARE DETECTADO</p><h2>Capacidade de execução</h2></div><span id="hardware-status" class="tag">Consultando…</span></div>
+        <p class="card-copy">Os valores são lidos do ambiente em que o servidor Flask está rodando. O benchmark nunca solicita mais núcleos do que os disponíveis.</p>
+        <div class="hardware-grid">
+            <div class="hardware-item"><span>NÚCLEOS LÓGICOS</span><strong id="hardware-logical">—</strong></div>
+            <div class="hardware-item"><span>NÚCLEOS DISPONÍVEIS</span><strong id="hardware-available">—</strong></div>
+            <div class="hardware-item"><span>MÁXIMO DO BENCHMARK</span><strong id="hardware-max">—</strong></div>
+        </div>
+    </article>
+
+    <div class="settings-stack">
+        <article class="card settings-section-card" aria-labelledby="settings-benchmark-title">
+            <div class="card-head">
+                <div><p class="card-eyebrow">BENCHMARK</p><h2 id="settings-benchmark-title">Carga e paralelismo</h2></div>
+                <span class="tag">MEDIÇÃO REAL</span>
+            </div>
+            <p class="card-copy">Defina quantos núcleos usar e o tamanho da carga. Estes valores alimentam o Painel e a página de Benchmark.</p>
+
+            <div class="settings-group">
+                <div class="settings-group-head">
+                    <div>
+                        <h3>Núcleos utilizados</h3>
+                        <p>O limite superior é o número real de núcleos disponíveis detectado pelo servidor.</p>
+                    </div>
+                    <div class="range-field">
+                        <input id="settings-cores" type="range" min="1" max="1" value="1" step="1" data-output="settings-cores-value" aria-label="Núcleos utilizados">
+                        <output id="settings-cores-value" class="mono-value">1</output>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <div class="settings-group-head">
+                    <div>
+                        <h3>Parâmetros da carga</h3>
+                        <p>Alunos e atividades geram as tarefas; os fractais adicionam trabalho determinístico.</p>
+                    </div>
+                </div>
+                <div class="settings-grid range-grid">
+                    <label class="benchmark-field">
+                        <span class="benchmark-field-head"><span>Alunos</span><input id="settings-students" class="number-input" type="number" min="1" max="2000" value="40"></span>
+                        <input id="settings-students-range" class="range-input" type="range" min="1" max="2000" step="1" value="40" data-sync="settings-students" aria-label="Alunos">
+                    </label>
+                    <label class="benchmark-field">
+                        <span class="benchmark-field-head"><span>Atividades por aluno</span><input id="settings-activities" class="number-input" type="number" min="1" max="2000" value="4"></span>
+                        <input id="settings-activities-range" class="range-input" type="range" min="1" max="2000" step="1" value="4" data-sync="settings-activities" aria-label="Atividades por aluno">
+                    </label>
+                    <label class="benchmark-field">
+                        <span class="benchmark-field-head"><span>Fractais</span></span>
+                        <select id="settings-fractals" class="select-control"><option value="0">Nenhum</option><option value="1">Mandelbrot</option><option value="2">Mandelbrot e Sierpinski</option></select>
+                    </label>
+                    <label class="benchmark-field">
+                        <span class="benchmark-field-head"><span>Repetições</span><input id="settings-repetitions" class="number-input" type="number" min="1" max="9" value="3"></span>
+                        <input id="settings-repetitions-range" class="range-input" type="range" min="1" max="9" step="1" value="3" data-sync="settings-repetitions" aria-label="Repetições">
+                    </label>
+                </div>
+            </div>
+        </article>
+
+        <article class="card settings-section-card" aria-labelledby="settings-compiler-title">
+            <div class="card-head">
+                <div><p class="card-eyebrow">COMPILADOR</p><h2 id="settings-compiler-title">Otimização e runtime</h2></div>
+                <span class="tag">TAC → C++</span>
+            </div>
+            <p class="card-copy">Ajustes aplicados às compilações feitas no editor e ao código C++ gerado.</p>
+
+            <div class="settings-group">
+                <div class="settings-group-head">
+                    <div>
+                        <h3>Nível de otimização</h3>
+                        <p>Escolha entre preservar o TAC original ou aplicar simplificações antes do C++.</p>
+                    </div>
+                    <select id="settings-optimization" class="select-control">
+                        <option value="O0">O0 — sem otimização</option>
+                        <option value="O1">O1 — simplificação</option>
+                        <option value="O2">O2 — código morto</option>
+                        <option value="O3">O3 — máxima</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <div class="settings-group-head">
+                    <div>
+                        <h3>Threads C++</h3>
+                        <p>O código gerado usa <code>std::thread</code> e fork/join local no runtime.</p>
+                    </div>
+                    <span class="tag tag-success">IMPLEMENTAÇÃO REAL</span>
+                </div>
+            </div>
+        </article>
+
+        <div class="settings-actions card">
+            <button id="restore-settings" class="button button-danger" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"></use></svg>Restaurar padrão</button>
+            <span id="settings-saved" class="saved-state"><span class="live-dot"></span> Configuração salva</span>
+            <button id="save-settings" class="button button-primary" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-check"></use></svg>Salvar configurações</button>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='benchmark.js') }}"></script>
+{% endblock %}

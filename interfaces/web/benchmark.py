@@ -283,8 +283,10 @@ def _program(
         tac.append(f"par_begin {core_count}")
         for core in range(1, core_count + 1):
             tac.extend((
-                f"start_{core}:int = total_activities * {core - 1} / {core_count}",
-                f"end_{core}:int = total_activities * {core} / {core_count}",
+                f"start_numerator_{core}:int = total_activities * {core - 1}",
+                f"end_numerator_{core}:int = total_activities * {core}",
+                f"start_{core}:int = start_numerator_{core} / {core_count}",
+                f"end_{core}:int = end_numerator_{core} / {core_count}",
                 f"count_{core}:int = end_{core} - start_{core}",
             ))
         for core in range(1, core_count + 1):
