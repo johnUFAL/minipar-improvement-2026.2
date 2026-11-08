@@ -48,6 +48,32 @@ class WebCompileTests(unittest.TestCase):
         self.assertNotIn('dashboard-pipeline-card', page)
         self.assertNotIn('id="test-list"', page)
 
+    def test_editor_assets_are_served_locally_for_both_interfaces(self):
+        for route in ("/", "/modelo-antigo"):
+            with self.subTest(route=route):
+                response = self.client.get(route)
+                self.assertEqual(response.status_code, 200)
+                page = response.get_data(as_text=True)
+                self.assertNotIn("https://", page)
+                self.assertIn(
+                    "/static/vendor/codemirror/lib/codemirror.js", page
+                )
+                self.assertIn(
+                    "/static/vendor/codemirror/mode/clike/clike.js", page
+                )
+
+        for asset in (
+            "vendor/codemirror/lib/codemirror.js",
+            "vendor/codemirror/lib/codemirror.css",
+            "vendor/codemirror/mode/clike/clike.js",
+            "vendor/codemirror/theme/dracula.css",
+        ):
+            with self.subTest(asset=asset):
+                self.assertEqual(
+                    self.client.get(f"/static/{asset}").status_code,
+                    200,
+                )
+
     def test_new_interface_contains_origin_highlight_contract(self):
         response = self.client.get("/")
 
@@ -242,7 +268,7 @@ class WebCompileTests(unittest.TestCase):
         cases = {
             "t02_fatorial_fibonacci_par.mp": (
                 [],
-                ["Fibonacci:", "Fatorial de 5: 120"],
+                ["FATORIAL_INICIO", "FIBONACCI_INICIO", "Fatorial de 10: 3628800", "FIBONACCI 34"],
             ),
             "t03_neuronio.mp": (
                 [],

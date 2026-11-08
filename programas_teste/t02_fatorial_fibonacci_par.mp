@@ -1,26 +1,39 @@
+func fatorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * fatorial(n - 1);
+}
+
+func fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
 par {
     seq {
-        var n = 5;
-        var fat = 1;
-        var i = 1;
-        while (i <= n) {
-            fat = fat * i;
-            i = i + 1;
+        var inicio_fatorial = clock();
+        print("FATORIAL_INICIO", inicio_fatorial);
+        var resultado = fatorial(10);
+        print("Fatorial de 10:", resultado);
+        while (clock() - inicio_fatorial < 0.25) {
+            var manter_ocupado = 1;
         }
-        print("Fatorial de 5:", fat);
+        print("FATORIAL_FIM", clock());
     }
     seq {
-        var limite = 8;
-        var a = 0;
-        var b = 1;
-        var i = 0;
-        print("Fibonacci:");
-        while (i < limite) {
-            print(a);
-            var prox = a + b;
-            a = b;
-            b = prox;
-            i = i + 1;
+        var inicio_fibonacci = clock();
+        print("FIBONACCI_INICIO", inicio_fibonacci);
+        var indice = 0;
+        while (indice < 10) {
+            print("FIBONACCI", fibonacci(indice));
+            indice = indice + 1;
         }
+        while (clock() - inicio_fibonacci < 0.25) {
+            var manter_ocupado = 1;
+        }
+        print("FIBONACCI_FIM", clock());
     }
 }

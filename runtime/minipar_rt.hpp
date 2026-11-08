@@ -472,12 +472,16 @@ void __minipar_array_set(Container& values, Index index, Value&& value) {
 
     if (invalid) {
         std::cerr << "Erro de execucao: indice " << index
-                  << " invalido para atribuicao em array." << std::endl;
+                  << " fora dos limites (tamanho " << values.size() << ")."
+                  << std::endl;
         std::exit(EXIT_FAILURE);
     }
     const auto converted = static_cast<std::size_t>(index);
     if (converted >= values.size()) {
-        values.resize(converted + 1);
+        std::cerr << "Erro de execucao: indice " << index
+                  << " fora dos limites (tamanho " << values.size() << ")."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
     }
     values[converted] = std::forward<Value>(value);
 }

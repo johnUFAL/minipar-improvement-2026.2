@@ -24,5 +24,9 @@ seq {
     var resultado = 0.0;
     dados.receive(resposta_op, r1, r2, resultado);
 
-    print("Resultado:", format_float(resultado, 1));
+    if (resposta_op == "DIVISAO_POR_ZERO") {
+        print("Erro: divisao por zero.");
+    } else {
+        print("Resultado:", format_float(resultado, 1));
+    }
 }

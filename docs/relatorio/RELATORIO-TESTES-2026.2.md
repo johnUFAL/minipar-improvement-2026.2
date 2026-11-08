@@ -159,6 +159,29 @@ As saídas de T2–T7 foram congeladas em
 `tests/integracao/expected_results/` e são comparadas após normalização de
 CRLF.
 
+### 5.1 Comparadores de regressão
+
+Os testes de aceitação em `tests/programas/test_programas.py` compartilham as
+rotinas do runner `scripts/run_testes_2026_2.py`. A normalização converte CRLF
+e CR em LF e remove espaços em branco no começo/fim da saída. O comparador é
+específico por programa:
+
+- **T2:** linhas da referência sem ordem global, pois os ramos de `par`
+  intercalam sua saída; a integração também verifica a ordem da sequência de
+  Fibonacci dentro do respectivo ramo e mede sobreposição em 20 execuções.
+- **T3:** linhas-chave das iterações 1, 50 e 51 e conclusão do treinamento,
+  sem exigir igualdade com o histórico completo.
+- **T4:** exatamente quatro previsões numéricas, finitas e no intervalo
+  `[0, 1]`; os valores não são comparados byte a byte porque a rede usa pesos
+  pseudoaleatórios.
+- **T5–T7:** saída completa exata após normalização.
+- **T1:** valida troca cliente/servidor, resultado aritmético e erro de
+  divisão por zero; a ordem de linhas de processos distintos não é comparada.
+
+O CI executa a suíte com relatório de cobertura (`coverage.xml` e resumo no
+log). A porcentagem observada varia conforme a versão de Python e deve ser
+conferida no resultado da execução; não há ainda um limite mínimo configurado.
+
 ---
 
 ## 6. T8–T10 — fork/join em núcleos

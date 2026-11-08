@@ -1,0 +1,2 @@
+SEQ
+    return 1

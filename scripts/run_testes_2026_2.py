@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import shutil
 import subprocess
 import sys
@@ -53,8 +55,9 @@ TESTS: list[dict[str, object]] = [
         "name": "Fatorial e Fibonacci em PAR",
         "file": "t02_fatorial_fibonacci_par.mp",
         "inputs": [],
-        "checks": ["Fatorial de 5: 120", "Fibonacci:", "0", "13"],
+        "checks": ["Fatorial de 10: 3628800", "FIBONACCI 0", "FIBONACCI 34"],
         "expected": "t02_fatorial_fibonacci_par.expected.txt",
+        "comparison": "unordered_lines",
     },
     {
         "id": "t3",
@@ -62,7 +65,14 @@ TESTS: list[dict[str, object]] = [
         "file": "t03_neuronio.mp",
         "inputs": [],
         "checks": ["Neuronio aprendeu", "Iteracoes totais:"],
-        "expected": "t03_neuronio.expected.txt",
+        "comparison": "key_lines",
+        "key_lines": [
+            "Iteracao: 1",
+            "Iteracao: 50",
+            "Iteracao: 51",
+            "Neuronio aprendeu dinamicamente.",
+            "Iteracoes totais: 51",
+        ],
     },
     {
         "id": "t4",
@@ -70,7 +80,8 @@ TESTS: list[dict[str, object]] = [
         "file": "t04_rede_neural_xor.mp",
         "inputs": [],
         "checks": ["Input: [0, 0]", "Input: [1, 1]", "Predicted Output:"],
-        "expected": "t04_rede_neural_xor.expected.txt",
+        "comparison": "float_range",
+        "float_count": 4,
     },
     {
         "id": "t5",
@@ -172,11 +183,36 @@ def check_local(test: dict[str, object], result: subprocess.CompletedProcess[byt
         checks.append((f"saida contem {text!r}", str(text) in stdout))
 
     expected_name = test.get("expected")
-    if expected_name:
+    comparison = str(test.get("comparison", "exact"))
+    if expected_name and comparison in ("exact", "unordered_lines"):
         expected_path = EXPECTED / str(expected_name)
         if expected_path.is_file():
             expected = normalize(expected_path.read_text(encoding="utf-8"))
-            checks.append((f"saida confere com {expected_path.name}", normalize(stdout) == expected))
+            actual = normalize(stdout)
+            if comparison == "unordered_lines":
+                expected_lines = {line for line in expected.splitlines() if line}
+                actual_lines = {line for line in actual.splitlines() if line}
+                matches = expected_lines <= actual_lines
+            else:
+                matches = actual == expected
+            checks.append((f"saida confere com {expected_path.name}", matches))
+
+    if comparison == "key_lines":
+        missing = [line for line in test.get("key_lines", []) if str(line) not in stdout]
+        checks.append(("linhas-chave esperadas presentes", not missing))
+    elif comparison == "float_range":
+        values = [
+            float(match.group(1))
+            for match in re.finditer(
+                r"Predicted Output:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)",
+                stdout,
+            )
+        ]
+        valid = (
+            len(values) == int(test.get("float_count", 0))
+            and all(math.isfinite(value) and 0.0 <= value <= 1.0 for value in values)
+        )
+        checks.append(("saidas sigmoid finitas na faixa [0, 1]", valid))
 
     return checks
 

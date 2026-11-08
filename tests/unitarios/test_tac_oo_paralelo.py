@@ -46,8 +46,11 @@ def test_parallel_factorial_and_fibonacci_have_distinct_tac_branches() -> None:
     ]
     assert len(branches) == 2
     assert branches[0] != branches[1]
-    assert "Fatorial de 5: 120" in output
-    assert all(str(value) in output for value in (0, 1, 2, 3, 5, 8, 13))
+    assert "Fatorial de 10: 3628800" in output
+    assert all(
+        f"FIBONACCI {value}" in output
+        for value in (0, 1, 2, 3, 5, 8, 13, 21, 34)
+    )
 
 
 def test_calculator_uses_send_recv_and_simulated_fifo_channels() -> None:

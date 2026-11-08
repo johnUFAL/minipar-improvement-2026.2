@@ -182,6 +182,7 @@ def run_t1(operacao: str, v1: str, v2: str, keep_temp: bool, timeout: float) -> 
         print("--- stderr do cliente ---")
         print(client.stderr.rstrip())
 
+    division_by_zero = operacao == "/" and float(v2) == 0
     expected_result = {
         "+": float(v1) + float(v2),
         "-": float(v1) - float(v2),
@@ -192,13 +193,18 @@ def run_t1(operacao: str, v1: str, v2: str, keep_temp: bool, timeout: float) -> 
         print(f"[T1] ERRO: operacao invalida '{operacao}'.", file=sys.stderr)
         return 1
 
-    expected_text = f"Resultado: {expected_result:.1f}"
     checks = {
         "cliente retornou 0": client.returncode == 0,
         "servidor retornou 0": server.returncode == 0,
         "servidor recebeu a requisicao": "Servidor recebeu:" in server_stdout,
-        f"cliente exibiu '{expected_text}'": expected_text in client.stdout,
     }
+    if division_by_zero:
+        checks["cliente exibiu o erro de divisao por zero"] = (
+            "Erro: divisao por zero." in client.stdout
+        )
+    else:
+        expected_text = f"Resultado: {expected_result:.1f}"
+        checks[f"cliente exibiu '{expected_text}'"] = expected_text in client.stdout
 
     print("\n===== VERIFICACOES =====")
     for label, ok in checks.items():

@@ -39,9 +39,15 @@ seq {
     dados.receive(op, v1, v2, ignorado);
 
     print("Servidor recebeu:", op, format_float(v1, 1), format_float(v2, 1));
-    var resultado = calcular(op, v1, v2);
+    var status = "";
+    var resultado = 0.0;
+    if (op == "/" && v2 == 0.0) {
+        status = "DIVISAO_POR_ZERO";
+    } else {
+        resultado = calcular(op, v1, v2);
+    }
     print("Servidor calculou:", format_float(resultado, 1));
 
-    dados.send("", 0.0, 0.0, resultado);
+    dados.send(status, 0.0, 0.0, resultado);
     print("Servidor enviou a resposta.");
 }

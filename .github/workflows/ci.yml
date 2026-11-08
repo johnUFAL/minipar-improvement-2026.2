@@ -39,4 +39,4 @@ jobs:
         run: python -m py_compile benchmarks/*.py
 
       - name: Testes (pytest)
-        run: pytest -v
+        run: pytest -v --cov=components --cov=erros --cov=interfaces --cov-report=term-missing --cov-report=xml --cov-fail-under=80

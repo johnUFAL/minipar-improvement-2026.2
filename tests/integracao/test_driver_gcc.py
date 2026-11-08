@@ -18,6 +18,7 @@ from components.lexico.c_lexico import Lexer
 from components.semantico.c_semantico import SemanticAnalyzer
 from components.sintatico.c_sintatico import Parser
 from components.tac.c_gerador_tac import TACGenerator
+from erros.diagnosticos import DiagnosticBag
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -277,6 +278,161 @@ class DriverGCCIntegrationTests(unittest.TestCase):
                 outputs.append(result.stdout.strip())
 
         self.assertEqual(outputs, [expected, expected])
+
+    @unittest.skipUnless(
+        shutil.which(os.environ.get("CXX", "g++").strip('"')),
+        "g++ is required for native array bounds integration tests",
+    )
+    def test_out_of_bounds_array_read_fails_with_runtime_diagnostic(self) -> None:
+        sources = {
+            "read": "SEQ\n    var valores = [10, 20]\n    print(valores[2])\n",
+            "write": (
+                "SEQ\n"
+                "    var valores = [10, 20]\n"
+                "    valores[2] = 30\n"
+            ),
+        }
+        for operation, source in sources.items():
+            with self.subTest(operation=operation):
+                program = Parser(Lexer(source)).parse()
+                analyzer = SemanticAnalyzer()
+                self.assertTrue(analyzer.analyze(program), analyzer.diagnostics)
+                tac = TACGenerator().generate_text(program)
+                generated_cpp = CppCodeGenerator._generate_cpp(tac)
+
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    cpp_path = Path(temp_dir) / "array_bounds.cpp"
+                    cpp_path.write_text(generated_cpp, encoding="utf-8")
+                    executable = Path(temp_dir) / "array_bounds"
+                    self.assertTrue(
+                        driver_gcc.DriverGCC().compile(
+                            cpp_path, executable, optimization_level="O0"
+                        )
+                    )
+                    result = driver_gcc.DriverGCC().executar(executable)
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(
+                    "Erro de execucao: indice 2 fora dos limites (tamanho 2)",
+                    result.stderr,
+                )
+
+    @unittest.skipUnless(
+        shutil.which(os.environ.get("CXX", "g++").strip('"')),
+        "g++ is required for sanitizer integration tests",
+    )
+    def test_t7_and_out_of_bounds_cases_under_address_and_undefined_sanitizers(
+        self,
+    ) -> None:
+        compiler = shutil.which(os.environ.get("CXX", "g++").strip('"'))
+        assert compiler is not None
+        sanitizer_flags = [
+            "-fsanitize=address,undefined",
+            "-fno-omit-frame-pointer",
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            work = Path(temp_dir)
+            probe = work / "sanitizer_probe.cpp"
+            probe.write_text("int main() { return 0; }\n", encoding="utf-8")
+            probe_result = subprocess.run(
+                [
+                    compiler,
+                    *sanitizer_flags,
+                    str(probe),
+                    "-o",
+                    str(work / "sanitizer_probe"),
+                ],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                check=False,
+            )
+            if probe_result.returncode != 0:
+                self.skipTest(
+                    "Compilador sem suporte a ASan/UBSan: "
+                    + probe_result.stderr.strip()
+                )
+
+            programs = {
+                "t07": (
+                    ROOT
+                    / "programas_teste"
+                    / "t07_quicksort_iterativo_tac.mp"
+                ).read_text(encoding="utf-8"),
+                "out_of_bounds_read": (
+                    "SEQ\n"
+                    "    var valores = [10, 20]\n"
+                    "    print(valores[2])\n"
+                ),
+                "out_of_bounds_write": (
+                    "SEQ\n"
+                    "    var valores = [10, 20]\n"
+                    "    valores[2] = 30\n"
+                ),
+            }
+            for name, source in programs.items():
+                with self.subTest(program=name):
+                    diagnostics = DiagnosticBag(source)
+                    program = Parser(Lexer(source, diagnostics), diagnostics).parse()
+                    self.assertTrue(SemanticAnalyzer(diagnostics).analyze(program))
+                    cpp_path = work / f"{name}.cpp"
+                    cpp_path.write_text(
+                        CppCodeGenerator().generate_source(
+                            TACGenerator().generate_text(program)
+                        ),
+                        encoding="utf-8",
+                    )
+                    executable = work / (
+                        name + (".exe" if os.name == "nt" else "")
+                    )
+                    command = [
+                        compiler,
+                        "-std=c++17",
+                        "-O1",
+                        *sanitizer_flags,
+                        str(cpp_path),
+                        str(ROOT / "runtime" / "canal.cpp"),
+                        str(ROOT / "runtime" / "paralelo.cpp"),
+                        str(ROOT / "runtime" / "worker.cpp"),
+                        "-I",
+                        str(ROOT / "runtime"),
+                        "-o",
+                        str(executable),
+                    ]
+                    if os.name == "nt":
+                        command.append("-lws2_32")
+                    else:
+                        command.append("-pthread")
+                    build = subprocess.run(
+                        command,
+                        capture_output=True,
+                        text=True,
+                        errors="replace",
+                        check=False,
+                    )
+                    self.assertEqual(build.returncode, 0, build.stderr)
+                    result = subprocess.run(
+                        [str(executable)],
+                        capture_output=True,
+                        text=True,
+                        errors="replace",
+                        check=False,
+                        timeout=30,
+                    )
+                    if name == "t07":
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertIn(
+                            "Array ordenado: [5, 12, 33, 61, 98]",
+                            result.stdout,
+                        )
+                        self.assertNotIn("Sanitizer", result.stderr)
+                    else:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn(
+                            "indice 2 fora dos limites (tamanho 2)",
+                            result.stderr,
+                        )
+                        self.assertNotIn("Sanitizer", result.stderr)
 
 
 if __name__ == "__main__":
