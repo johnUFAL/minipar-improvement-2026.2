@@ -318,6 +318,34 @@ class FrontendBrowserTests(unittest.TestCase):
         )
         self.assertEqual(audit, [])
 
+    def test_pages_load_without_external_requests(self):
+        external_requests = []
+
+        def handle_route(route):
+            url = route.request.url
+            if url.startswith(("data:", "blob:", "about:")):
+                route.continue_()
+                return
+            if not url.startswith(self.base_url):
+                external_requests.append(url)
+                route.abort()
+                return
+            route.continue_()
+
+        self.page.route("**/*", handle_route)
+        try:
+            for path in ("/", "/modelo-antigo"):
+                self.page.goto(
+                    f"{self.base_url}{path}", wait_until="domcontentloaded"
+                )
+                self.page.wait_for_function(
+                    "typeof CodeMirror === 'function'"
+                )
+        finally:
+            self.page.unroute("**/*", handle_route)
+
+        self.assertEqual(external_requests, [])
+
 
 if __name__ == "__main__":
     unittest.main()

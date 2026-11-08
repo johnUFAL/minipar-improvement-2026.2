@@ -33,6 +33,7 @@ ignore = ["E701", "E702"]
 [tool.mypy]
 python_version = "3.11"
 files = ["components", "erros", "interfaces"]
+exclude = ["interfaces/web/frontend/reference"]
 no_implicit_optional = true
 warn_unused_ignores = true
 warn_redundant_casts = true
