@@ -129,3 +129,76 @@ hosts/portas, comandos e resultados observados (incluindo os resultados
 recebidos em `join`). A integracao automatizada valida duas subtarefas remotas
 em localhost; essa verificacao nao substitui a execucao em maquinas reais
 prevista em T41.
+
+## Validacao em duas maquinas (T41)
+
+> **Status:** a validacao automatizada em localhost passa (T1 e fork remoto). A
+> execucao em duas maquinas fisicas ainda precisa ser registrada abaixo pelo
+> responsavel pela entrega.
+
+### Checklist
+
+- [ ] Duas maquinas na mesma rede (ou com rota/NAT liberados).
+- [ ] Mesmo executavel copiado para as duas maquinas.
+- [ ] `minipar.hosts` editado em cada maquina com IPs alcancaveis.
+- [ ] Porta do servidor/worker liberada no firewall da maquina que escuta.
+- [ ] Teste T1: servidor em uma maquina, cliente na outra.
+- [ ] Fork remoto: `minipar_worker` em cada maquina e cliente com `host(...)`.
+- [ ] Fotos/capturas das duas telas em `docs/relatorio/evidencias/duas_maquinas/`.
+
+### Teste T1 em duas maquinas
+
+Maquina B (servidor):
+
+```powershell
+.\t01_calculadora_servidor.exe --hosts .\minipar.hosts --como computador_2
+```
+
+Maquina A (cliente):
+
+```powershell
+.\t01_calculadora_cliente.exe --hosts .\minipar.hosts --como computador_1
+```
+
+O `minipar.hosts` da maquina A deve apontar `computador_2` para o IP da maquina
+B; na maquina B, `computador_2` deve apontar para o IP local dela.
+
+### Fork remoto em duas maquinas
+
+Maquina A:
+
+```powershell
+.\minipar_worker.exe --porta 5001
+```
+
+Maquina B:
+
+```powershell
+.\minipar_worker.exe --porta 5002
+```
+
+Cliente (em qualquer maquina com o mesmo executavel):
+
+```powershell
+.\programa.exe --hosts .\minipar.hosts
+```
+
+O programa deve usar `fork tarefa em host("computador_2")` e o `join` deve
+receber o resultado. Se o worker estiver inacessivel, o cliente falha em ate
+`MINIPAR_TIMEOUT_MS` (padrao 5000 ms).
+
+### Registro da execucao
+
+| Item | Maquina A | Maquina B |
+|---|---|---|
+| Sistema operacional | | |
+| IP | | |
+| Papel (cliente/servidor/worker) | | |
+| Porta | | |
+| Firewall | | |
+| Comandos executados | | |
+| Resultado T1 | | |
+| Resultado fork remoto | | |
+| Problemas encontrados | | |
+
+Anexe as capturas em `docs/relatorio/evidencias/duas_maquinas/`.

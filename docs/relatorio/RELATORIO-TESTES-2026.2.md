@@ -343,6 +343,20 @@ Os três montam sem erro. A execução no CPUlator permanece manual: colar o
    mas não é executável sozinho; o par em `t01_multiterminal/` é a versão
    válida.
 
+### 8.1 Evidências de execução (T41)
+
+`tools/rodar_todos.py` executa os 10 programas de exemplo e grava saída e tempo
+em `docs/relatorio/evidencias/terminal/`, com índice em
+`docs/relatorio/evidencias/README.md`. Resultado local: **10/10**.
+
+As capturas da Web 2 podem ser geradas com
+`tools/capturar_telas_web.py` (requer Playwright + Chrome) e as imagens de
+terminal com `tools/render_terminal_png.py`.
+
+A validação em duas máquinas reais (T1 e fork remoto) continua **pendente**: o
+procedimento e o template de registro estão em `docs/rede.md`. A integração
+automatizada cobre os dois processos em `localhost`.
+
 ---
 
 ## 9. Checklist
@@ -355,7 +369,9 @@ Os três montam sem erro. A execução no CPUlator permanece manual: colar o
 - [x] Teste pytest do T1 multi-terminal.
 - [x] Correções de `parse_ints` e array de atributo com testes unitários.
 - [ ] Screenshot do CPUlator.
-- [ ] Execução em duas máquinas reais (opcional nesta entrega).
+- [x] 10/10 programas com evidência em `docs/relatorio/evidencias/`.
+- [ ] Capturas Web 2 (requer Playwright + Chrome).
+- [ ] Execução em duas máquinas reais (T41).
 
 ---
 
