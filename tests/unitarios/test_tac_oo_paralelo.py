@@ -23,7 +23,7 @@ def test_neuronio_runs_in_tac_and_converges_after_51_iterations() -> None:
 
     _, output = TACExecutor().execute(tac)
 
-    assert "Iteracoes totais: 51" in output
+    assert "#### Iteração: 51" in output
     assert " = alloc 8" in tac
     assert " = getfield " in tac
     assert "setfield " in tac
