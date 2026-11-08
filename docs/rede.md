@@ -19,8 +19,8 @@ resposta:   (status, resultado, 0.0, 0.0)
 ```
 
 - `status = "OK"` em sucesso;
-- `status = "ERRO: divisao por zero"` em `/0`;
-- `status = "ERRO: operacao invalida"` para operador desconhecido.
+- `status = "Erro: divisao por zero."` em `/0`;
+- `status = "Erro: operacao invalida."` para operador desconhecido.
 
 O servidor fica em loop até receber `"sair"`. Assim, um erro de divisão por zero
 não derruba o serviço: ele responde o erro e atende a próxima requisição.

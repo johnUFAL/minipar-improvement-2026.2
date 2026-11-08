@@ -434,6 +434,17 @@ class TACExecutor:
                         raise ValueError("Funcao clock TAC nao aceita argumentos")
                     variables[destination] = time.monotonic()
                     return True
+                if function_name == "format_float":
+                    if count_text != "2":
+                        raise ValueError(
+                            "Funcao format_float TAC espera 2 argumentos"
+                        )
+                    arguments = context.pending_parameters[-2:]
+                    del context.pending_parameters[-2:]
+                    value = float(arguments[0])
+                    precision = int(arguments[1])
+                    variables[destination] = f"{value:.{precision}f}"
+                    return True
                 context.variables = self._call_function(
                     function_name,
                     int(count_text),

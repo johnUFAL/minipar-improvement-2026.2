@@ -1,313 +1,38 @@
-==== Teste 3: neuronio simples com classes e objetos ====
-Entrada: 1 Saida desejada: 0
-Iteracao: 1
-Soma ponderada: 1
-Saida: 1
+Entrada: 1 | Saída desejada: 0
+#### Iteração: 1
+Peso: 0.5000
+Saída: 1
 Erro: -1
-Peso entrada: 0.5
-Peso bias: 0.5
-Iteracao: 2
-Soma ponderada: 0.98
-Saida: 1
+Peso do bias: 0.5000
+#### Iteração: 2
+Peso: 0.4900
+Saída: 1
 Erro: -1
-Peso entrada: 0.49
-Peso bias: 0.49
-Iteracao: 3
-Soma ponderada: 0.96
-Saida: 1
+Peso do bias: 0.4900
+#### Iteração: 3
+Peso: 0.4800
+Saída: 1
 Erro: -1
-Peso entrada: 0.48
-Peso bias: 0.48
-Iteracao: 4
-Soma ponderada: 0.94
-Saida: 1
+Peso do bias: 0.4800
+#### Iteração: 4
+Peso: 0.4700
+Saída: 1
 Erro: -1
-Peso entrada: 0.47
-Peso bias: 0.47
-Iteracao: 5
-Soma ponderada: 0.92
-Saida: 1
+Peso do bias: 0.4700
+#### Iteração: 49
+Peso: 0.0200
+Saída: 1
 Erro: -1
-Peso entrada: 0.46
-Peso bias: 0.46
-Iteracao: 6
-Soma ponderada: 0.9
-Saida: 1
+Peso do bias: 0.0200
+#### Iteração: 50
+Peso: 0.0100
+Saída: 1
 Erro: -1
-Peso entrada: 0.45
-Peso bias: 0.45
-Iteracao: 7
-Soma ponderada: 0.88
-Saida: 1
-Erro: -1
-Peso entrada: 0.44
-Peso bias: 0.44
-Iteracao: 8
-Soma ponderada: 0.86
-Saida: 1
-Erro: -1
-Peso entrada: 0.43
-Peso bias: 0.43
-Iteracao: 9
-Soma ponderada: 0.84
-Saida: 1
-Erro: -1
-Peso entrada: 0.42
-Peso bias: 0.42
-Iteracao: 10
-Soma ponderada: 0.82
-Saida: 1
-Erro: -1
-Peso entrada: 0.41
-Peso bias: 0.41
-Iteracao: 11
-Soma ponderada: 0.8
-Saida: 1
-Erro: -1
-Peso entrada: 0.4
-Peso bias: 0.4
-Iteracao: 12
-Soma ponderada: 0.78
-Saida: 1
-Erro: -1
-Peso entrada: 0.39
-Peso bias: 0.39
-Iteracao: 13
-Soma ponderada: 0.76
-Saida: 1
-Erro: -1
-Peso entrada: 0.38
-Peso bias: 0.38
-Iteracao: 14
-Soma ponderada: 0.74
-Saida: 1
-Erro: -1
-Peso entrada: 0.37
-Peso bias: 0.37
-Iteracao: 15
-Soma ponderada: 0.72
-Saida: 1
-Erro: -1
-Peso entrada: 0.36
-Peso bias: 0.36
-Iteracao: 16
-Soma ponderada: 0.7
-Saida: 1
-Erro: -1
-Peso entrada: 0.35
-Peso bias: 0.35
-Iteracao: 17
-Soma ponderada: 0.68
-Saida: 1
-Erro: -1
-Peso entrada: 0.34
-Peso bias: 0.34
-Iteracao: 18
-Soma ponderada: 0.66
-Saida: 1
-Erro: -1
-Peso entrada: 0.33
-Peso bias: 0.33
-Iteracao: 19
-Soma ponderada: 0.64
-Saida: 1
-Erro: -1
-Peso entrada: 0.32
-Peso bias: 0.32
-Iteracao: 20
-Soma ponderada: 0.62
-Saida: 1
-Erro: -1
-Peso entrada: 0.31
-Peso bias: 0.31
-Iteracao: 21
-Soma ponderada: 0.6
-Saida: 1
-Erro: -1
-Peso entrada: 0.3
-Peso bias: 0.3
-Iteracao: 22
-Soma ponderada: 0.58
-Saida: 1
-Erro: -1
-Peso entrada: 0.29
-Peso bias: 0.29
-Iteracao: 23
-Soma ponderada: 0.56
-Saida: 1
-Erro: -1
-Peso entrada: 0.28
-Peso bias: 0.28
-Iteracao: 24
-Soma ponderada: 0.54
-Saida: 1
-Erro: -1
-Peso entrada: 0.27
-Peso bias: 0.27
-Iteracao: 25
-Soma ponderada: 0.52
-Saida: 1
-Erro: -1
-Peso entrada: 0.26
-Peso bias: 0.26
-Iteracao: 26
-Soma ponderada: 0.5
-Saida: 1
-Erro: -1
-Peso entrada: 0.25
-Peso bias: 0.25
-Iteracao: 27
-Soma ponderada: 0.48
-Saida: 1
-Erro: -1
-Peso entrada: 0.24
-Peso bias: 0.24
-Iteracao: 28
-Soma ponderada: 0.46
-Saida: 1
-Erro: -1
-Peso entrada: 0.23
-Peso bias: 0.23
-Iteracao: 29
-Soma ponderada: 0.44
-Saida: 1
-Erro: -1
-Peso entrada: 0.22
-Peso bias: 0.22
-Iteracao: 30
-Soma ponderada: 0.42
-Saida: 1
-Erro: -1
-Peso entrada: 0.21
-Peso bias: 0.21
-Iteracao: 31
-Soma ponderada: 0.4
-Saida: 1
-Erro: -1
-Peso entrada: 0.2
-Peso bias: 0.2
-Iteracao: 32
-Soma ponderada: 0.38
-Saida: 1
-Erro: -1
-Peso entrada: 0.19
-Peso bias: 0.19
-Iteracao: 33
-Soma ponderada: 0.36
-Saida: 1
-Erro: -1
-Peso entrada: 0.18
-Peso bias: 0.18
-Iteracao: 34
-Soma ponderada: 0.34
-Saida: 1
-Erro: -1
-Peso entrada: 0.17
-Peso bias: 0.17
-Iteracao: 35
-Soma ponderada: 0.32
-Saida: 1
-Erro: -1
-Peso entrada: 0.16
-Peso bias: 0.16
-Iteracao: 36
-Soma ponderada: 0.3
-Saida: 1
-Erro: -1
-Peso entrada: 0.15
-Peso bias: 0.15
-Iteracao: 37
-Soma ponderada: 0.28
-Saida: 1
-Erro: -1
-Peso entrada: 0.14
-Peso bias: 0.14
-Iteracao: 38
-Soma ponderada: 0.26
-Saida: 1
-Erro: -1
-Peso entrada: 0.13
-Peso bias: 0.13
-Iteracao: 39
-Soma ponderada: 0.24
-Saida: 1
-Erro: -1
-Peso entrada: 0.12
-Peso bias: 0.12
-Iteracao: 40
-Soma ponderada: 0.22
-Saida: 1
-Erro: -1
-Peso entrada: 0.11
-Peso bias: 0.11
-Iteracao: 41
-Soma ponderada: 0.2
-Saida: 1
-Erro: -1
-Peso entrada: 0.1
-Peso bias: 0.1
-Iteracao: 42
-Soma ponderada: 0.18
-Saida: 1
-Erro: -1
-Peso entrada: 0.09
-Peso bias: 0.09
-Iteracao: 43
-Soma ponderada: 0.16
-Saida: 1
-Erro: -1
-Peso entrada: 0.08
-Peso bias: 0.08
-Iteracao: 44
-Soma ponderada: 0.14
-Saida: 1
-Erro: -1
-Peso entrada: 0.07
-Peso bias: 0.07
-Iteracao: 45
-Soma ponderada: 0.12
-Saida: 1
-Erro: -1
-Peso entrada: 0.06
-Peso bias: 0.06
-Iteracao: 46
-Soma ponderada: 0.1
-Saida: 1
-Erro: -1
-Peso entrada: 0.05
-Peso bias: 0.05
-Iteracao: 47
-Soma ponderada: 0.08
-Saida: 1
-Erro: -1
-Peso entrada: 0.04
-Peso bias: 0.04
-Iteracao: 48
-Soma ponderada: 0.06
-Saida: 1
-Erro: -1
-Peso entrada: 0.03
-Peso bias: 0.03
-Iteracao: 49
-Soma ponderada: 0.04
-Saida: 1
-Erro: -1
-Peso entrada: 0.02
-Peso bias: 0.02
-Iteracao: 50
-Soma ponderada: 0.02
-Saida: 1
-Erro: -1
-Peso entrada: 0.01
-Peso bias: 0.01
-Iteracao: 51
-Soma ponderada: -6.17562e-16
-Saida: 0
+Peso do bias: 0.0100
+#### Iteração: 51
+Peso: -0.0000
+Saída: 0
 Erro: 0
-Peso entrada: -3.08781e-16
-Peso bias: -3.08781e-16
-Neuronio aprendeu dinamicamente.
-Iteracoes totais: 51
-Peso final: -3.08781e-16
-Peso bias final: -3.08781e-16
+Peso do bias: -0.0000
+✅ Parabéns! O neurônio aprendeu.
 Valor desejado: 0
