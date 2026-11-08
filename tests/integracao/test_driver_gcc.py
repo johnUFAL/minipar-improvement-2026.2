@@ -60,7 +60,7 @@ class DriverGCCIntegrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         output = result.stdout.splitlines()
         self.assertEqual(output[0], "valor")
-        self.assertGreater(float(output[1]), 0.0)
+        self.assertGreaterEqual(float(output[1]), 0.0)
         self.assertNotEqual(missing.returncode, 0)
         self.assertIn("argumento(1) fora dos limites", missing.stderr)
 

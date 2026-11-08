@@ -424,8 +424,8 @@ class WebCompileTests(unittest.TestCase):
                 [],
                 [
                     "Valor desejado: 0",
-                    "Iteracao: 51",
-                    "Neuronio aprendeu dinamicamente.",
+                    "#### Iteração: 51",
+                    "✅ Parabéns! O neurônio aprendeu.",
                 ],
             ),
             "t05_recomendacao.mp": (
