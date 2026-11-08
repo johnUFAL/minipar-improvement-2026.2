@@ -362,7 +362,9 @@ class CppCodeGenerator:
         functions: dict[str, _Function], classes: dict[str, list[str]],
     ) -> tuple[dict[str, str], list[tuple[str, str]], str]:
         def normalize_type(type_name: str | None) -> str:
-            return "" if type_name in (None, "var") else type_name
+            if type_name is None or type_name == "var":
+                return ""
+            return type_name
 
         types = {
             name: normalize_type(type_name)
