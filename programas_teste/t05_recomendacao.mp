@@ -62,19 +62,19 @@ func nome_produto(indice) {
         return "Micro-ondas";
     }
     if (indice == 10) {
-        return "Maquina de lavar";
+        return "Máquina de lavar";
     }
     if (indice == 11) {
         return "Ar condicionado";
     }
     if (indice == 12) {
-        return "Ficcao";
+        return "Ficção";
     }
     if (indice == 13) {
-        return "Nao-ficcao";
+        return "Não-ficção";
     }
     if (indice == 14) {
-        return "Ficcao cientifica";
+        return "Ficção científica";
     }
     return "Fantasia";
 }

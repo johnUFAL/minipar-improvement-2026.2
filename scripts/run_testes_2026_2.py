@@ -95,8 +95,8 @@ TESTS: list[dict[str, object]] = [
         "id": "t5",
         "name": "Sistema de recomendacao",
         "file": "t05_recomendacao.mp",
-        "inputs": ["1", "1", "1", "1", "1", "1", "1", "1", "0", "0", "0", "0", "0", "0", "0", "0"],
-        "checks": ["Produtos recomendados", "Laptop"],
+        "inputs": ["1", "0", "0", "0", "0", "1", "0", "0", "0", "1", "0", "0", "1", "0", "0", "0"],
+        "checks": ["Produtos recomendados para voce:", "Máquina de lavar", "Não-ficção"],
         "expected": "t05_recomendacao.expected.txt",
     },
     {

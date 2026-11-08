@@ -176,7 +176,7 @@ Ambas as correções têm testes unitários em `tests/unitarios/test_codegen.py`
 | Teste | Entrada |
 |---|---|
 | T1 | `+`, `7`, `5` |
-| T5 | `1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0` (16 linhas) |
+| T5 | `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0` (16 linhas) |
 | T6 | `10 -3 -40 80 70 -100` |
 | T2, T3, T4, T7, T8–T11 | sem entrada |
 
@@ -199,7 +199,9 @@ específico por programa:
 - **T4:** exatamente quatro previsões numéricas, finitas e no intervalo
   `[0, 1]`; os valores não são comparados byte a byte porque a rede usa pesos
   pseudoaleatórios.
-- **T5–T7:** saída completa exata após normalização.
+- **T5–T7:** saída completa exata após normalização. No T5, o golden test
+  também confere as 12 recomendações na ordem e os acentos/UTF-8
+  (`Máquina de lavar`, `Não-ficção`, `Ficção científica`).
 - **T1:** valida troca cliente/servidor, resultado aritmético e erro de
   divisão por zero; a ordem de linhas de processos distintos não é comparada.
 
