@@ -21,8 +21,8 @@ resposta:   (status, resultado, 0.0, 0.0)
 ```
 
 - `status = "OK"` em sucesso;
-- `status = "ERRO: divisao por zero"` em `/0`;
-- `status = "ERRO: operacao invalida"` para operador desconhecido.
+- `status = "Erro: divisao por zero."` em `/0`;
+- `status = "Erro: operacao invalida."` para operador desconhecido.
 
 O servidor fica em loop até receber `"sair"`, então continua atendendo após um
 erro de divisão por zero.
@@ -73,7 +73,7 @@ Entradas do cliente para testar soma e erro:
 sair
 ```
 
-Saída esperada: `Resultado: 42.0` e depois `ERRO: divisao por zero`.
+Saída esperada: `Resultado: 42.0` e depois `Erro: divisao por zero.`.
 
 ## Por que não usar o menu interativo?
 
