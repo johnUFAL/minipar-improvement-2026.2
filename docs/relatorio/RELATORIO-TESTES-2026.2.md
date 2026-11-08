@@ -228,6 +228,31 @@ Speedup Python/C++: **15,62×**.
 
 Resultado detalhado em `docs/relatorio/resultados/t04_tempo.json`.
 
+### 5.3 TAC do T7 — PDF × gerado
+
+O T7 é o único teste com TAC publicado no PDF. A comparação é por
+**equivalência de execução** (decisão da #17), não por texto idêntico: tanto o
+TAC gerado quanto o binário produzem `Array ordenado: [5, 12, 33, 61, 98]`.
+
+O gerador usa rótulos genéricos e temporários tipados; o PDF usa nomes
+semânticos e `if ... goto`. Mapa dos pontos equivalentes:
+
+| PDF | Gerado | Observação |
+|---|---|---|
+| `LOOP` | `WHILE_0` | laço externo da pilha |
+| `PARTITION_LOOP` | `WHILE_3` | laço interno de partição |
+| `SWAP` | bloco inline no `if` de troca | a troca virou código no `ENDIF_5` |
+| `PARTITION_END` | após `ENDWHILE_4` | fim da partição |
+| `END` | `ENDWHILE_1` | pilha vazia |
+| `S[...]` | `stack[...]` | pilha explícita |
+| `A[...]` | `arr[...]` | array de entrada |
+| `if ... goto` | `ifFalse ... goto` | lowering do gerador |
+
+O TAC de referência do PDF está em
+`tests/integracao/expected_results/t07_quicksort_iterativo_tac.expected.tac`
+e é conferido por `tests/programas/test_t07.py` apenas quanto aos rótulos
+estruturais (`LOOP`, `PARTITION_LOOP`, `PARTITION_END`, `END`).
+
 ## 6. T8–T10 — fork/join em núcleos
 
 - **T8:** 160 atividades em 4 núcleos; imprime benchmark e speedup.
