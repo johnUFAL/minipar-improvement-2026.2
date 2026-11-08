@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Painel — MiniPar 2026.2{% endblock %}
+{% block page_label %}Painel{% endblock %}
+{% block current_file %}visão geral{% endblock %}
+
+{% block content %}
+<section id="page-dashboard" class="page active-page">
+    <div class="page-intro">
+        <div>
+            <p class="kicker">VISÃO GERAL · INSTITUTO DE COMPUTAÇÃO · UFAL</p>
+            <h1>Painel</h1>
+            <p class="intro-copy">Acompanhe as execuções do compilador, prepare o benchmark e acesse cada área do MiniPar.</p>
+        </div>
+        <div class="intro-actions">
+            <a class="button button-primary" href="/editor">Abrir editor <span>→</span></a>
+            <a class="button button-outline" href="/benchmark">Ir para benchmark</a>
+        </div>
+    </div>
+
+    <div class="metric-grid">
+        <div class="metric-card"><span>EXECUÇÕES DO COMPILADOR</span><strong id="panel-compiler-total">—</strong><small>nesta máquina</small></div>
+        <div class="metric-card"><span>ÚLTIMA EXECUÇÃO</span><strong id="panel-compiler-time">—</strong><small id="panel-compiler-status">aguardando o editor</small></div>
+        <div class="metric-card"><span>ÚLTIMO BENCHMARK</span><strong id="panel-benchmark-speedup" class="accent-text">—</strong><small id="panel-benchmark-meta">nenhuma medição</small></div>
+        <div class="metric-card"><span>HARDWARE</span><strong id="panel-hardware">—</strong><small>núcleos disponíveis</small></div>
+    </div>
+
+    <div class="dashboard-columns">
+        <article class="card config-card" aria-labelledby="panel-benchmark-title">
+            <div class="card-head">
+                <div><p class="card-eyebrow">BENCHMARK</p><h2 id="panel-benchmark-title">Preparar execução</h2></div>
+                <span id="benchmark-hardware" class="tag">Detectando hardware…</span>
+            </div>
+            <p class="card-copy">Ajuste a carga e os núcleos. Ao executar, o MiniPar abre a aba Benchmark e inicia a medição automaticamente.</p>
+            <div class="settings-grid">
+                <label class="benchmark-field">Alunos<input id="benchmark-students" type="number" min="1" max="2000" value="40"></label>
+                <label class="benchmark-field">Atividades por aluno<input id="benchmark-activities" type="number" min="1" max="2000" value="4"></label>
+                <label class="benchmark-field">Núcleos<select id="benchmark-cores" class="select-control"><option value="">Carregando…</option></select></label>
+                <label class="benchmark-field">Fractais<select id="benchmark-fractals" class="select-control"><option value="0">Nenhum</option><option value="1">Mandelbrot</option><option value="2">Mandelbrot e Sierpinski</option></select></label>
+                <label class="benchmark-field">Repetições<input id="benchmark-repetitions" type="number" min="1" max="9" value="3"></label>
+            </div>
+            <div class="card-foot">
+                <span class="mini-status">A execução e os resultados ficam na aba Benchmark.</span>
+                <button id="panel-run-benchmark" class="button button-primary" type="button">Executar e abrir benchmark</button>
+            </div>
+        </article>
+
+        <article class="card config-card">
+            <div class="card-head"><div><p class="card-eyebrow">COMECE POR AQUI</p><h2>Escolha um programa</h2></div><span class="round-icon"><svg class="icon" aria-hidden="true"><use href="#icon-code"></use></svg></span></div>
+            <p class="card-copy">Carregue um exemplo pronto para acompanhar o pipeline no editor.</p>
+            <label class="field-label" for="dashboard-example">PROGRAMA DE ENTRADA</label>
+            <select id="dashboard-example" class="select-control"><option value="">Escolha um exemplo</option></select>
+            <div class="card-foot"><span class="mini-status"><span class="live-dot"></span> Selecione um exemplo</span><button id="dashboard-analyze" class="button button-primary" type="button">Analisar programa</button></div>
+        </article>
+    </div>
+
+    <div class="dashboard-bottom">
+        <article class="card dashboard-history-card">
+            <div class="card-head"><div><p class="card-eyebrow">RESULTADOS DO COMPILADOR</p><h2>Compilações e execuções</h2></div><a class="text-button" href="/resultados">Abrir resultados →</a></div>
+            <div class="dashboard-history-list"><a class="dashboard-history-row" href="/resultados"><span><b id="panel-compiler-file">Nenhuma execução ainda</b><small id="panel-compiler-detail">Execute um programa no editor para começar</small></span><strong class="green-text" id="panel-compiler-summary">—</strong></a></div>
+        </article>
+        <article class="card dashboard-history-card">
+            <div class="card-head"><div><p class="card-eyebrow">BENCHMARK</p><h2>Medições paralelas</h2></div><a class="text-button" href="/benchmark">Abrir benchmark →</a></div>
+            <div class="dashboard-history-list"><a class="dashboard-history-row" href="/benchmark"><span><b id="panel-benchmark-title-row">Nenhuma medição ainda</b><small id="panel-benchmark-detail">Configure e execute o benchmark</small></span><strong class="green-text" id="panel-benchmark-summary">—</strong></a></div>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='benchmark.js') }}"></script>
+<script src="{{ url_for('static', filename='compiler-results.js') }}"></script>
+{% endblock %}

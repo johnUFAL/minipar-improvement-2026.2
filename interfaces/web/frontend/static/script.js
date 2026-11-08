@@ -1,4 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
+    const COMPILER_HISTORY_KEY = "minipar-compiler-history";
+    const COMPILER_LAST_KEY = "minipar-compiler-last";
+    const COMPILER_HISTORY_LIMIT = 10;
     const editor = CodeMirror.fromTextArea(document.getElementById("source-editor"), {
         mode: "clike", lineNumbers: true, lineWrapping: true, autoCloseBrackets: true,
     });
@@ -39,6 +42,47 @@ document.addEventListener("DOMContentLoaded", () => {
     let astReadonlyHighlights = [];
 
     const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
+    function saveCompilerRun(entry) {
+        try {
+            const previous = JSON.parse(localStorage.getItem(COMPILER_HISTORY_KEY) || "[]");
+            const compact = {
+                id: `run-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                file: entry.file,
+                source: entry.source,
+                inputs: entry.inputs,
+                optimization: entry.optimization,
+                success: Boolean(entry.success),
+                time: Number(entry.time || 0),
+                diagnosticos: entry.diagnosticos || [],
+                execution: entry.execution || null,
+                cpp: entry.compileResult?.cpp || "",
+                compileResult: entry.compileResult ? {
+                    tokens: entry.compileResult.tokens || [],
+                    ast: entry.compileResult.ast || null,
+                    tabela_simbolos: entry.compileResult.tabela_simbolos || null,
+                    tac: entry.compileResult.tac || "",
+                    tac_origin: entry.compileResult.tac_origin || [],
+                    cpp: entry.compileResult.cpp || "",
+                    cpp_origin: entry.compileResult.cpp_origin || [],
+                } : null,
+                created_at: Date.now(),
+            };
+            const next = [compact, ...(Array.isArray(previous) ? previous : [])].slice(0, COMPILER_HISTORY_LIMIT);
+            try {
+                localStorage.setItem(COMPILER_HISTORY_KEY, JSON.stringify(next));
+            } catch (error) {
+                const reduced = next.map((item, index) => index === 0 ? item : { ...item, compileResult: null });
+                try {
+                    localStorage.setItem(COMPILER_HISTORY_KEY, JSON.stringify(reduced));
+                } catch (fallbackError) {
+                    localStorage.setItem(COMPILER_HISTORY_KEY, JSON.stringify(reduced.map(item => ({ ...item, compileResult: null }))));
+                }
+            }
+            localStorage.setItem(COMPILER_LAST_KEY, JSON.stringify(compact));
+        } catch (error) {
+            // Histórico é complementar; a IDE continua funcionando se o armazenamento falhar.
+        }
+    }
     const json = value => `<pre class="json-output">${escape(JSON.stringify(value, null, 2))}</pre>`;
     const output = (title, value) => `<section><h3>${title}</h3><pre class="code-output">${escape(value)}</pre></section>`;
     const explain = {
@@ -552,15 +596,23 @@ document.addEventListener("DOMContentLoaded", () => {
         buttons.forEach(button => button.disabled = true);
         setStatus("Compilando e executando...");
         try {
-            const compileResponse = await fetch("/api/compilar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: editor.getValue() }) });
+            const currentFile = document.getElementById("current-file").textContent;
+            const source = editor.getValue();
+            const inputsText = programInput.value;
+            const compileResponse = await fetch("/api/compilar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: source }) });
             result = await compileResponse.json();
             execution = null;
             markDiagnostics(result.diagnosticos || []);
-            if (!result.success) { currentPhase = "code"; setStatus("Há erros no programa", true); renderPhase(); return; }
-            const inputs = programInput.value.split(/\r?\n/).filter(line => line.length > 0);
-            const response = await fetch("/api/executar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: editor.getValue(), inputs }) });
+            if (!result.success) {
+                saveCompilerRun({ file: currentFile, source, inputs: inputsText, diagnosticos: result.diagnosticos || [], compileResult: result, optimization: optimizationLevel, success: false, time: 0, execution: null });
+                currentPhase = "code"; setStatus("Há erros no programa", true); renderPhase(); return;
+            }
+            const inputs = inputsText.split(/\r?\n/).filter(line => line.length > 0);
+            const response = await fetch("/api/executar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: source, inputs }) });
             execution = await response.json();
-            history.unshift({ file: document.getElementById("current-file").textContent, source: editor.getValue(), inputs: programInput.value, diagnosticos: result.diagnosticos || [], compileResult: result, optimization: optimizationLevel, success: Boolean(execution.success), time: Number(execution.tempo || 0), execution });
+            const runItem = { file: currentFile, source, inputs: inputsText, diagnosticos: result.diagnosticos || [], compileResult: result, optimization: optimizationLevel, success: Boolean(execution.success), time: Number(execution.tempo || 0), execution };
+            history.unshift(runItem);
+            saveCompilerRun(runItem);
             renderHistory();
             renderDashboard();
             currentPhase = "execution"; setStatus(execution.success ? "Execução concluída" : "Execução terminou com erro", !execution.success); renderPhase();
@@ -568,99 +620,6 @@ document.addEventListener("DOMContentLoaded", () => {
         finally {
             runInProgress = false;
             buttons.forEach(button => button.disabled = false);
-        }
-    }
-    async function loadBenchmarkHardware() {
-        const hardware = document.getElementById("benchmark-hardware");
-        const coreSelect = document.getElementById("benchmark-cores");
-        try {
-            const response = await fetch("/api/hardware");
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error || "Falha ao detectar hardware");
-            const available = Math.max(1, Number(data.available_cores));
-            const benchmarkMax = Math.max(
-                1,
-                Math.min(available, Number(data.benchmark_max_cores)),
-            );
-            hardware.textContent = `${data.logical_cores} lógicos · ${available} disponíveis`;
-            coreSelect.innerHTML = Array.from(
-                { length: benchmarkMax },
-                (_, index) => `<option value="${index + 1}">${index + 1}</option>`,
-            ).join("");
-            coreSelect.value = String(benchmarkMax);
-        } catch (error) {
-            hardware.textContent = "Hardware indisponível";
-            document.getElementById("benchmark-status").textContent =
-                error instanceof Error ? error.message : "Falha ao detectar hardware";
-        }
-    }
-    function renderBenchmarkResult(result, csvUrl) {
-        const summary = document.getElementById("benchmark-summary");
-        const results = document.getElementById("benchmark-results");
-        const parameters = result.parameters;
-        const format = value => Number(value).toFixed(3);
-        const warnings = result.warnings.length
-            ? `<ul>${result.warnings.map(message => `<li>${escape(message)}</li>`).join("")}</ul>`
-            : "";
-        summary.innerHTML = `
-            <div class="benchmark-summary-item"><span>Atividades</span><strong>${parameters.total_atividades}</strong></div>
-            <div class="benchmark-summary-item"><span>Tempo sequencial · mediana</span><strong>${format(result.sequential_seconds)} s</strong></div>
-            <div class="benchmark-summary-item"><span>Tempo paralelo · mediana</span><strong>${format(result.parallel_seconds)} s</strong></div>
-            <div class="benchmark-summary-item"><span>Speedup</span><strong>${format(result.speedup)}×</strong></div>
-            <div class="benchmark-summary-item"><span>Eficiência</span><strong>${format(result.efficiency_percent)}%</strong></div>
-            ${warnings}`;
-        document.getElementById("benchmark-cores-result").innerHTML =
-            result.cores.map(core => `
-                <tr>
-                    <td>${core.core}</td>
-                    <td>${core.task_count}</td>
-                    <td>${format(core.busy_seconds)}</td>
-                    <td>${format(core.utilization_percent)}%</td>
-                </tr>`).join("");
-        const csvLink = document.getElementById("benchmark-csv");
-        csvLink.href = csvUrl;
-        csvLink.hidden = false;
-        results.hidden = false;
-    }
-    async function runBenchmark() {
-        const button = document.getElementById("benchmark-run");
-        const status = document.getElementById("benchmark-status");
-        const results = document.getElementById("benchmark-results");
-        button.disabled = true;
-        results.hidden = true;
-        status.textContent = "Enfileirando benchmark…";
-        try {
-            const payload = {
-                alunos: Number(document.getElementById("benchmark-students").value),
-                atividades: Number(document.getElementById("benchmark-activities").value),
-                nucleos: Number(document.getElementById("benchmark-cores").value),
-                fractais: Number(document.getElementById("benchmark-fractals").value),
-                repeticoes: Number(document.getElementById("benchmark-repetitions").value),
-            };
-            const response = await fetch("/api/benchmark", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(payload),
-            });
-            const created = await response.json();
-            if (!response.ok) throw new Error(created.error || "Não foi possível iniciar o benchmark.");
-            while (true) {
-                await new Promise(resolve => window.setTimeout(resolve, 300));
-                const pollResponse = await fetch(created.status_url);
-                const job = await pollResponse.json();
-                if (!pollResponse.ok) throw new Error(job.error || "Falha ao consultar o benchmark.");
-                status.textContent = `${job.message} · ${job.progress}%`;
-                if (job.status === "failed") throw new Error(job.error || "O benchmark falhou.");
-                if (job.status === "completed") {
-                    renderBenchmarkResult(job.result, job.csv_url);
-                    status.textContent = "Benchmark concluído.";
-                    return;
-                }
-            }
-        } catch (error) {
-            status.textContent = error instanceof Error ? error.message : "Falha ao executar benchmark.";
-        } finally {
-            button.disabled = false;
         }
     }
     editor.on("change", () => {
@@ -684,7 +643,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         await loadExample(selectedExample);
     });
-    document.getElementById("benchmark-run").addEventListener("click", runBenchmark);
     document.getElementById("compile-button").addEventListener("click", run);
     document.getElementById("editor-compile").addEventListener("click", run);
     editor.getWrapperElement().addEventListener("keydown", event => {
@@ -715,29 +673,36 @@ document.addEventListener("DOMContentLoaded", () => {
     function syncOptimization(value) {
         optimizationLevel = value;
         localStorage.setItem("minipar-optimization", value);
-        document.getElementById("optimization").value = value;
-        document.getElementById("settings-optimization").value = value;
-        document.getElementById("dashboard-optimization").textContent = `${value} — ${value === "O0" ? "sem otimização" : "otimização aplicada"}`;
+        const editorSelect = document.getElementById("optimization");
+        if (editorSelect) editorSelect.value = value;
+        const settingsSelect = document.getElementById("settings-optimization");
+        if (settingsSelect) settingsSelect.value = value;
+        const dashboardOptimization = document.getElementById("dashboard-optimization");
+        if (dashboardOptimization) dashboardOptimization.textContent = `${value} — ${value === "O0" ? "sem otimização" : "otimização aplicada"}`;
         renderPhase();
     }
-    document.getElementById("optimization").value = optimizationLevel;
-    document.getElementById("settings-optimization").value = optimizationLevel;
-    document.getElementById("optimization").addEventListener("change", event => syncOptimization(event.target.value));
-    document.getElementById("settings-optimization").addEventListener("change", event => {
-        document.getElementById("settings-saved").innerHTML = '<span class="status-dot"></span> Alterações não salvas';
+    const optimizationSelect = document.getElementById("optimization");
+    if (optimizationSelect) optimizationSelect.value = optimizationLevel;
+    const settingsOptimization = document.getElementById("settings-optimization");
+    if (settingsOptimization) settingsOptimization.value = optimizationLevel;
+    optimizationSelect?.addEventListener("change", event => syncOptimization(event.target.value));
+    settingsOptimization?.addEventListener("change", event => {
+        const savedState = document.getElementById("settings-saved");
+        if (savedState) savedState.innerHTML = '<span class="status-dot"></span> Alterações não salvas';
         optimizationLevel = event.target.value;
     });
-    document.getElementById("save-settings").addEventListener("click", () => {
-        syncOptimization(document.getElementById("settings-optimization").value);
-        document.getElementById("settings-saved").innerHTML = '<span class="status-dot"></span> Configuração salva';
+    document.getElementById("save-settings")?.addEventListener("click", () => {
+        syncOptimization(document.getElementById("settings-optimization")?.value || defaultOptimization);
+        const savedState = document.getElementById("settings-saved");
+        if (savedState) savedState.innerHTML = '<span class="status-dot"></span> Configuração salva';
         setStatus("Configurações salvas");
     });
-    document.getElementById("restore-settings").addEventListener("click", () => {
-        document.getElementById("settings-optimization").value = defaultOptimization;
+    document.getElementById("restore-settings")?.addEventListener("click", () => {
         syncOptimization(defaultOptimization);
-        document.getElementById("settings-saved").innerHTML = '<span class="status-dot"></span> Padrão restaurado';
+        const savedState = document.getElementById("settings-saved");
+        if (savedState) savedState.innerHTML = '<span class="status-dot"></span> Padrão restaurado';
     });
-    document.getElementById("export-results").addEventListener("click", () => {
+    document.getElementById("export-results")?.addEventListener("click", () => {
         const data = JSON.stringify(history, null, 2);
         const link = document.createElement("a");
         link.href = URL.createObjectURL(new Blob([data], { type: "application/json" }));
@@ -745,11 +710,10 @@ document.addEventListener("DOMContentLoaded", () => {
         link.click();
         URL.revokeObjectURL(link.href);
     });
-    document.getElementById("back-to-results").addEventListener("click", () => showPage("results"));
-    document.getElementById("theme-toggle")?.addEventListener("click", () => {
-        localStorage.setItem("minipar-theme", document.body.classList.contains("light-theme") ? "dark" : "light");
-        syncTheme();
+    document.getElementById("back-to-results")?.addEventListener("click", () => showPage("results"));
+    loadExamples().then(() => {
+        const requested = new URLSearchParams(window.location.search).get("example");
+        if (requested) loadExample(requested);
     });
-    const initialPage = ["results", "result-detail", "configuration", "ide", "pipeline"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "dashboard";
-    loadExamples(); loadBenchmarkHardware(); renderPhase(); renderDashboard(); syncTheme(); showPage(initialPage);
+    renderPhase(); renderDashboard(); showPage("ide");
 });

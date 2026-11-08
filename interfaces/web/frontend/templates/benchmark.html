@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Benchmark — MiniPar 2026.2{% endblock %}
+{% block page_label %}Benchmark{% endblock %}
+{% block current_file %}execução e resultados{% endblock %}
+
+{% block content %}
+<section id="page-benchmark" class="page active-page">
+    <div class="page-intro">
+        <div>
+            <p class="kicker">MEDIÇÕES PARALELAS</p>
+            <h1>Benchmark</h1>
+            <p class="intro-copy">Execute a carga CPU-bound do MiniPar e acompanhe tempos, speedup e ocupação por núcleo.</p>
+        </div>
+        <div class="intro-actions">
+            <a class="button button-outline" href="/configuracoes">Configurações</a>
+            <a class="button button-outline" href="/resultados">Resultados do compilador</a>
+        </div>
+    </div>
+
+    <div class="metric-grid">
+        <div class="metric-card"><span>ATIVIDADES</span><strong id="metric-activities">—</strong><small>tarefas medidas</small></div>
+        <div class="metric-card"><span>SEQUENCIAL · MEDIANA</span><strong id="metric-sequential">—</strong><small>tempo real</small></div>
+        <div class="metric-card"><span>PARALELO · MEDIANA</span><strong id="metric-parallel">—</strong><small>tempo real</small></div>
+        <div class="metric-card"><span>SPEEDUP</span><strong id="metric-speedup" class="accent-text">—</strong><small>sequencial / paralelo</small></div>
+    </div>
+
+    <article class="card benchmark-card" aria-labelledby="benchmark-title">
+        <div class="card-head">
+            <div><p class="card-eyebrow">MEDIÇÃO REAL</p><h2 id="benchmark-title">Benchmark paralelo MiniPar</h2></div>
+            <span id="benchmark-hardware" class="tag">Detectando hardware…</span>
+        </div>
+        <p class="card-copy">Os tempos são medianas das repetições executadas no ambiente local. Ajuste os parâmetros e execute para atualizar os cards, as barras por núcleo e as tabelas.</p>
+        <div class="benchmark-controls">
+            <label class="benchmark-field">
+                <span class="benchmark-field-head"><span>Alunos</span><input id="benchmark-students" class="number-input" type="number" min="1" max="2000" value="40"></span>
+                <input id="benchmark-students-range" class="range-input" type="range" min="1" max="2000" step="1" value="40" data-sync="benchmark-students" aria-label="Alunos">
+            </label>
+            <label class="benchmark-field">
+                <span class="benchmark-field-head"><span>Atividades por aluno</span><input id="benchmark-activities" class="number-input" type="number" min="1" max="2000" value="4"></span>
+                <input id="benchmark-activities-range" class="range-input" type="range" min="1" max="2000" step="1" value="4" data-sync="benchmark-activities" aria-label="Atividades por aluno">
+            </label>
+            <label class="benchmark-field">
+                <span class="benchmark-field-head"><span>Núcleos</span><output id="benchmark-cores-value" class="range-output">1</output></span>
+                <input id="benchmark-cores" class="range-input" type="range" min="1" max="1" step="1" value="1" data-output="benchmark-cores-value" aria-label="Núcleos">
+            </label>
+            <label class="benchmark-field">
+                <span class="benchmark-field-head"><span>Fractais</span></span>
+                <select id="benchmark-fractals" class="select-control"><option value="0">Nenhum</option><option value="1">Mandelbrot</option><option value="2">Mandelbrot e Sierpinski</option></select>
+            </label>
+            <label class="benchmark-field">
+                <span class="benchmark-field-head"><span>Repetições</span><input id="benchmark-repetitions" class="number-input" type="number" min="1" max="9" value="3"></span>
+                <input id="benchmark-repetitions-range" class="range-input" type="range" min="1" max="9" step="1" value="3" data-sync="benchmark-repetitions" aria-label="Repetições">
+            </label>
+        </div>
+        <div class="benchmark-run-row">
+            <span class="mini-status">A execução usa os núcleos disponíveis e pode levar alguns segundos.</span>
+            <button id="benchmark-run" class="button button-primary" type="button">Executar benchmark</button>
+        </div>
+        <div class="benchmark-progress-row">
+            <span id="benchmark-state" class="tag">Aguardando</span>
+            <div class="progress-track"><div id="benchmark-progress" class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div></div>
+            <span id="benchmark-progress-value" class="mono-value">0%</span>
+        </div>
+        <p id="benchmark-status" class="benchmark-status" role="status" aria-live="polite">Aguardando configuração do benchmark.</p>
+    </article>
+
+    <article id="benchmark-history" class="card benchmark-history-card" hidden>
+        <div class="card-head"><div><p class="card-eyebrow">HISTÓRICO</p><h2>Execuções de benchmark</h2></div><button id="benchmark-history-clear" class="button button-outline" type="button">Limpar histórico</button></div>
+        <p class="card-copy">Selecione uma medição anterior para restaurar os cards, as barras por núcleo e as tabelas.</p>
+        <div id="benchmark-history-list" class="benchmark-history-list"></div>
+    </article>
+
+    <div id="benchmark-empty" class="card results-empty">
+        <strong>Nenhuma medição disponível</strong>
+        <p>Ajuste os parâmetros acima e execute o benchmark, ou configure a carga no <a href="/">Painel</a>.</p>
+    </div>
+
+    <div id="benchmark-results" hidden>
+        <article class="card results-summary-card">
+            <div class="card-head"><div><p class="card-eyebrow">RESUMO</p><h2>Parâmetros da execução</h2></div><span class="tag">MEDIANAS</span></div>
+            <div id="benchmark-summary" class="benchmark-summary"></div>
+        </article>
+
+        <article class="card results-cores-card">
+            <div class="card-head"><div><p class="card-eyebrow">OCUPAÇÃO</p><h2>Trabalho por núcleo lógico</h2></div><span class="tag">TEMPO OCUPADO</span></div>
+            <div id="benchmark-cores-bars" class="core-bars"></div>
+            <div class="table-scroll"><table class="data-table"><thead><tr><th>Núcleo lógico</th><th>Tarefas</th><th>Tempo ocupado (s)</th><th>Ocupação</th></tr></thead><tbody id="benchmark-cores-result"></tbody></table></div>
+        </article>
+
+        <article class="card results-tasks-card">
+            <div class="card-head"><div><p class="card-eyebrow">DETALHE</p><h2>Tarefas medidas</h2></div><span class="tag">MEDIANA POR TAREFA</span></div>
+            <div class="table-scroll"><table class="data-table"><thead><tr><th>Tarefa</th><th>Núcleo</th><th>Unidades</th><th>Tempo mediano (s)</th></tr></thead><tbody id="benchmark-tasks-result"></tbody></table></div>
+            <nav id="benchmark-tasks-pagination" class="pagination" aria-label="Paginação das tarefas medidas" hidden>
+                <button id="benchmark-tasks-prev" class="button button-outline pagination-button" type="button">Anterior</button>
+                <div id="benchmark-tasks-pages" class="pagination-pages"></div>
+                <span id="benchmark-tasks-page" class="pagination-label">Página 1 de 1</span>
+                <button id="benchmark-tasks-next" class="button button-outline pagination-button" type="button">Próxima</button>
+            </nav>
+        </article>
+
+        <div class="benchmark-actions">
+            <a id="benchmark-csv" class="button button-outline" href="#" hidden><svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg>Exportar CSV</a>
+            <a class="button button-outline" href="/resultados">Ver resultados do compilador</a>
+            <a class="button button-outline" href="/configuracoes">Ajustar configurações</a>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='benchmark.js') }}"></script>
+{% endblock %}

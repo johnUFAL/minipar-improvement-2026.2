@@ -34,7 +34,7 @@
 | [#45 — Limites de array/T7](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/45) | Implementada localmente; CI Linux pendente | Pilha do T7 dimensionada; runtime valida leitura e escrita fora dos limites com mensagem e código não zero; testes nativos adicionados. | O workflow agora exige ASan/UBSan; anexar e conferir o resultado do job Linux. A tentativa local Windows falhou ao linkar `-lasan`/`-lubsan`, ausentes no toolchain instalado. |
 | [#46 — Regressão T1–T10](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/46) | Parcial | O [runner](scripts/run_testes_2026_2.py) compara saídas para parte dos casos e verifica marcos dos benchmarks. | Implementar comparador adequado por teste (exato, faixa, linhas-chave, ordem não determinística), normalização definida e integração à CI. |
 | [#47 — Backend de benchmark](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/47) | Implementada localmente; validação funcional pendente | [interfaces/web/benchmark.py](interfaces/web/benchmark.py) executa código C++ gerado do TAC MiniPar; API em [interfaces/web/api.py](interfaces/web/api.py) oferece hardware, jobs assíncronos, progresso, métricas, medianas e CSV; runtime fornece `argumento(n)` e `clock()`. | Confirmar em ambiente de entrega o job completo e a correspondência do workload gerado com os critérios específicos dos programas T8–T10 antes de fechar a issue. |
-| [#48 — Telas Flask](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/48) | Parcial | Painel, editor, resultados e configurações existem em um template e compartilham estilos em [frontend](interfaces/web/frontend). | Criar `base.html` e rotas/páginas requeridas; substituir métricas estáticas por dados do backend #47; concluir estado de execução, hardware e responsividade. |
+| [#48 — Telas Flask](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/48) | Implementada localmente; validação visual pendente | `base.html` único, rotas `/`, `/benchmark`, `/resultados`, `/configuracoes` e `/editor`; Painel só configura e navega para `/benchmark?autorun=1`, página dedicada executa/progride/exporta e `/resultados` mantém o histórico do compilador, com persistência em `localStorage` em [frontend](interfaces/web/frontend). | Revisar o layout em 1280 px/tablet no ambiente de entrega e fechar a issue remota; terminal/sessões permanecem no escopo de #50 (T49). |
 | [#49 — Migração da IDE e sessões](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/49) | Parcial | Editor, fases do compilador, execução e API de sessões estão disponíveis na interface atual. | Fechar paridade funcional no novo layout: explorer, editor, abas de fases, terminal, entrada, seletor `-O` e sessões; validar fluxo entre dois navegadores e documentar a paridade. |
 | [#50 — Assets offline](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/50) | Pendente | CSS e JavaScript próprios já estão em [static](interfaces/web/frontend/static). | Hospedar CodeMirror, fontes, ícones e logo localmente; remover referências externas dos templates e validar a interface sem internet. |
 
@@ -128,6 +128,7 @@
 3. Implementar workloads parametrizados com TAC/C++ MiniPar para avaliação e zero, um ou dois fractais; medir tarefas e núcleos e produzir a linha `@@METRICAS`. Confirmar a equivalência com os programas de aceitação T8–T10 antes de fechar a issue.
 4. Calcular mediana, speedup e eficiência, limitar núcleos ao hardware disponível e permitir exportação CSV.
 5. Testar a responsividade do servidor e validar que os parâmetros são repassados ao binário e alteram o trabalho medido.
+6. Corrigir a partição de tarefas entre núcleos: o TAC gerado usa `__minipar_divide` com inteiros; o gerador estava agrupando `total * núcleo` com a divisão por engano, o que fazia o último núcleo receber todas as tarefas. A geração agora calcula limites com divisão inteira equivalente por variáveis intermediárias.
 
 ### T48 — Telas
 1. Criar template base compartilhado com uma única paleta, tipografia e componentes de navegação.
@@ -162,3 +163,45 @@ foram fechadas. A revisão humana dos pseudocódigos, o acesso ao GitHub Project
 o enunciado integral para a matriz de 17 itens, a execução ASan/UBSan no CI e a
 validação final da correspondência do benchmark com T8–T10 permanecem como
 evidências externas ou pendências.
+
+## Atualização — T48 (#49), 08/11/2026
+
+O T48 foi implementado localmente nesta branch:
+
+- `base.html` concentra sidebar, topbar, sprite de ícones e tokens únicos; as
+  telas `painel.html`, `benchmark.html`, `resultados.html`,
+  `configuracoes.html` e `editor.html` estendem o mesmo layout. `/pipeline`
+  preserva o guia didático.
+- Rotas Flask dedicadas: `/` (Painel), `/benchmark`, `/resultados`,
+  `/configuracoes`, `/editor` e `/pipeline`; a IDE continua funcional em
+  `/editor` até a migração completa de terminal/sessões do T49.
+- O Painel apenas prepara o benchmark: ajusta carga/núcleos, salva as
+  preferências e o botão navega para `/benchmark?autorun=1`. A execução,
+  progresso e resultados ficam na página dedicada `/benchmark`, que consome
+  `/api/hardware`, `POST /api/benchmark`, o polling de estado e o CSV.
+- As telas se separam por domínio: `/resultados` mostra o histórico do
+  compilador (`minipar-compiler-history`) e cada execução abre em
+  `/resultados/<run_id>` com a mesma visão de 7 fases do editor original
+  (Código, Tokens, AST, Símbolos, TAC, C++ e Execução), apenas leitura. O
+  histórico persiste `compileResult` para restaurar tokens, AST, tabela de
+  símbolos, TAC, C++ e mapeamentos de origem sem recompilar, com fallback para
+  entradas antigas que só guardavam o C++. O endereço antigo `/#result-detail`
+  é redirecionado para a execução mais recente e a rota `/result-detail` também
+  existe por compatibilidade. O `/benchmark` guarda a
+  última medição paralela (`minipar-benchmark-last`) e um histórico restaurável
+  de até 10 execuções (`minipar-benchmark-history`); a tabela de tarefas medidas
+  pagina de 15 em 15 linhas. Parâmetros, otimização, tema e hardware também são
+  persistidos em `localStorage`.
+- O estado do benchmark passa por Aguardando → Executando → Concluído/Falhou,
+  com barra de progresso acessível, cards de resumo, barras por núcleo, tabela e
+  exportação CSV. Os parâmetros de carga usam sliders sincronizados com campos
+  numéricos, e Configurações separa as seções de benchmark e de compilador.
+- Os testes de integração cobrem as rotas, o fluxo Painel → `/benchmark` com
+  `autorun`, a máquina de estados com resposta simulada, a persistência após
+  recarregar e a ausência de overflow em 1280 px, 820 px e 390 px. `ruff` e
+  `mypy` passaram; a suíte completa mantém apenas as 4 falhas preexistentes de
+  T1 (#32), sem relação com a interface.
+
+Pendências externas: revisão visual no ambiente de entrega e fechamento da
+issue remota. A migração completa da IDE/terminal/sessões continua no T49 (#50)
+e o empacotamento integral de assets no T50 (#48).

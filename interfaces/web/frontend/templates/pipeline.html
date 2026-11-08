@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Pipeline do Compilador — MiniPar 2026.2{% endblock %}
+{% block page_label %}Pipeline MiniPar{% endblock %}
+{% block current_file %}guia{% endblock %}
+
+{% block content %}
+<section id="page-pipeline" class="page active-page pipeline-page">
+    <div class="page-intro">
+        <div><p class="kicker">GUIA DO COMPILADOR</p><h1>Como funciona o pipeline</h1><p class="intro-copy">O MiniPar transforma seu programa em etapas para que você possa acompanhar e entender cada resultado.</p></div>
+        <div class="intro-actions"><a class="button button-outline" href="/">Voltar ao painel</a><a class="button button-primary" href="/editor">Abrir editor <span>→</span></a></div>
+    </div>
+    <div class="pipeline-explainer-grid">
+        <article class="card pipeline-explainer-card"><span class="pipeline-number">01</span><div><h2>Código-fonte</h2><p>Você escreve ou carrega um programa MiniPar no editor. Esta é a entrada usada em todas as etapas seguintes.</p></div></article>
+        <article class="card pipeline-explainer-card"><span class="pipeline-number">02</span><div><h2>Tokens</h2><p>O analisador léxico separa o texto em unidades, como palavras-chave, identificadores, operadores e valores.</p></div></article>
+        <article class="card pipeline-explainer-card"><span class="pipeline-number">03</span><div><h2>AST</h2><p>O analisador sintático organiza os tokens em uma árvore que representa a estrutura do programa.</p></div></article>
+        <article class="card pipeline-explainer-card"><span class="pipeline-number">04</span><div><h2>Símbolos</h2><p>A análise semântica verifica o significado do código e registra variáveis, funções, tipos e escopos.</p></div></article>
+        <article class="card pipeline-explainer-card"><span class="pipeline-number">05</span><div><h2>TAC</h2><p>O programa é convertido em código de três endereços, uma forma intermediária simples para analisar e otimizar.</p></div></article>
+        <article class="card pipeline-explainer-card"><span class="pipeline-number">06</span><div><h2>C++</h2><p>O gerador traduz o TAC para C++, preparando o programa que será compilado pelo ambiente.</p></div></article>
+        <article class="card pipeline-explainer-card pipeline-explainer-final"><span class="pipeline-number">07</span><div><h2>Execução</h2><p>O MiniPar executa o programa compilado e mostra a saída, os erros e o tempo medido.</p></div></article>
+    </div>
+    <div class="pipeline-next card"><div><p class="card-eyebrow">PRONTO PARA TESTAR?</p><h2>Acompanhe cada fase no editor</h2><p class="card-copy">Depois de compilar, use os controles de fase para navegar pelos artefatos produzidos.</p></div><a class="button button-primary" href="/editor">Ir para o editor <span>→</span></a></div>
+</section>
+{% endblock %}

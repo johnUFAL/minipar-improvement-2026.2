@@ -259,7 +259,51 @@ def _execution_input(data: dict[str, object]) -> tuple[str | None, str | None]:
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('painel.html', active_page='painel')
+
+
+@app.route('/benchmark')
+def benchmark_page():
+    return render_template('benchmark.html', active_page='benchmark')
+
+
+@app.route('/resultados')
+def resultados():
+    return render_template('resultados.html', active_page='resultados')
+
+
+@app.route('/result-detail')
+def resultado_compat():
+    """Compatibilidade com o endereço antigo /#result-detail."""
+    return render_template(
+        'resultado.html',
+        active_page='resultados',
+        run_id=request.args.get('run') or 'latest',
+    )
+
+
+@app.route('/resultados/<run_id>')
+def resultado_detalhe(run_id: str):
+    return render_template(
+        'resultado.html',
+        active_page='resultados',
+        run_id=run_id,
+    )
+
+
+@app.route('/configuracoes')
+def configuracoes():
+    return render_template('configuracoes.html', active_page='configuracoes')
+
+
+@app.route('/editor')
+def editor():
+    return render_template('editor.html', active_page='editor')
+
+
+@app.route('/pipeline')
+def pipeline():
+    return render_template('pipeline.html', active_page='pipeline')
 
 
 @app.route('/modelo-antigo')

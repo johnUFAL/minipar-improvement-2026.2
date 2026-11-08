@@ -35,7 +35,7 @@ class OfflineAssetsTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_templates_use_vendored_codemirror(self):
-        for template in ("index.html", "legacy/index.html"):
+        for template in ("editor.html", "legacy/index.html"):
             text = (TEMPLATES_DIR / template).read_text(encoding="utf-8")
             self.assertIn(
                 "vendor/codemirror/5.65.13/codemirror.min.js",

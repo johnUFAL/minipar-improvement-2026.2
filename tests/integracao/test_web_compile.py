@@ -44,13 +44,54 @@ class WebCompileTests(unittest.TestCase):
         self.assertIn("/modelo-antigo", page)
         self.assertIn('id="dashboard-example"', page)
         self.assertIn('id="dashboard-analyze"', page)
-        self.assertIn('id="example-select"', page)
-        self.assertIn('id="page-pipeline"', page)
-        self.assertIn('data-page-target="pipeline"', page)
-        self.assertNotIn('dashboard-pipeline-card', page)
         self.assertNotIn('id="test-list"', page)
 
-    def test_dashboard_exposes_benchmark_controls(self):
+    def test_screens_share_base_layout_and_have_dedicated_routes(self):
+        routes = {
+            "/": "Painel",
+            "/resultados": "Resultados do compilador",
+            "/benchmark": "Benchmark",
+            "/configuracoes": "Configurações",
+            "/editor": "Editor MiniPar",
+            "/pipeline": "Pipeline MiniPar",
+        }
+        for path, label in routes.items():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                page = response.get_data(as_text=True)
+                self.assertIn('class="sidebar"', page)
+                self.assertIn('class="topbar"', page)
+                self.assertIn(f"<span id=\"topbar-page\">{label}</span>", page)
+                self.assertNotIn("OpenMP", page)
+                self.assertNotIn("SIMD", page)
+                self.assertNotIn("HPC", page)
+
+        panel_page = self.client.get("/").get_data(as_text=True)
+        benchmark_page = self.client.get("/benchmark").get_data(as_text=True)
+        results_page = self.client.get("/resultados").get_data(as_text=True)
+        settings_page = self.client.get("/configuracoes").get_data(as_text=True)
+        self.assertIn('id="panel-run-benchmark"', panel_page)
+        self.assertIn('id="panel-compiler-total"', panel_page)
+        self.assertNotIn('id="benchmark-run"', panel_page)
+        self.assertIn('id="benchmark-state"', benchmark_page)
+        self.assertIn('role="progressbar"', benchmark_page)
+        self.assertIn('id="benchmark-cores-bars"', benchmark_page)
+        self.assertIn('id="benchmark-tasks-result"', benchmark_page)
+        self.assertIn('id="benchmark-tasks-pagination"', benchmark_page)
+        self.assertIn('id="compiler-history-list"', results_page)
+        detail_page = self.client.get("/resultados/execucao-teste").get_data(as_text=True)
+        self.assertIn('id="result-detail"', detail_page)
+        self.assertIn('class="result-detail"', detail_page)
+        self.assertIn('data-run-id="execucao-teste"', detail_page)
+        self.assertIn('id="back-to-results"', detail_page)
+        self.assertIn('SOMENTE LEITURA', detail_page)
+        compat_page = self.client.get("/result-detail").get_data(as_text=True)
+        self.assertIn('data-run-id="latest"', compat_page)
+        self.assertIn('id="settings-cores"', settings_page)
+        self.assertIn('id="hardware-max"', settings_page)
+
+    def test_dashboard_exposes_benchmark_controls_without_running_there(self):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
@@ -61,9 +102,29 @@ class WebCompileTests(unittest.TestCase):
             "benchmark-cores",
             "benchmark-fractals",
             "benchmark-repetitions",
+            "panel-run-benchmark",
+        ):
+            with self.subTest(element_id=element_id):
+                self.assertIn(f'id="{element_id}"', page)
+        for element_id in ("benchmark-run", "benchmark-results", "benchmark-csv"):
+            with self.subTest(element_id=element_id):
+                self.assertNotIn(f'id="{element_id}"', page)
+
+    def test_benchmark_page_exposes_execution_and_results(self):
+        response = self.client.get("/benchmark")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        for element_id in (
             "benchmark-run",
+            "benchmark-state",
             "benchmark-results",
+            "benchmark-summary",
+            "benchmark-cores-result",
+            "benchmark-tasks-result",
             "benchmark-csv",
+            "benchmark-history",
+            "benchmark-history-list",
         ):
             with self.subTest(element_id=element_id):
                 self.assertIn(f'id="{element_id}"', page)
@@ -198,25 +259,50 @@ class WebCompileTests(unittest.TestCase):
         self.assertIn("3 núcleos", result["warnings"][0])
         self.assertIn("2 disponíveis", result["warnings"][0])
 
+    @unittest.skipUnless(CXX_AVAILABLE, "g++ is required for benchmark core distribution")
+    def test_benchmark_distributes_activities_across_cores(self):
+        result = benchmark._run_benchmark(
+            benchmark.BenchmarkConfig(
+                students=1,
+                activities_per_student=2,
+                requested_cores=2,
+                fractals=0,
+                repetitions=1,
+            ),
+            cpu_count=2,
+            progress=lambda _progress, _message: None,
+        )
+        activity_tasks = [
+            task
+            for task in result["tasks"]
+            if task["task"] == "activity"
+        ]
+        self.assertEqual(len(activity_tasks), 2)
+        self.assertEqual(sorted(task["core"] for task in activity_tasks), [1, 2])
+        self.assertEqual(
+            [core["task_count"] for core in result["cores"]],
+            [1, 1],
+        )
+
     def test_editor_assets_are_served_locally_for_both_interfaces(self):
-        for route in ("/", "/modelo-antigo"):
+        for route in ("/editor", "/modelo-antigo"):
             with self.subTest(route=route):
                 response = self.client.get(route)
                 self.assertEqual(response.status_code, 200)
                 page = response.get_data(as_text=True)
                 self.assertNotIn("https://", page)
                 self.assertIn(
-                    "/static/vendor/codemirror/lib/codemirror.js", page
+                    "/static/vendor/codemirror/5.65.13/codemirror.min.js", page
                 )
                 self.assertIn(
-                    "/static/vendor/codemirror/mode/clike/clike.js", page
+                    "/static/vendor/codemirror/5.65.13/mode/clike/clike.min.js", page
                 )
 
         for asset in (
-            "vendor/codemirror/lib/codemirror.js",
-            "vendor/codemirror/lib/codemirror.css",
-            "vendor/codemirror/mode/clike/clike.js",
-            "vendor/codemirror/theme/dracula.css",
+            "vendor/codemirror/5.65.13/codemirror.min.js",
+            "vendor/codemirror/5.65.13/codemirror.min.css",
+            "vendor/codemirror/5.65.13/mode/clike/clike.min.js",
+            "vendor/codemirror/5.65.13/theme/dracula.min.css",
         ):
             with self.subTest(asset=asset):
                 self.assertEqual(
