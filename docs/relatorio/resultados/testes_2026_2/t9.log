@@ -1,8 +1,8 @@
 Carga de Trabalho: 160 atividades + 1 Calculo de Fractal ASCII
 
 --- 1. Executando Modo Sequencial (Apenas 1 Nucleo) ---
-[Professor] Concluiu 160 atividades (checksum 344428884.99)
-Tempo Sequencial Concluido em: 0.54 segundos
+[Professor] Concluiu 160 atividades (checksum 353511540.98)
+Tempo Sequencial Concluido em: 0.40 segundos
 
 --- 2. Executando Modo Paralelo (5 Nucleos Dedicados) ---
 
@@ -29,18 +29,18 @@ Tempo Sequencial Concluido em: 0.54 segundos
                                                   
 ====================================================
 
-[Monitor 1] Concluiu 40 atividades (checksum 91052300.39)
-[Professor] Concluiu 40 atividades (checksum 92770723.64)
-[Monitor 3] Concluiu 40 atividades (checksum 82714954.76)
-[Monitor 2] Concluiu 40 atividades (checksum 89440943.63)
-Tempo Paralelo Concluido em:   0.15 segundos
+[Professor] Concluiu 40 atividades (checksum 86533446.50)
+[Monitor 1] Concluiu 40 atividades (checksum 89358199.33)
+[Monitor 2] Concluiu 40 atividades (checksum 87379256.64)
+[Monitor 3] Concluiu 40 atividades (checksum 90240638.51)
+Tempo Paralelo Concluido em:   0.12 segundos
 
 ==========================================
          BENCHMARK DE DESEMPENHO          
 ==========================================
 Nucleos Utilizados (Paralelo) : 5
-Tempo Sequencial : 0.54 s
-Tempo Paralelo   : 0.15 s
-Aceleracao       : 3.67 x mais rapido!
-Reducao no tempo : 72.8 % de economia
+Tempo Sequencial : 0.40 s
+Tempo Paralelo   : 0.12 s
+Aceleracao       : 3.25 x mais rapido!
+Reducao no tempo : 69.2 % de economia
 ==========================================

@@ -79,6 +79,13 @@ int main(int argc, char** argv) {
 
     const double uniform = random_uniforme(-2.0, 3.0);
     assert(uniform >= -2.0 && uniform <= 3.0);
+
+    __minipar_random_seed(42);
+    const double seeded_first = random_val();
+    __minipar_random_seed(42);
+    assert(random_val() == seeded_first);
+    __minipar_random_seed(43);
+    assert(random_val() != seeded_first);
     assert(std::abs(std::exp(1.0) - 2.718281828459045) < 1e-12);
     assert(__minipar_max(2, 8, 3) == 8);
 

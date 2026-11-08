@@ -37,6 +37,7 @@ _BUILTIN_CALLS: dict[str, str] = {
     "write_file": "__minipar_write_file",
     "matrix": "__make_matrix",
     "random": "random_val",
+    "random_seed": "__minipar_random_seed",
     "clock": "agora",
     "argumento": "__minipar_argumento",
     "inf": "__minipar_inf",
