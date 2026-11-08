@@ -63,15 +63,17 @@ def available_cpu_count() -> int:
     if hasattr(os, "sched_getaffinity"):
         return max(1, len(os.sched_getaffinity(0)))
     if os.name == "nt":
-        process_mask = ctypes.c_size_t()
-        system_mask = ctypes.c_size_t()
-        get_affinity = ctypes.windll.kernel32.GetProcessAffinityMask
-        if get_affinity(
-            ctypes.windll.kernel32.GetCurrentProcess(),
-            ctypes.byref(process_mask),
-            ctypes.byref(system_mask),
-        ):
-            return max(1, process_mask.value.bit_count())
+        windll = getattr(ctypes, "windll", None)
+        if windll is not None:
+            process_mask = ctypes.c_size_t()
+            system_mask = ctypes.c_size_t()
+            get_affinity = windll.kernel32.GetProcessAffinityMask
+            if get_affinity(
+                windll.kernel32.GetCurrentProcess(),
+                ctypes.byref(process_mask),
+                ctypes.byref(system_mask),
+            ):
+                return max(1, process_mask.value.bit_count())
     return max(1, os.cpu_count() or 1)
 
 
