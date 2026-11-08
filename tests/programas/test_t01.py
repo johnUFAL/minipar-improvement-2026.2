@@ -27,12 +27,13 @@ class TestT01(unittest.TestCase):
         self.assertIn("Resultado: 42.0", output)  # + 12 30 e * 6 7
         self.assertIn("Resultado: 18.0", output)  # - 30 12
         self.assertIn("Resultado: 3.5", output)  # / 7 2
-        self.assertIn("ERRO: divisao por zero", output)  # / 5 0
-        self.assertIn("ERRO: operacao invalida", output)  # % 2 3
+        self.assertIn("Erro: divisao por zero.", output)  # / 5 0
+        self.assertIn("Erro: operacao invalida.", output)  # % 2 3
         self.assertIn("Servidor encerrando.", output)
         self.assertIn("Cliente encerrando.", output)
         self.assertEqual(output.count("Resultado: 42.0"), 3)
-        self.assertIn("servidor recebeu todas as requisicoes", output)
+        self.assertIn("servidor recebeu a requisicao", output)
+        self.assertIn("cliente exibiu a resposta da requisicao 7", output)
 
 
 if __name__ == "__main__":

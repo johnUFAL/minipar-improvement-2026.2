@@ -1045,8 +1045,10 @@ class SemanticAnalyzer:
                     f"{expected_type}.",
                     node.column,
                 )
-            elif expected_type not in (None, "void") and not self._types_compatible(
-                expected_type, actual_type
+            elif (
+                expected_type is not None
+                and expected_type != "void"
+                and not self._types_compatible(expected_type, actual_type)
             ):
                 self._report(
                     node.line,

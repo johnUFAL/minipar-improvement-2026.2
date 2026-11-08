@@ -151,9 +151,9 @@ def requests_to_input(requests: list[Request]) -> str:
 
 def expected_outcome(operacao: str, v1: str, v2: str) -> tuple[str, str | None]:
     if operacao not in {"+", "-", "*", "/"}:
-        return "ERRO: operacao invalida", None
+        return "Erro: operacao invalida.", None
     if operacao == "/" and float(v2) == 0.0:
-        return "ERRO: divisao por zero", None
+        return "Erro: divisao por zero.", None
     a = float(v1)
     b = float(v2)
     result = {"+": a + b, "-": a - b, "*": a * b, "/": a / b}[operacao]
