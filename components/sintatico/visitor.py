@@ -6,6 +6,77 @@ from typing import Any
 from .ast import ASTNode
 
 
+_CATEGORIA_DECLARACAO = frozenset({
+    "Program",
+    "VarDecl",
+    "AttributeDecl",
+    "Parameter",
+    "FuncDecl",
+    "MethodDecl",
+    "ClassDecl",
+})
+
+_CATEGORIA_EXPRESSAO = frozenset({
+    "NumberExpr",
+    "StringExpr",
+    "BoolExpr",
+    "IdentifierExpr",
+    "BinaryExpr",
+    "UnaryExpr",
+    "PropertyAccess",
+    "MethodCall",
+    "FuncCallExpr",
+    "NewExpr",
+    "ThisExpr",
+    "InputExpr",
+    "ListLiteral",
+    "MatrixCreateExpr",
+    "IndexExpr",
+})
+
+_CATEGORIA_CONTROLE = frozenset({
+    "SeqBlock",
+    "IfStmt",
+    "WhileStmt",
+    "DoWhileStmt",
+    "ForStmt",
+    "BreakStmt",
+    "ContinueStmt",
+    "ReturnStmt",
+    "PrintStmt",
+    "Assignment",
+    "PropertyAssign",
+    "IndexAssign",
+})
+
+_CATEGORIA_PARALELO = frozenset({
+    "ParBlock",
+    "ForkStmt",
+    "JoinStmt",
+    "SendStmt",
+    "ReceiveExpr",
+    "ChannelDecl",
+    "CChannelExpr",
+})
+
+
+def categoria_ast(node: ASTNode) -> str:
+    tipo = type(node).__name__
+    if tipo in _CATEGORIA_PARALELO:
+        return "paralelo"
+    if tipo in ("FuncCallExpr", "MethodCall"):
+        nome = getattr(node, "name", None) or getattr(node, "method_name", None)
+        if nome in ("send", "receive"):
+            return "paralelo"
+    if tipo in _CATEGORIA_DECLARACAO:
+        return "declaracao"
+    if tipo in _CATEGORIA_EXPRESSAO:
+        return "expressao"
+    if tipo in _CATEGORIA_CONTROLE:
+        return "controle"
+    return "controle"
+
+
 class ASTVisitor:
     def visit(self, node: ASTNode | None) -> Any:
         if node is None:
@@ -26,15 +97,23 @@ class ASTVisitor:
                         self.visit(item)
 
 
-def para_dict(node: ASTNode) -> dict[str, object]:
+def para_dict(
+    node: ASTNode, *, incluir_categoria: bool = False
+) -> dict[str, object]:
     result: dict[str, object] = {"tipo": type(node).__name__}
+    if incluir_categoria:
+        result["categoria"] = categoria_ast(node)
     for field in fields(node):
         value = getattr(node, field.name)
         if isinstance(value, ASTNode):
-            result[field.name] = para_dict(value)
+            result[field.name] = para_dict(
+                value, incluir_categoria=incluir_categoria
+            )
         elif isinstance(value, (tuple, list)):
             result[field.name] = [
-                para_dict(item) if isinstance(item, ASTNode) else item
+                para_dict(item, incluir_categoria=incluir_categoria)
+                if isinstance(item, ASTNode)
+                else item
                 for item in value
             ]
         else:

@@ -107,6 +107,50 @@ class FrontendBrowserTests(unittest.TestCase):
             arg=highlight_selector,
         )
 
+    def test_origin_popover_uses_light_theme_in_light_mode(self):
+        self._open_ide()
+        self._run_simple_program()
+        self.page.click('.step[data-phase="tac"]')
+        self.page.wait_for_selector('#page-ide .mapped-code-line[data-source-line]')
+        self.page.evaluate(
+            """() => {
+                document.body.classList.add('light-theme');
+                localStorage.setItem('minipar-theme', 'light');
+            }"""
+        )
+        line = self.page.locator('#page-ide .mapped-code-line[data-source-line]').first
+        line.hover()
+        self.page.wait_for_function(
+            """() => {
+                const popover = document.querySelector('.tac-origin-popover');
+                return popover && !popover.hidden &&
+                    popover.textContent.includes('Origem: linha');
+            }"""
+        )
+        popover = self.page.locator('.tac-origin-popover')
+        self.assertFalse(popover.is_hidden())
+        background = popover.evaluate(
+            "element => getComputedStyle(element).backgroundColor"
+        )
+        self.assertEqual(background, "rgb(255, 255, 255)")
+        self.page.mouse.move(2, 2)
+
+    def test_phase_bar_uses_light_theme_in_light_mode(self):
+        self._open_ide()
+        self.page.evaluate(
+            """() => {
+                document.body.classList.add('light-theme');
+                localStorage.setItem('minipar-theme', 'light');
+            }"""
+        )
+        step = self.page.locator('.phase-nav .step[data-phase="tac"]')
+        step.hover()
+        background = step.evaluate(
+            "element => getComputedStyle(element).backgroundColor"
+        )
+        self.assertEqual(background, "rgb(232, 238, 248)")
+        self.page.mouse.move(2, 2)
+
     def test_origin_highlights_in_editor_and_result_detail(self):
         self._open_ide()
         self.assertTrue(self.page.locator("#compile-button").is_visible())

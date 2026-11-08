@@ -34,6 +34,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let runInProgress = false;
     let editorOriginBinding = null;
     let resultOriginBinding = null;
+    let astLineMarkers = [];
+    let astTextMarkers = [];
+    let astReadonlyHighlights = [];
 
     const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
     const json = value => `<pre class="json-output">${escape(JSON.stringify(value, null, 2))}</pre>`;
@@ -47,6 +50,84 @@ document.addEventListener("DOMContentLoaded", () => {
         execution: "Confira a saída do programa, os erros e o tempo medido pelo ambiente.",
     };
     function setStatus(text, error = false) { status.classList.toggle("error", error); status.innerHTML = `<span></span> ${escape(text)}`; }
+    function clamp(value, minimum, maximum) {
+        return Math.min(maximum, Math.max(minimum, value));
+    }
+    function astSpan(node) {
+        if (!node) return null;
+        if (window.MiniParAstView && window.MiniParAstView.spanOf) {
+            return window.MiniParAstView.spanOf(node);
+        }
+        const line = Math.max(1, Number(node.line || 1));
+        const column = Math.max(1, Number(node.column || 1));
+        return { line, column, endLine: line, endColumn: column + 1 };
+    }
+    function clearAstHighlight() {
+        astLineMarkers.forEach(marker => editor.removeLineClass(marker, "background", "cm-ast-line"));
+        astLineMarkers = [];
+        astTextMarkers.forEach(marker => marker.clear());
+        astTextMarkers = [];
+        astReadonlyHighlights.forEach(element => element.classList.remove("ast-source-highlight"));
+        astReadonlyHighlights = [];
+    }
+    function revealEditorLine(line, ch) {
+        if (line < 0 || line >= editor.lineCount()) return;
+        const scroll = editor.getScrollInfo();
+        const coords = editor.charCoords({ line, ch: ch || 0 }, "local");
+        const lineHeight = editor.defaultTextHeight
+            ? editor.defaultTextHeight()
+            : Math.max(1, parseFloat(getComputedStyle(editor.getWrapperElement()).lineHeight) || 21);
+        const scroller = editor.getScrollerElement();
+        if (coords.top < scroll.top || coords.top > scroll.top + scroll.clientHeight - lineHeight) {
+            scroller.scrollTop = Math.max(0, coords.top - Math.floor(scroll.clientHeight / 2));
+        }
+        if (coords.left < scroll.left || coords.left > scroll.left + scroll.clientWidth) {
+            scroller.scrollLeft = Math.max(0, coords.left - 24);
+        }
+    }
+    function highlightAstNode(node) {
+        clearAstHighlight();
+        const span = astSpan(node);
+        if (!span) return;
+        const startLine = clamp(span.line - 1, 0, editor.lineCount() - 1);
+        const rawEndLine = clamp(span.endLine - 1, startLine, editor.lineCount() - 1);
+        const endLine = Math.min(rawEndLine, startLine + 299);
+        const startText = editor.getLine(startLine) || "";
+        const endText = editor.getLine(endLine) || "";
+        const startCh = clamp(span.column - 1, 0, startText.length);
+        let endCh = rawEndLine === endLine
+            ? clamp(span.endColumn - 1, 0, endText.length)
+            : endText.length;
+        if (startLine === endLine && endCh <= startCh) {
+            endCh = Math.min(startText.length, startCh + 1);
+        }
+        for (let line = startLine; line <= endLine; line += 1) {
+            astLineMarkers.push(editor.addLineClass(line, "background", "cm-ast-line"));
+        }
+        if (endLine > startLine || endCh > startCh) {
+            astTextMarkers.push(editor.markText(
+                { line: startLine, ch: startCh },
+                { line: endLine, ch: endCh },
+                { className: "cm-ast-token", title: `AST: ${node.tipo || "nó"}` },
+            ));
+        }
+        revealEditorLine(startLine, startCh);
+    }
+    function highlightReadonlyAstNode(node, root) {
+        clearAstHighlight();
+        if (!root) return;
+        const span = astSpan(node);
+        if (!span) return;
+        const lines = root.querySelectorAll(".readonly-code-line");
+        const lastLine = Math.min(span.endLine, span.line + 299);
+        for (let line = span.line; line <= lastLine; line += 1) {
+            const target = lines[line - 1];
+            if (target) {
+                target.classList.add("ast-source-highlight");
+                astReadonlyHighlights.push(target);
+            }
+        }
+    }
     function showPage(pageName) {
         pages.forEach(page => page.classList.toggle("active-page", page.id === `page-${pageName}`));
         navItems.forEach(item => item.classList.toggle("active", item.dataset.page === pageName));
@@ -107,12 +188,30 @@ document.addEventListener("DOMContentLoaded", () => {
         const resultPhaseTitle = document.getElementById("result-phase-title");
         const compileResult = item.compileResult || {};
         const renderResultPhase = phase => {
+            clearAstHighlight();
             if (resultPhaseTitle) resultPhaseTitle.textContent = phaseNames[phase];
             document.querySelectorAll("[data-result-phase]").forEach(step => step.classList.toggle("active", step.dataset.resultPhase === phase));
             if (!resultPhaseContent) return;
             if (phase === "code") resultPhaseContent.innerHTML = diagnosticsOutput(item.diagnosticos || []) || `<div class="phase-placeholder"><strong>Código-fonte preservado</strong><p>Este programa não pode ser editado nesta tela.</p></div>`;
             else if (phase === "tokens") resultPhaseContent.innerHTML = compileResult.tokens ? `<div class="phase-explainer">${explain.tokens}</div><div class="table-scroll"><table class="data-table"><thead><tr><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead><tbody>${compileResult.tokens.map(token => `<tr><td>${escape(token.type)}</td><td><code>${escape(token.lexeme)}</code></td><td>${token.line}</td><td>${token.column}</td></tr>`).join("")}</tbody></table></div>` : `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
-            else if (phase === "ast") resultPhaseContent.innerHTML = compileResult.ast ? `<div class="phase-explainer">${explain.ast}</div>${json(compileResult.ast)}` : `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
+            else if (phase === "ast") {
+                if (compileResult.ast) {
+                    resultPhaseContent.innerHTML = `<div class="phase-explainer">${explain.ast}</div><div id="result-ast-view" class="ast-mount"></div>`;
+                    const astHost = resultPhaseContent.querySelector("#result-ast-view");
+                    if (astHost) {
+                        if (window.MiniParAstView) {
+                            const readonlySource = detail.querySelector(".result-source-code");
+                            window.MiniParAstView.mount(astHost, compileResult.ast, {
+                                onSelect: node => highlightReadonlyAstNode(node, readonlySource),
+                            });
+                        } else {
+                            astHost.innerHTML = json(compileResult.ast);
+                        }
+                    }
+                } else {
+                    resultPhaseContent.innerHTML = `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
+                }
+            }
             else if (phase === "symbols") resultPhaseContent.innerHTML = compileResult.tabela_simbolos ? `<div class="phase-explainer">${explain.symbols}</div>${json(compileResult.tabela_simbolos)}` : `<div class="phase-placeholder"><strong>Dados não armazenados</strong></div>`;
             else if (phase === "tac") {
                 if (!compileResult.tac) {
@@ -363,6 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     function renderPhase() {
         const index = phaseOrder.indexOf(currentPhase);
+        clearAstHighlight();
         document.getElementById("phase-title").textContent = phaseNames[currentPhase];
         document.getElementById("phase-count").textContent = `${index + 1} de ${phaseOrder.length}`;
         document.querySelectorAll(".step").forEach(step => {
@@ -373,11 +473,23 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentPhase === "code") content.innerHTML = `${result ? diagnosticsOutput(result.diagnosticos || []) : ""}<div class="phase-placeholder"><strong>Seu ponto de partida</strong><p>Edite o programa à esquerda e compile para liberar as próximas fases.</p></div>`;
         else if (!result) content.innerHTML = `<div class="phase-placeholder"><strong>Compile primeiro</strong><p>Os dados desta fase aparecerão aqui.</p></div>`;
         else if (currentPhase === "tokens") content.innerHTML = `<div class="phase-explainer">${explain.tokens}</div><div class="table-scroll"><table class="data-table"><thead><tr><th>Tipo</th><th>Lexema</th><th>Linha</th><th>Coluna</th></tr></thead><tbody>${result.tokens.map(token => `<tr><td>${escape(token.type)}</td><td><code>${escape(token.lexeme)}</code></td><td>${token.line}</td><td>${token.column}</td></tr>`).join("")}</tbody></table></div>`;
-        else if (currentPhase === "ast") content.innerHTML = `<div class="phase-explainer">${explain.ast}</div>${json(result.ast)}`;
+        else if (currentPhase === "ast") content.innerHTML = `<div class="phase-explainer">${explain.ast}</div><div id="ast-phase-view" class="ast-mount"></div>`;
         else if (currentPhase === "symbols") content.innerHTML = `<div class="phase-explainer">${explain.symbols}</div>${json(result.tabela_simbolos)}`;
         else if (currentPhase === "tac") content.innerHTML = `<div class="phase-explainer">${explain.tac}</div><div class="tac-toolbar"><span>Nível selecionado: <b>${optimizationLevel}</b></span><button class="btn secondary" id="compare-tac">Comparar antes/depois</button></div>${result.tac ? mappedCode("Código intermediário", result.tac, result.tac_origin, "tac") : `<p class="hint">Nenhum TAC foi gerado porque há erros no programa.</p>`}`;
         else if (currentPhase === "cpp") content.innerHTML = `<div class="phase-explainer">${explain.cpp}</div>${result.cpp ? mappedCode("Código C++ gerado", result.cpp, result.cpp_origin, "cpp") : `<p class="hint">Nenhum C++ foi gerado porque há erros no programa.</p>`}`;
         else content.innerHTML = execution ? `<div class="phase-explainer">${explain.execution}</div><div class="execution"><p class="hint">Tempo: ${Number(execution.tempo || 0).toFixed(3)} s · código de saída: ${execution.exit_code ?? "—"}</p><div class="execution-grid"><div class="execution-box"><h3>STDOUT</h3><pre>${escape(execution.stdout)}</pre></div><div class="execution-box"><h3>STDERR</h3><pre>${escape(execution.stderr)}</pre></div></div></div>` : `<div class="phase-placeholder"><strong>Ainda não executado</strong><p>Clique em Executar para ver stdout, stderr e tempo.</p></div>`;
+        if (currentPhase === "ast" && result && result.ast) {
+            const astHost = document.getElementById("ast-phase-view");
+            if (astHost) {
+                if (window.MiniParAstView) {
+                    window.MiniParAstView.mount(astHost, result.ast, {
+                        onSelect: node => highlightAstNode(node),
+                    });
+                } else {
+                    astHost.innerHTML = json(result.ast);
+                }
+            }
+        }
         const compareButton = document.getElementById("compare-tac");
         if (compareButton) compareButton.addEventListener("click", compareTac);
         bindOriginHighlights({ scope: content, source: { type: "editor" } });
