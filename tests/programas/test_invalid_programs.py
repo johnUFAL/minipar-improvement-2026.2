@@ -20,12 +20,15 @@ EXPECTED_DIAGNOSTICS = {
     "08_canal_mesmo_host.mp": "computadores distintos",
     "09_fork_sem_join.mp": "nao possui join",
     "10_join_sem_fork.mp": "nao referencia um fork",
+    "11_funcao_nao_declarada.mp": "Funcao 'nao_existe' nao declarada.",
+    "12_argumentos_incorretos.mp": "'soma' espera 2 argumento(s), recebeu 1.",
+    "13_tipo_argumento.mp": "Tipo incompativel no argumento 1 de 'exp'",
 }
 
 
 class InvalidProgramIntegrationTests(unittest.TestCase):
     def test_invalid_programs_report_the_expected_diagnostic(self) -> None:
-        self.assertEqual(len(EXPECTED_DIAGNOSTICS), 10)
+        self.assertEqual(len(EXPECTED_DIAGNOSTICS), 13)
         for filename, expected in EXPECTED_DIAGNOSTICS.items():
             with self.subTest(program=filename):
                 source = (INVALID_PROGRAMS / filename).read_text(encoding="utf-8")
