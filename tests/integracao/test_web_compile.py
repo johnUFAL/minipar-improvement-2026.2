@@ -3,12 +3,14 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from interfaces.web import api
+from interfaces.web import benchmark
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,6 +49,154 @@ class WebCompileTests(unittest.TestCase):
         self.assertIn('data-page-target="pipeline"', page)
         self.assertNotIn('dashboard-pipeline-card', page)
         self.assertNotIn('id="test-list"', page)
+
+    def test_dashboard_exposes_benchmark_controls(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        for element_id in (
+            "benchmark-students",
+            "benchmark-activities",
+            "benchmark-cores",
+            "benchmark-fractals",
+            "benchmark-repetitions",
+            "benchmark-run",
+            "benchmark-results",
+            "benchmark-csv",
+        ):
+            with self.subTest(element_id=element_id):
+                self.assertIn(f'id="{element_id}"', page)
+
+    def test_benchmark_hardware_and_validation_endpoints(self):
+        hardware = self.client.get("/api/hardware")
+        self.assertEqual(hardware.status_code, 200)
+        hardware_data = hardware.get_json()
+        self.assertGreaterEqual(hardware_data["available_cores"], 1)
+        self.assertLessEqual(
+            hardware_data["benchmark_max_cores"],
+            hardware_data["available_cores"],
+        )
+        self.assertLessEqual(hardware_data["benchmark_max_cores"], 256)
+        with patch.object(api, "available_cpu_count", return_value=512):
+            hardware = self.client.get("/api/hardware")
+        self.assertEqual(hardware.get_json()["available_cores"], 512)
+        self.assertEqual(hardware.get_json()["benchmark_max_cores"], 256)
+
+        for payload in (
+            None,
+            {"alunos": True},
+            {"fractais": 3},
+            {"alunos": 2000, "atividades": 2},
+        ):
+            with self.subTest(payload=payload):
+                response = self.client.post("/api/benchmark", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertTrue(response.get_json()["error"])
+
+    @unittest.skipUnless(CXX_AVAILABLE, "g++ is required for benchmark API integration")
+    def test_benchmark_runs_asynchronously_and_exports_metrics_csv(self):
+        response = self.client.post(
+            "/api/benchmark",
+            json={
+                "alunos": 1,
+                "atividades": 2,
+                "nucleos": 1,
+                "fractais": 1,
+                "repeticoes": 1,
+            },
+        )
+        self.assertEqual(response.status_code, 202)
+        job_id = response.get_json()["job_id"]
+
+        hardware = self.client.get("/api/hardware")
+        self.assertEqual(hardware.status_code, 200)
+        self.assertEqual(
+            self.client.get(f"/api/benchmark/{job_id}/csv").status_code,
+            409,
+        )
+
+        deadline = time.monotonic() + 60
+        job = None
+        while time.monotonic() < deadline:
+            response = self.client.get(f"/api/benchmark/{job_id}")
+            self.assertEqual(response.status_code, 200)
+            job = response.get_json()
+            if job["status"] in {"completed", "failed"}:
+                break
+            time.sleep(0.1)
+
+        self.assertIsNotNone(job)
+        self.assertEqual(job["status"], "completed", job)
+        self.assertEqual(job["state"], "concluído")
+        result = job["result"]
+        self.assertEqual(result["parameters"]["total_atividades"], 2)
+        self.assertEqual(result["parameters"]["nucleos_utilizados"], 1)
+        self.assertGreater(result["sequential_seconds"], 0)
+        self.assertGreater(result["parallel_seconds"], 0)
+        self.assertGreaterEqual(result["speedup"], 0)
+        self.assertIn("@@METRICAS ", result["metrics_line"])
+        self.assertEqual(len(result["tasks"]), 3)
+        self.assertEqual(
+            {task["task"] for task in result["tasks"]},
+            {"activity", "mandelbrot"},
+        )
+        self.assertEqual(
+            sum(task["task"] == "activity" for task in result["tasks"]),
+            2,
+        )
+
+        csv_response = self.client.get(f"/api/benchmark/{job_id}/csv")
+        self.assertEqual(csv_response.status_code, 200)
+        self.assertIn("text/csv", csv_response.content_type)
+        self.assertIn("resumo_sequencial", csv_response.get_data(as_text=True))
+        self.assertIn("mandelbrot", csv_response.get_data(as_text=True))
+
+    def test_benchmark_caps_requested_cores_to_available_hardware(self):
+        tasks = [
+            {
+                "task_id": core - 1,
+                "task": "activity",
+                "core": core,
+                "units": 1,
+                "seconds": 0.01,
+            }
+            for core in (1, 2)
+        ]
+
+        with (
+            patch.object(benchmark, "_program", return_value="program"),
+            patch.object(
+                benchmark,
+                "_compile_program",
+                side_effect=lambda _source, name, _directory: Path(name),
+            ),
+            patch.object(
+                benchmark,
+                "_run_program",
+                side_effect=lambda executable, _arguments: (
+                    (0.04, tasks[:1])
+                    if executable.name == "sequential"
+                    else (0.02, tasks)
+                ),
+            ),
+        ):
+            result = benchmark._run_benchmark(
+                benchmark.BenchmarkConfig(
+                    students=1,
+                    activities_per_student=4,
+                    requested_cores=3,
+                    fractals=0,
+                    repetitions=1,
+                ),
+                cpu_count=2,
+                progress=lambda _progress, _message: None,
+            )
+
+        self.assertEqual(result["parameters"]["nucleos_utilizados"], 2)
+        self.assertEqual(result["parameters"]["nucleos_solicitados"], 3)
+        self.assertIn("3 núcleos", result["warnings"][0])
+        self.assertIn("2 disponíveis", result["warnings"][0])
 
     def test_editor_assets_are_served_locally_for_both_interfaces(self):
         for route in ("/", "/modelo-antigo"):

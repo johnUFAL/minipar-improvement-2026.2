@@ -612,6 +612,7 @@ private:
 };
 
 void minipar_init(int argc, char** argv);
+std::string __minipar_argumento(std::int64_t index);
 bool minipar_worker_requested();
 int minipar_worker_port();
 std::pair<std::string, int> minipar_resolve_host(const std::string& name);

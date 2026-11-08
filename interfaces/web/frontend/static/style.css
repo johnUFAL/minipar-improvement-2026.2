@@ -242,6 +242,20 @@ body.light-theme .cm-error-token{background:#f7c9d2;border-bottom-color:#b83650}
 .table-scroll .data-table{min-width:520px}
 body{overflow-x:hidden}
 
+.benchmark-card{margin-top:20px}
+.benchmark-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));align-items:end;gap:12px;margin:18px 0}
+.benchmark-field{display:grid;gap:6px;color:var(--muted);font-size:10px;font-weight:700}
+.benchmark-field input,.benchmark-field select{width:100%;min-width:0;padding:9px 10px;border:1px solid var(--border);border-radius:5px;background:var(--background);color:var(--text);font:12px var(--mono)}
+.benchmark-status{min-height:18px;color:var(--muted);font:11px var(--mono)}
+.benchmark-results{display:grid;gap:14px;margin-top:16px}
+.benchmark-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.benchmark-summary-item{display:grid;gap:6px;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--card-2)}
+.benchmark-summary-item span{color:var(--muted);font-size:9px;text-transform:uppercase}
+.benchmark-summary-item strong{font:600 16px var(--mono);color:var(--text)}
+.benchmark-summary ul{grid-column:1/-1;margin:0;padding-left:20px;color:var(--warning,var(--muted));font-size:11px}
+.benchmark-results .button{justify-self:start}
+@media (max-width:560px){.benchmark-controls .button{width:100%}.benchmark-summary{grid-template-columns:1fr 1fr}}
+
 @media (max-width:900px){
     .sidebar{width:72px}
     .brand{justify-content:center;padding:14px 6px}

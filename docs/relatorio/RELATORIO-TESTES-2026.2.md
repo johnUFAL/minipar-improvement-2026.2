@@ -1,7 +1,7 @@
 # Relatório de execução — 11 testes do MiniPar 2026.2
 
-**Branch:** `testes`  
-**Data da execução:** 06/11/2026  
+**Branch da execução original:** `testes`
+**Data da execução original:** 06/11/2026
 **Ambiente:** Windows 10, Python 3.11.15, GCC 16.2.0 (MSYS2 UCRT64), clang 23.1.4  
 **Escopo:** Testes 1 a 11 do compilador MiniPar. A interface didática **não** faz parte deste relatório.
 
@@ -29,7 +29,7 @@
 
 Os tempos incluem compilação e execução. A soma é de aproximadamente 2 min 34 s.
 
-### 1.1 Suíte automatizada
+### 1.1 Suíte automatizada — execução original de 06/11/2026
 
 ```text
 216 passed, 1 skipped, 40 subtests passed in 245.57s
@@ -38,6 +38,31 @@ Os tempos incluem compilação e execução. A soma é de aproximadamente 2 min 
 O único teste ignorado é o de `taskset`, específico de Linux. A suíte inclui
 os testes unitários, T1 multi-terminal, T8–T11 e os testes de integração do
 compilador.
+
+### 1.2 Atualização do checkout em 08/11/2026
+
+O checkout da branch `fix/quest_docs_minipar_2026` foi validado novamente com
+cobertura e a configuração mínima de 80% usada pelo CI:
+
+Ambiente desta execução: Windows, Python 3.12.10 e GCC 16.2.0 (MSYS2 UCRT64).
+
+```text
+247 passed, 8 failed, 8 skipped, 89 subtests passed in 296.44s
+Coverage: 81.03% (required: 80%)
+```
+
+As falhas observadas não pertencem às tasks 42, 43, 44, 45 e 47 desta branch:
+
+- T1 multi-terminal falha ao analisar os programas cliente/servidor (issue
+  #32); o erro ocorre antes da compilação e execução dos processos.
+- Os testes de assets offline falham porque os templates ainda referenciam
+  CodeMirror por CDN (tasks 48–50, fora do escopo atual).
+
+O conjunto de testes dirigido ao benchmark passou: **4 testes, 12 subtestes**.
+`mypy` passou. `ruff check .` ainda falha em `scripts/run_multiterminal.py`
+por referências indefinidas a `expected_text`, também fora do escopo desta
+branch. A cobertura atingiu o limite, mas o código de saída da suíte completa
+é falha devido aos testes descritos acima.
 
 ---
 
@@ -253,3 +278,28 @@ Os três montam sem erro. A execução no CPUlator permanece manual: colar o
 - [x] Correções de `parse_ints` e array de atributo com testes unitários.
 - [ ] Screenshot do CPUlator.
 - [ ] Execução em duas máquinas reais (opcional nesta entrega).
+
+---
+
+## 10. Atualização das tasks 42, 43, 44, 45 e 47
+
+Esta branch cobre somente as issues 42, 43, 44, 45 e 47; este relatório
+permanece compartilhado pelo projeto e continua registrando evidências dos
+testes 1–11.
+
+- **#42:** pseudocódigos do léxico, parser, semântico, diagnósticos e tabela de
+  símbolos estão em `pseudocodigos.md`; falta revisão cruzada por outro
+  integrante.
+- **#43:** backlog local lista as 50 issues e os nove sprints. Não foi possível
+  conferir o GitHub Project com a credencial atual, que não possui
+  `read:project`.
+- **#44:** não foi inventada a matriz dos 17 itens porque o enunciado integral
+  não está no checkout. Permanecem pendentes a revisão final, o clone limpo,
+  o PDF definitivo, a tag e a release `v2026.2`.
+- **#45:** os testes locais e o workflow exigem ASan/UBSan; ainda falta
+  confirmar a execução do job Linux no CI. A tentativa local em Windows não
+  pôde compilar o probe porque o linker não encontrou `-lasan` e `-lubsan`.
+- **#47:** API de hardware, jobs assíncronos, métricas e CSV foram
+  implementados. O workload MiniPar é gerado via TAC/C++; ainda é necessário
+  confirmar que atende integralmente aos critérios específicos dos programas
+  T8–T10.

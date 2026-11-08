@@ -242,8 +242,17 @@ def run_t1(requests: list[Request], keep_temp: bool, timeout: float) -> int:
         "cliente retornou 0": client.returncode == 0,
         "servidor retornou 0": server.returncode == 0,
         "servidor recebeu a requisicao": "Servidor recebeu:" in server_stdout,
-        f"cliente exibiu '{expected_text}'": expected_text in client.stdout,
     }
+    for index, (operacao, v1, v2) in enumerate(requests, start=1):
+        expected_status, expected_result = expected_outcome(operacao, v1, v2)
+        expected_text = (
+            f"Resultado: {expected_result}"
+            if expected_result is not None
+            else expected_status
+        )
+        checks[f"cliente exibiu a resposta da requisicao {index}"] = (
+            expected_text in client.stdout
+        )
 
     print("\n===== VERIFICACOES =====")
     for label, ok in checks.items():

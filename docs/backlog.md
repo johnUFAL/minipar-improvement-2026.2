@@ -99,7 +99,9 @@ validação independente de todos os critérios da milestone.
 ### Sprint 5 — C++ e GCC
 - **Issues:** #20–#22 Feito; #45 Em andamento.
 - **Incremento registrado:** runtime, gerador C++ e driver GCC. A correção
-  adicional de limites do T7 continua aberta e está sendo trabalhada.
+  do T7 e os limites de leitura/escrita foram implementados nesta branch;
+  falta confirmar a execução obrigatória de ASan/UBSan no CI Linux antes de
+  considerar a evidência completa. A issue remota permanece aberta.
 
 ### Sprint 6 — Paralelismo e Canais
 - **Issues:** #23–#27 — todas Feito.
@@ -109,32 +111,57 @@ validação independente de todos os critérios da milestone.
 ### Sprint 7 — Interfaces
 - **Issues:** #28–#31 Feito; #47–#50 Em andamento.
 - **Incremento registrado:** CLI, API do pipeline, interface didática e
-  visualização da AST. Métricas reais, migração de telas e assets locais
-  continuam em andamento.
+  visualização da AST. O backend de benchmark com medições reais foi
+  implementado localmente nesta branch (#47); a migração de telas e a
+  remoção de dependências externas permanecem em andamento (#48–#50).
 
 ### Sprint 8 — Testes, Documentação e Entrega
 - **Issues:** #32–#44 e #46 — todas Em andamento.
 - **Incremento registrado:** sem issues fechadas neste milestone no snapshot.
-  Programas, testes, documentação e release permanecem em andamento.
+  Os pseudocódigos estão documentados, o Product/Sprint Backlog foi
+  inventariado e o relatório de execução foi atualizado; revisão humana,
+  acesso ao Project, checklist oficial dos 17 itens e release ainda estão
+  pendentes.
 
-## Plano de implementação priorizado
+## Acompanhamento do plano priorizado
 
-1. **Fechar a segurança de memória do T7 (#45, P0):** fixar o tamanho correto
-   da pilha no programa, cobrir leitura fora dos limites com mensagem e código
-   de saída não zero, e validar T7 sob ASan/UBSan onde o toolchain permitir.
+1. **Segurança de memória do T7 (#45, P0) — implementada localmente:** a pilha
+   foi dimensionada, leitura e escrita fora dos limites falham explicitamente,
+   e o teste sanitizado é obrigatório no CI. A confirmação do job Linux ainda
+   precisa ser anexada como evidência.
 2. **Consolidar os testes de integração (#40, P0) e os programas P0 (#32, #33,
    #38):** assegurar build/link do runtime e casos reproduzíveis antes de
-   ampliar a suíte de regressão.
+   ampliar a suíte de regressão. Esses itens não são escopo desta branch.
 3. **Completar os artefatos P1 do Sprint 8:** regressão T1–T10 (#46), programas
    T3–T6 e benchmarks T8–T10 (#34–#37, #39), pseudocódigos (#42) e evidências
    de execução (#41). O T7 do backlog corresponde à issue #38; a verificação
-   de limites é uma correção separada na #45.
-4. **Finalizar entrega e relatório (#43, #44):** confirmar board e associações,
-   ligar os 17 itens do enunciado às evidências, fazer clone limpo e release.
-5. **Destravar o benchmark de interface (#47):** depende de #29 e #39; definir
-   contrato de parâmetros/hardware antes de job assíncrono, métricas e CSV.
-6. **Migrar telas e ativos (#49, #50, #48; T48–T50):** integrar ao pipeline
-   existente e validar operação offline e preservação das funções da IDE.
+   de limites é uma correção separada na #45. A documentação #42 está
+   preparada; a revisão por outro integrante e as demais evidências continuam
+   pendentes.
+4. **Finalizar entrega e relatório (#43, #44):** o backlog local contém os nove
+   sprints e o relatório de testes foi atualizado. A revisão do board, a
+   matriz exata dos 17 itens do enunciado, o clone limpo e a release ainda não
+   podem ser confirmados.
+5. **Backend de benchmark (#47) — implementado localmente:** hardware,
+   parâmetros limitados, jobs assíncronos, polling, medições sequencial/
+   paralela, mediana, speedup, eficiência e CSV estão disponíveis na API e no
+   painel. A execução é gerada pelo pipeline TAC/C++ do MiniPar; a equivalência
+   exata com os programas de aceitação T8–T10 deve ser revisada antes de fechar
+   a issue.
+6. **Migrar telas e ativos:** #49 (T48), #50 (T49) e #48 (T50); integrar ao
+   pipeline existente e validar operação offline e preservação das funções da
+   IDE. Esses itens não são escopo desta branch.
+   Esses itens não são escopo desta branch.
+
+## Evidências e pendências das tasks desta branch
+
+| Task | Implementação local | Evidência/pendência |
+|---|---|---|
+| #42 | Pseudocódigos de léxico, parser, semântico, diagnósticos e tabela de símbolos em [`pseudocodigos.md`](relatorio/pseudocodigos.md). | A revisão independente por outro integrante ainda não ocorreu. |
+| #43 | Product Backlog e nove Sprint Backlogs registrados neste arquivo; snapshot confirma as 50 issues associadas a um milestone. | A listagem/configuração do GitHub Project exige o escopo `read:project`, ausente na autenticação atual. |
+| #44 | Relatório geral de testes com informações de ambiente e links de evidência, atualizado para separar resultados observados de pendências. | O enunciado integral dos 17 itens não está no checkout; não se deve inventar a matriz. Clone limpo, PDF final, tag e release aguardam as evidências faltantes. |
+| #45 | Pilha do T7 e limites de leitura/escrita corrigidos; CI exige ASan/UBSan no Linux. | A execução local Windows não substitui a confirmação do job Linux. |
+| #47 | API e painel de benchmark usam programa MiniPar gerado, medição monotônica dentro das tarefas, polling e exportação CSV. | Confirmar no ambiente de entrega o job completo e revisar a correspondência do workload com os critérios específicos de T8–T10. |
 
 ## Limitação de acesso ao Project
 

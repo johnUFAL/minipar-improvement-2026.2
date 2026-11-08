@@ -27,6 +27,45 @@ ROOT = Path(__file__).resolve().parents[2]
 class DriverGCCIntegrationTests(unittest.TestCase):
     @unittest.skipUnless(
         shutil.which(os.environ.get("CXX", "g++").strip('"')),
+        "g++ is required for runtime argument and clock tests",
+    )
+    def test_runtime_arguments_and_monotonic_clock_builtin(self) -> None:
+        source = (
+            "SEQ\n"
+            "    print(argumento(1))\n"
+            "    print(clock())\n"
+        )
+        diagnostics = DiagnosticBag(source)
+        program = Parser(Lexer(source, diagnostics), diagnostics).parse()
+        analyzer = SemanticAnalyzer(diagnostics)
+        self.assertTrue(analyzer.analyze(program), analyzer.diagnostics)
+        tac = TACGenerator().generate_text(program)
+        generated_cpp = CppCodeGenerator().generate_source(tac)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cpp_path = Path(temp_dir) / "arguments.cpp"
+            cpp_path.write_text(generated_cpp, encoding="utf-8")
+            executable = Path(temp_dir) / "arguments"
+            self.assertTrue(
+                driver_gcc.DriverGCC().compile(
+                    cpp_path,
+                    executable,
+                    optimization_level="O0",
+                )
+            )
+            driver = driver_gcc.DriverGCC()
+            result = driver.executar(executable, ["valor", "extra"])
+            missing = driver.executar(executable)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = result.stdout.splitlines()
+        self.assertEqual(output[0], "valor")
+        self.assertGreater(float(output[1]), 0.0)
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("argumento(1) fora dos limites", missing.stderr)
+
+    @unittest.skipUnless(
+        shutil.which(os.environ.get("CXX", "g++").strip('"')),
         "g++ is required for native channel code generation",
     )
     def test_declared_channel_generates_compilable_cpp(self) -> None:
@@ -348,6 +387,11 @@ class DriverGCCIntegrationTests(unittest.TestCase):
                 check=False,
             )
             if probe_result.returncode != 0:
+                if os.environ.get("MINIPAR_REQUIRE_SANITIZERS") == "1":
+                    self.fail(
+                        "A CI exige suporte a ASan/UBSan, mas o compilador não "
+                        "pôde compilar o probe: " + probe_result.stderr.strip()
+                    )
                 self.skipTest(
                     "Compilador sem suporte a ASan/UBSan: "
                     + probe_result.stderr.strip()

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 from components.lexico.c_lexico import Lexer
 from components.codegen.c_gerador_cpp import CppCodeGenerator
@@ -22,6 +22,12 @@ from components.tac.c_gerador_tac import TACGenerator
 from erros.diagnosticos import DiagnosticBag
 
 from ..program_analyzer import get_program_spec
+from .benchmark import (
+    MAX_REQUESTED_CORES,
+    available_cpu_count,
+    benchmark_manager,
+    parse_config,
+)
 from ..test_orchestrator import (
     _load_session,
     _save_session,
@@ -293,6 +299,62 @@ def get_tests():
     # Retorna os testes ordenados alfabeticamente
     tests = [os.path.basename(f) for f in glob.glob(os.path.join(TESTS_DIR, '*.mp'))]
     return jsonify({"tests": sorted(tests)})
+
+
+@app.route("/api/hardware", methods=["GET"])
+def get_hardware():
+    cpu_count = available_cpu_count()
+    return jsonify({
+        "logical_cores": os.cpu_count() or cpu_count,
+        "available_cores": cpu_count,
+        "benchmark_max_cores": min(cpu_count, MAX_REQUESTED_CORES),
+    })
+
+
+@app.route("/api/benchmark", methods=["POST"])
+def create_benchmark():
+    cpu_count = available_cpu_count()
+    config, error = parse_config(request.get_json(silent=True), cpu_count)
+    if error is not None or config is None:
+        return jsonify({"error": error or "Parâmetros de benchmark inválidos."}), 400
+
+    job_id, submit_error = benchmark_manager.submit(config, cpu_count)
+    if submit_error is not None or job_id is None:
+        return jsonify({"error": submit_error or "Não foi possível iniciar o benchmark."}), 429
+    return jsonify({
+        "job_id": job_id,
+        "status_url": f"/api/benchmark/{job_id}",
+        "csv_url": f"/api/benchmark/{job_id}/csv",
+    }), 202
+
+
+@app.route("/api/benchmark/<job_id>", methods=["GET"])
+def get_benchmark(job_id: str):
+    job = benchmark_manager.get(job_id)
+    if job is None:
+        return jsonify({"error": "Job de benchmark não encontrado."}), 404
+    if job["status"] == "completed":
+        job["csv_url"] = f"/api/benchmark/{job_id}/csv"
+    return jsonify(job)
+
+
+@app.route("/api/benchmark/<job_id>/csv", methods=["GET"])
+def export_benchmark_csv(job_id: str):
+    job = benchmark_manager.get(job_id)
+    if job is None:
+        return jsonify({"error": "Job de benchmark não encontrado."}), 404
+    if job["status"] != "completed":
+        return jsonify({"error": "O benchmark ainda não foi concluído."}), 409
+    content = benchmark_manager.csv(job_id)
+    if content is None:
+        return jsonify({"error": "Métricas do benchmark indisponíveis."}), 500
+    return Response(
+        content,
+        mimetype="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="benchmark-{job_id}.csv"'
+        },
+    )
 
 
 @app.route('/api/get_test', methods=['POST'])

@@ -24,6 +24,7 @@ struct MiniParHost {
 struct MiniParConfiguration {
     std::string hosts_path = "minipar.hosts";
     std::string role;
+    std::vector<std::string> arguments;
     bool worker_mode = false;
     int worker_port = 0;
 };
@@ -655,12 +656,14 @@ void minipar_init(int argc, char** argv) {
                     throw std::invalid_argument("Porta do worker invalida: " + value);
                 }
             }
-        } else {
+        } else if (argument.rfind("--", 0) == 0) {
             throw std::invalid_argument(
                 "Argumento desconhecido: " + argument +
                 ". Opcoes: --como <nome> --hosts <arquivo> "
                 "--worker --porta <porta>."
             );
+        } else {
+            parsed.arguments.push_back(argument);
         }
     }
     if (parsed.worker_mode && parsed.worker_port == 0) {
@@ -670,6 +673,17 @@ void minipar_init(int argc, char** argv) {
         throw std::invalid_argument("--porta so pode ser usada com --worker.");
     }
     configuration() = std::move(parsed);
+}
+
+std::string __minipar_argumento(std::int64_t index) {
+    if (index < 1 ||
+        static_cast<std::uint64_t>(index) > configuration().arguments.size()) {
+        throw std::out_of_range(
+            "argumento(" + std::to_string(index) +
+            ") fora dos limites (argumentos começam em 1)."
+        );
+    }
+    return configuration().arguments[static_cast<std::size_t>(index - 1)];
 }
 
 bool minipar_worker_requested() {
