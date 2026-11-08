@@ -13,17 +13,34 @@ c_channel dados computador_1 computador_2
 ```
 
 O payload tem sempre quatro campos `(string, float, float, float)` para manter
-aridade e tipos iguais nas duas direções.
+aridade e tipos iguais nas duas direções:
+
+```text
+requisição: (op, v1, v2, 0.0)
+resposta:   (status, resultado, 0.0, 0.0)
+```
+
+- `status = "OK"` em sucesso;
+- `status = "ERRO: divisao por zero"` em `/0`;
+- `status = "ERRO: operacao invalida"` para operador desconhecido.
+
+O servidor fica em loop até receber `"sair"`, então continua atendendo após um
+erro de divisão por zero.
+
+> **Desvio em relação à issue #32:** a issue pede cliente e servidor no mesmo
+> arquivo. Nesta entrega eles estão em dois arquivos que compartilham o mesmo
+> canal lógico. O comportamento e os papéis por `--como` são os mesmos.
 
 ## Execução automatizada
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\run_multiterminal.py --operacao + --v1 7 --v2 5
+.\.venv\Scripts\python.exe scripts\run_multiterminal.py --scenario all
+.\.venv\Scripts\python.exe scripts\run_multiterminal.py --requests "/,5,0;+,12,30;sair"
 ```
 
-O script compila os dois programas, aloca uma porta livre, escreve um
+O script compila os dois programas, aloca portas livres, escreve um
 `minipar.hosts` temporário, inicia o servidor, espera a porta e executa o
-cliente.
+cliente com todas as requisições.
 
 ## Execução manual
 
@@ -44,7 +61,19 @@ Em duas janelas:
 .\t01_calculadora_cliente.exe --hosts .\minipar.hosts --como computador_1
 ```
 
-Entradas do cliente: `+`, `7`, `5`. Saída esperada: `Resultado: 12.0`.
+Entradas do cliente para testar soma e erro:
+
+```text
++
+12
+30
+/
+5
+0
+sair
+```
+
+Saída esperada: `Resultado: 42.0` e depois `ERRO: divisao por zero`.
 
 ## Por que não usar o menu interativo?
 
