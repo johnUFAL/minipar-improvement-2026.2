@@ -89,8 +89,7 @@ TESTS: list[dict[str, object]] = [
         "file": "t04_rede_neural_xor.mp",
         "inputs": [],
         "checks": ["Input: [0, 0]", "Input: [1, 1]", "Predicted Output:"],
-        "comparison": "float_range",
-        "float_count": 4,
+        "comparison": "xor_range",
     },
     {
         "id": "t5",
@@ -209,6 +208,23 @@ def check_local(test: dict[str, object], result: subprocess.CompletedProcess[byt
     if comparison == "key_lines":
         missing = [line for line in test.get("key_lines", []) if str(line) not in stdout]
         checks.append(("linhas-chave esperadas presentes", not missing))
+    elif comparison == "xor_range":
+        values = [
+            float(match.group(1))
+            for match in re.finditer(
+                r"Predicted Output:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)",
+                stdout,
+            )
+        ]
+        valid = (
+            len(values) == 4
+            and all(math.isfinite(value) and 0.0 <= value <= 1.0 for value in values)
+            and values[0] < 0.1
+            and values[1] > 0.9
+            and values[2] > 0.9
+            and values[3] < 0.1
+        )
+        checks.append(("saidas XOR nas faixas esperadas", valid))
     elif comparison == "float_range":
         values = [
             float(match.group(1))

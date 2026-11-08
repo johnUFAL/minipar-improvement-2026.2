@@ -4,7 +4,7 @@
       "id": "t1",
       "name": "Calculadora cliente-servidor (2 terminais)",
       "ok": true,
-      "elapsed": 23.99,
+      "elapsed": 16.55,
       "checks": [
         {
           "label": "script multi-terminal retornou 0",
@@ -24,26 +24,22 @@
       "id": "t2",
       "name": "Fatorial e Fibonacci em PAR",
       "ok": true,
-      "elapsed": 12.69,
+      "elapsed": 8.25,
       "checks": [
         {
           "label": "codigo de saida 0",
           "ok": true
         },
         {
-          "label": "saida contem 'Fatorial de 5: 120'",
+          "label": "saida contem 'Fatorial de 10: 3628800'",
           "ok": true
         },
         {
-          "label": "saida contem 'Fibonacci:'",
+          "label": "saida contem 'FIBONACCI 0'",
           "ok": true
         },
         {
-          "label": "saida contem '0'",
-          "ok": true
-        },
-        {
-          "label": "saida contem '13'",
+          "label": "saida contem 'FIBONACCI 34'",
           "ok": true
         },
         {
@@ -56,22 +52,26 @@
       "id": "t3",
       "name": "Neuronio com classes",
       "ok": true,
-      "elapsed": 12.33,
+      "elapsed": 7.63,
       "checks": [
         {
           "label": "codigo de saida 0",
           "ok": true
         },
         {
-          "label": "saida contem 'Neuronio aprendeu'",
+          "label": "saida contem '#### Iteração: 1'",
           "ok": true
         },
         {
-          "label": "saida contem 'Iteracoes totais:'",
+          "label": "saida contem '#### Iteração: 51'",
           "ok": true
         },
         {
-          "label": "saida confere com t03_neuronio.expected.txt",
+          "label": "saida contem 'Valor desejado: 0'",
+          "ok": true
+        },
+        {
+          "label": "linhas-chave esperadas presentes",
           "ok": true
         }
       ]
@@ -80,7 +80,7 @@
       "id": "t4",
       "name": "Rede neural XOR",
       "ok": true,
-      "elapsed": 13.41,
+      "elapsed": 7.66,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -99,7 +99,7 @@
           "ok": true
         },
         {
-          "label": "saida confere com t04_rede_neural_xor.expected.txt",
+          "label": "saidas XOR nas faixas esperadas",
           "ok": true
         }
       ]
@@ -108,7 +108,7 @@
       "id": "t5",
       "name": "Sistema de recomendacao",
       "ok": true,
-      "elapsed": 11.7,
+      "elapsed": 7.77,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -132,7 +132,7 @@
       "id": "t6",
       "name": "Quicksort com classes",
       "ok": true,
-      "elapsed": 13.68,
+      "elapsed": 8.07,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -152,7 +152,7 @@
       "id": "t7",
       "name": "Quicksort iterativo",
       "ok": true,
-      "elapsed": 11.94,
+      "elapsed": 7.54,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -172,7 +172,7 @@
       "id": "t8",
       "name": "Avaliacao em 4 nucleos",
       "ok": true,
-      "elapsed": 13.82,
+      "elapsed": 8.59,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -200,7 +200,7 @@
       "id": "t9",
       "name": "5 nucleos com Mandelbrot",
       "ok": true,
-      "elapsed": 14.84,
+      "elapsed": 8.68,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -224,7 +224,7 @@
       "id": "t10",
       "name": "6 nucleos com dois fractais",
       "ok": true,
-      "elapsed": 12.98,
+      "elapsed": 8.84,
       "checks": [
         {
           "label": "codigo de saida 0",
@@ -248,7 +248,7 @@
       "id": "t11",
       "name": "Minicompilador ARMv7",
       "ok": true,
-      "elapsed": 12.78,
+      "elapsed": 9.06,
       "checks": [
         {
           "label": "codigo de saida 0",
