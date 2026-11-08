@@ -1,0 +1,310 @@
+{
+  "ambiente": {
+    "sistema": "Windows-10-10.0.26300-SP0",
+    "python": "3.11.15",
+    "maquina": "AMD64",
+    "processador": "Intel64 Family 6 Model 181 Stepping 0, GenuineIntel"
+  },
+  "resultados": [
+    {
+      "id": "t1",
+      "name": "Calculadora cliente-servidor (2 terminais)",
+      "command": "python scripts/run_multiterminal.py --scenario all",
+      "elapsed": "14.78s",
+      "output": "[T1] Diretorio de trabalho: C:\\Users\\RianGaião\\AppData\\Local\\Temp\\minipar-t1-2y7kj5py\n[T1] Requisicoes: [('+', '12', '30'), ('-', '30', '12'), ('*', '6', '7'), ('/', '7', '2'), ('/', '5', '0'), ('+', '12', '30'), ('%', '2', '3')]\n[SUCESSO] Executavel: C:\\Users\\RianGaião\\AppData\\Local\\Temp\\minipar-t1-2y7kj5py\\t01_calculadora_servidor.exe\n[SUCESSO] Executavel: C:\\Users\\RianGaião\\AppData\\Local\\Temp\\minipar-t1-2y7kj5py\\t01_calculadora_cliente.exe\n[T1] Aguardando o servidor na porta 63001...\n[T1] Servidor pronto; executando o cliente.\n\n===== SAIDA DO SERVIDOR =====\n==== T1 Calculadora - servidor (computador_2) ====\nServidor recebeu: + 12.0 30.0\nServidor respondeu: OK 42.0\nServidor recebeu: - 30.0 12.0\nServidor respondeu: OK 18.0\nServidor recebeu: * 6.0 7.0\nServidor respondeu: OK 42.0\nServidor recebeu: / 7.0 2.0\nServidor respondeu: OK 3.5\nServidor recebeu: / 5.0 0.0\nServidor respondeu: Erro: divisao por zero. 0.0\nServidor recebeu: + 12.0 30.0\nServidor respondeu: OK 42.0\nServidor recebeu: % 2.0 3.0\nServidor respondeu: Erro: operacao invalida. 0.0\nServidor encerrando.\n\n===== SAIDA DO CLIENTE =====\n==== T1 Calculadora - cliente (computador_1) ====\nOperacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: + 12.0 30.0\nResultado: 42.0\nOperacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: - 30.0 12.0\nResultado: 18.0\nOperacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: * 6.0 7.0\nResultado: 42.0\nOperacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: / 7.0 2.0\nResultado: 3.5\nOperacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: / 5.0 0.0\nErro: divisao por zero.\nOperacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: + 12.0 30.0\nResultado: 42.0\nOperacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: % 2.0 3.0\nErro: operacao invalida.\nOperacao (+,-,*,/): Cliente encerrando.\n\n===== VERIFICACOES =====\n  [OK] cliente retornou 0\n  [OK] servidor retornou 0\n  [OK] servidor recebeu a requisicao\n  [OK] cliente exibiu a resposta da requisicao 1\n  [OK] cliente exibiu a resposta da requisicao 2\n  [OK] cliente exibiu a resposta da requisicao 3\n  [OK] cliente exibiu a resposta da requisicao 4\n  [OK] cliente exibiu a resposta da requisicao 5\n  [OK] cliente exibiu a resposta da requisicao 6\n  [OK] cliente exibiu a resposta da requisicao 7\n",
+      "checks": [
+        [
+          "script multi-terminal retornou 0",
+          true
+        ],
+        [
+          "Resultado: 42.0",
+          true
+        ],
+        [
+          "Resultado: 18.0",
+          true
+        ],
+        [
+          "Resultado: 3.5",
+          true
+        ],
+        [
+          "Erro: divisao por zero.",
+          true
+        ],
+        [
+          "Erro: operacao invalida.",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/01_t1_calculadora_cliente_servidor_2_terminais.txt"
+    },
+    {
+      "id": "t2",
+      "name": "Fatorial e Fibonacci em PAR",
+      "command": "run_local(t02_fatorial_fibonacci_par.mp)",
+      "elapsed": "0.34s",
+      "output": "FIBONACCI_INICIO 1.14e-05\r\nFIBONACCI 0\r\nFIBONACCI 1\r\nFIBONACCI 1\r\nFIBONACCI 2\r\nFIBONACCI 3\r\nFIBONACCI 5\r\nFIBONACCI 8\r\nFIBONACCI 13\r\nFIBONACCI 21\r\nFIBONACCI 34\r\nFATORIAL_INICIO 1.76e-05\r\nFatorial de 10: 3628800\r\nFIBONACCI_FIM 0.250011\r\nFATORIAL_FIM 0.250018\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'Fatorial de 10: 3628800'",
+          true
+        ],
+        [
+          "saida contem 'FIBONACCI 0'",
+          true
+        ],
+        [
+          "saida contem 'FIBONACCI 34'",
+          true
+        ],
+        [
+          "saida confere com t02_fatorial_fibonacci_par.expected.txt",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/02_t2_fatorial_e_fibonacci_em_par.txt"
+    },
+    {
+      "id": "t3",
+      "name": "Neuronio com classes",
+      "command": "run_local(t03_neuronio.mp)",
+      "elapsed": "0.09s",
+      "output": "==== Teste 3: neuronio simples com classes e objetos ====\r\nEntrada: 1 | Saída desejada: 0\r\n#### Iteração: 1\r\nPeso: 0.5000\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.5000\r\n#### Iteração: 2\r\nPeso: 0.4900\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4900\r\n#### Iteração: 3\r\nPeso: 0.4800\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4800\r\n#### Iteração: 4\r\nPeso: 0.4700\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4700\r\n#### Iteração: 5\r\nPeso: 0.4600\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4600\r\n#### Iteração: 6\r\nPeso: 0.4500\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4500\r\n#### Iteração: 7\r\nPeso: 0.4400\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4400\r\n#### Iteração: 8\r\nPeso: 0.4300\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4300\r\n#### Iteração: 9\r\nPeso: 0.4200\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4200\r\n#### Iteração: 10\r\nPeso: 0.4100\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4100\r\n#### Iteração: 11\r\nPeso: 0.4000\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.4000\r\n#### Iteração: 12\r\nPeso: 0.3900\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3900\r\n#### Iteração: 13\r\nPeso: 0.3800\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3800\r\n#### Iteração: 14\r\nPeso: 0.3700\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3700\r\n#### Iteração: 15\r\nPeso: 0.3600\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3600\r\n#### Iteração: 16\r\nPeso: 0.3500\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3500\r\n#### Iteração: 17\r\nPeso: 0.3400\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3400\r\n#### Iteração: 18\r\nPeso: 0.3300\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3300\r\n#### Iteração: 19\r\nPeso: 0.3200\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3200\r\n#### Iteração: 20\r\nPeso: 0.3100\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3100\r\n#### Iteração: 21\r\nPeso: 0.3000\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.3000\r\n#### Iteração: 22\r\nPeso: 0.2900\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2900\r\n#### Iteração: 23\r\nPeso: 0.2800\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2800\r\n#### Iteração: 24\r\nPeso: 0.2700\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2700\r\n#### Iteração: 25\r\nPeso: 0.2600\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2600\r\n#### Iteração: 26\r\nPeso: 0.2500\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2500\r\n#### Iteração: 27\r\nPeso: 0.2400\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2400\r\n#### Iteração: 28\r\nPeso: 0.2300\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2300\r\n#### Iteração: 29\r\nPeso: 0.2200\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2200\r\n#### Iteração: 30\r\nPeso: 0.2100\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2100\r\n#### Iteração: 31\r\nPeso: 0.2000\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.2000\r\n#### Iteração: 32\r\nPeso: 0.1900\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1900\r\n#### Iteração: 33\r\nPeso: 0.1800\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1800\r\n#### Iteração: 34\r\nPeso: 0.1700\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1700\r\n#### Iteração: 35\r\nPeso: 0.1600\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1600\r\n#### Iteração: 36\r\nPeso: 0.1500\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1500\r\n#### Iteração: 37\r\nPeso: 0.1400\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1400\r\n#### Iteração: 38\r\nPeso: 0.1300\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1300\r\n#### Iteração: 39\r\nPeso: 0.1200\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1200\r\n#### Iteração: 40\r\nPeso: 0.1100\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1100\r\n#### Iteração: 41\r\nPeso: 0.1000\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.1000\r\n#### Iteração: 42\r\nPeso: 0.0900\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0900\r\n#### Iteração: 43\r\nPeso: 0.0800\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0800\r\n#### Iteração: 44\r\nPeso: 0.0700\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0700\r\n#### Iteração: 45\r\nPeso: 0.0600\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0600\r\n#### Iteração: 46\r\nPeso: 0.0500\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0500\r\n#### Iteração: 47\r\nPeso: 0.0400\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0400\r\n#### Iteração: 48\r\nPeso: 0.0300\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0300\r\n#### Iteração: 49\r\nPeso: 0.0200\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0200\r\n#### Iteração: 50\r\nPeso: 0.0100\r\nSaída: 1\r\nErro: -1\r\nPeso do bias: 0.0100\r\n#### Iteração: 51\r\nPeso: -0.0000\r\nSaída: 0\r\nErro: 0\r\nPeso do bias: -0.0000\r\n✅ Parabéns! O neurônio aprendeu.\r\nValor desejado: 0\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem '#### Iteração: 1'",
+          true
+        ],
+        [
+          "saida contem '#### Iteração: 51'",
+          true
+        ],
+        [
+          "saida contem 'Valor desejado: 0'",
+          true
+        ],
+        [
+          "linhas-chave esperadas presentes",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/03_t3_neuronio_com_classes.txt"
+    },
+    {
+      "id": "t4",
+      "name": "Rede neural XOR",
+      "command": "run_local(t04_rede_neural_xor.mp)",
+      "elapsed": "0.10s",
+      "output": "==== Teste 4: rede neural XOR com backpropagation ====\r\nInput: [0, 0], Predicted Output: 0.00684395\r\nInput: [0, 1], Predicted Output: 0.986493\r\nInput: [1, 0], Predicted Output: 0.98925\r\nInput: [1, 1], Predicted Output: 0.0140296\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'Input: [0, 0]'",
+          true
+        ],
+        [
+          "saida contem 'Input: [1, 1]'",
+          true
+        ],
+        [
+          "saida contem 'Predicted Output:'",
+          true
+        ],
+        [
+          "saidas XOR nas faixas esperadas",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/04_t4_rede_neural_xor.txt"
+    },
+    {
+      "id": "t5",
+      "name": "Sistema de recomendacao",
+      "command": "run_local(t05_recomendacao.mp)",
+      "elapsed": "0.08s",
+      "output": "==== Teste 5: recomendacao e-commerce com rede neural ====\r\nInforme o historico de compras (1 = comprou, 0 = nao comprou):\r\nSmartphone - comprou? (0/1):\r\nLaptop - comprou? (0/1):\r\nTablet - comprou? (0/1):\r\nFones de ouvido - comprou? (0/1):\r\nCamisa - comprou? (0/1):\r\nJeans - comprou? (0/1):\r\nJaqueta - comprou? (0/1):\r\nSapatos - comprou? (0/1):\r\nGeladeira - comprou? (0/1):\r\nMicro-ondas - comprou? (0/1):\r\nMáquina de lavar - comprou? (0/1):\r\nAr condicionado - comprou? (0/1):\r\nFicção - comprou? (0/1):\r\nNão-ficção - comprou? (0/1):\r\nFicção científica - comprou? (0/1):\r\nFantasia - comprou? (0/1):\r\nProdutos recomendados para voce:\r\nLaptop probabilidade: 0.723522\r\nTablet probabilidade: 0.711771\r\nFones de ouvido probabilidade: 0.716263\r\nCamisa probabilidade: 0.564145\r\nJaqueta probabilidade: 0.723522\r\nSapatos probabilidade: 0.711771\r\nGeladeira probabilidade: 0.716263\r\nMáquina de lavar probabilidade: 0.7191\r\nAr condicionado probabilidade: 0.723522\r\nNão-ficção probabilidade: 0.716263\r\nFicção científica probabilidade: 0.564145\r\nFantasia probabilidade: 0.7191\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'Produtos recomendados para voce:'",
+          true
+        ],
+        [
+          "saida contem 'Máquina de lavar'",
+          true
+        ],
+        [
+          "saida contem 'Não-ficção'",
+          true
+        ],
+        [
+          "saida confere com t05_recomendacao.expected.txt",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/05_t5_sistema_de_recomendacao.txt"
+    },
+    {
+      "id": "t6",
+      "name": "Quicksort com classes",
+      "command": "run_local(t06_quicksort_classes.mp)",
+      "elapsed": "0.08s",
+      "output": "==== Ordenacao com Quicksort ====\r\nInsira os elementos do vetor separados por espaco:\r\nVetor original: [10, -3, -40, 80, 70, -100]\r\nVetor ordenado: [-100, -40, -3, 10, 70, 80]\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'Vetor ordenado: [-100, -40, -3, 10, 70, 80]'",
+          true
+        ],
+        [
+          "saida confere com t06_quicksort_classes.expected.txt",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/06_t6_quicksort_com_classes.txt"
+    },
+    {
+      "id": "t7",
+      "name": "Quicksort iterativo",
+      "command": "run_local(t07_quicksort_iterativo_tac.mp)",
+      "elapsed": "0.07s",
+      "output": "Array ordenado: [5, 12, 33, 61, 98]\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'Array ordenado: [5, 12, 33, 61, 98]'",
+          true
+        ],
+        [
+          "saida confere com t07_quicksort_iterativo_tac.expected.txt",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/07_t7_quicksort_iterativo.txt"
+    },
+    {
+      "id": "t8",
+      "name": "Avaliacao em 4 nucleos",
+      "command": "run_local(t08_avaliacao_4_nucleos.mp)",
+      "elapsed": "0.72s",
+      "output": "Total de Atividades a Avaliar: 160 (40 alunos x 4 atividades)\r\n\r\n--- 1. Executando Modo Sequencial (Apenas 1 Nucleo / Professor) ---\r\n[Professor] Concluiu 160 atividades (checksum 353511540.98)\r\nTempo Sequencial Concluido em: 0.49 segundos\r\n\r\n--- 2. Executando Modo Paralelo (4 Nucleos Dedicados) ---\r\n[Professor] Concluiu 40 atividades (checksum 86533446.50)\r\n[Monitor 1] Concluiu 40 atividades (checksum 89358199.33)\r\n[Monitor 2] Concluiu 40 atividades (checksum 87379256.64)\r\n[Monitor 3] Concluiu 40 atividades (checksum 90240638.51)\r\nTempo Paralelo Concluido em:   0.14 segundos\r\n\r\n==========================================\r\n         BENCHMARK DE DESEMPENHO          \r\n==========================================\r\nNucleos Utilizados (Paralelo) : 4\r\nTempo Sequencial : 0.49 s\r\nTempo Paralelo   : 0.14 s\r\nAceleracao       : 3.40 x mais rapido!\r\nReducao no tempo : 70.6 % de economia\r\n==========================================\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'Total de Atividades a Avaliar: 160'",
+          true
+        ],
+        [
+          "saida contem 'BENCHMARK DE DESEMPENHO'",
+          true
+        ],
+        [
+          "saida contem 'Nucleos Utilizados (Paralelo) : 4'",
+          true
+        ],
+        [
+          "saida contem '[Professor] Concluiu 160 atividades'",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/08_t8_avaliacao_em_4_nucleos.txt"
+    },
+    {
+      "id": "t9",
+      "name": "5 nucleos com Mandelbrot",
+      "command": "run_local(t09_5_nucleos_4_avaliadores_1_fractal.mp)",
+      "elapsed": "0.78s",
+      "output": "Carga de Trabalho: 160 atividades + 1 Calculo de Fractal ASCII\r\n\r\n--- 1. Executando Modo Sequencial (Apenas 1 Nucleo) ---\r\n[Professor] Concluiu 160 atividades (checksum 353511540.98)\r\nTempo Sequencial Concluido em: 0.53 segundos\r\n\r\n--- 2. Executando Modo Paralelo (5 Nucleos Dedicados) ---\r\n\r\n=== FRACTAL DE MANDELBROT (Gerado pelo Nucleo 5) ===\r\n                                                  \r\n                                                  \r\n                                .                 \r\n                             ..=:.                \r\n                              @@@:                \r\n                        +@.@@@@@@@@@. :..         \r\n                       .@@@@@@@@@@@@@@:           \r\n                .     #@@@@@@@@@@@@@@@@@:         \r\n             .@:@@@- :@@@@@@@@@@@@@@@@@@:         \r\n          - .@@@@@@@@@@@@@@@@@@@@@@@@@@@          \r\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.           \r\n          - .@@@@@@@@@@@@@@@@@@@@@@@@@@@          \r\n             .@:@@@- :@@@@@@@@@@@@@@@@@@:         \r\n                .     #@@@@@@@@@@@@@@@@@:         \r\n                       .@@@@@@@@@@@@@@:           \r\n                        +@.@@@@@@@@@. :..         \r\n                              @@@:                \r\n                             ..=:.                \r\n                                .                 \r\n                                                  \r\n====================================================\r\n\r\n[Monitor 1] Concluiu 40 atividades (checksum 89358199.33)\r\n[Professor] Concluiu 40 atividades (checksum 86533446.50)\r\n[Monitor 2] Concluiu 40 atividades (checksum 87379256.64)\r\n[Monitor 3] Concluiu 40 atividades (checksum 90240638.51)\r\nTempo Paralelo Concluido em:   0.15 segundos\r\n\r\n==========================================\r\n         BENCHMARK DE DESEMPENHO          \r\n==========================================\r\nNucleos Utilizados (Paralelo) : 5\r\nTempo Sequencial : 0.53 s\r\nTempo Paralelo   : 0.15 s\r\nAceleracao       : 3.65 x mais rapido!\r\nReducao no tempo : 72.6 % de economia\r\n==========================================\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'FRACTAL DE MANDELBROT'",
+          true
+        ],
+        [
+          "saida contem 'Nucleos Utilizados (Paralelo) : 5'",
+          true
+        ],
+        [
+          "saida contem '[Monitor 3] Concluiu 40 atividades'",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/09_t9_5_nucleos_com_mandelbrot.txt"
+    },
+    {
+      "id": "t10",
+      "name": "6 nucleos com dois fractais",
+      "command": "run_local(t10_6_nucleos_avaliacao_2_fractais.mp)",
+      "elapsed": "0.79s",
+      "output": "Carga de Trabalho: 160 atividades + Mandelbrot (ASCII) + Sierpinski (ASCII)\r\n\r\n--- 1. Executando Modo Sequencial (Apenas 1 Nucleo) ---\r\n[Professor] Concluiu 160 atividades (checksum 353511540.98)\r\nTempo Sequencial Concluido em: 0.56 segundos\r\n\r\n--- 2. Executando Modo Paralelo (6 Nucleos Dedicados) ---\r\n\r\n=== TAPETE DE SIERPINSKI (Gerado pelo Nucleo 6) ===\r\n###########################\r\n# ## ## ## ## ## ## ## ## #\r\n###########################\r\n###   ######   ######   ###\r\n# #   # ## #   # ## #   # #\r\n###   ######   ######   ###\r\n###########################\r\n# ## ## ## ## ## ## ## ## #\r\n###########################\r\n#########         #########\r\n# ## ## #         # ## ## #\r\n#########         #########\r\n###   ###         ###   ###\r\n# #   # #         # #   # #\r\n###   ###         ###   ###\r\n#########         #########\r\n# ## ## #         # ## ## #\r\n#########         #########\r\n###########################\r\n# ## ## ## ## ## ## ## ## #\r\n###########################\r\n###   ######   ######   ###\r\n# #   # ## #   # ## #   # #\r\n###   ######   ######   ###\r\n###########################\r\n# ## ## ## ## ## ## ## ## #\r\n###########################\r\n====================================================\r\n\r\n\r\n=== FRACTAL DE MANDELBROT (Gerado pelo Nucleo 5) ===\r\n                                                  \r\n                                                  \r\n                                .                 \r\n                             ..=:.                \r\n                              @@@:                \r\n                        +@.@@@@@@@@@. :..         \r\n                       .@@@@@@@@@@@@@@:           \r\n                .     #@@@@@@@@@@@@@@@@@:         \r\n             .@:@@@- :@@@@@@@@@@@@@@@@@@:         \r\n          - .@@@@@@@@@@@@@@@@@@@@@@@@@@@          \r\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.           \r\n          - .@@@@@@@@@@@@@@@@@@@@@@@@@@@          \r\n             .@:@@@- :@@@@@@@@@@@@@@@@@@:         \r\n                .     #@@@@@@@@@@@@@@@@@:         \r\n                       .@@@@@@@@@@@@@@:           \r\n                        +@.@@@@@@@@@. :..         \r\n                              @@@:                \r\n                             ..=:.                \r\n                                .                 \r\n                                                  \r\n====================================================\r\n\r\n[Monitor 1] Concluiu 40 atividades (checksum 89358199.33)\r\n[Professor] Concluiu 40 atividades (checksum 86533446.50)\r\n[Monitor 2] Concluiu 40 atividades (checksum 87379256.64)\r\n[Monitor 3] Concluiu 40 atividades (checksum 90240638.51)\r\nTempo Paralelo Concluido em:   0.15 segundos\r\n\r\n==========================================\r\n         BENCHMARK DE DESEMPENHO          \r\n==========================================\r\nNucleos Utilizados (Paralelo) : 6\r\nTempo Sequencial : 0.56 s\r\nTempo Paralelo   : 0.15 s\r\nAceleracao       : 3.62 x mais rapido!\r\nReducao no tempo : 72.3 % de economia\r\n==========================================\r\n",
+      "checks": [
+        [
+          "codigo de saida 0",
+          true
+        ],
+        [
+          "saida contem 'FRACTAL DE MANDELBROT'",
+          true
+        ],
+        [
+          "saida contem 'TAPETE DE SIERPINSKI'",
+          true
+        ],
+        [
+          "saida contem 'Nucleos Utilizados (Paralelo) : 6'",
+          true
+        ]
+      ],
+      "ok": true,
+      "returncode": 0,
+      "evidence": "terminal/10_t10_6_nucleos_com_dois_fractais.txt"
+    }
+  ]
+}

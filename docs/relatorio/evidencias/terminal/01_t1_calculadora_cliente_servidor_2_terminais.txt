@@ -1,0 +1,59 @@
+=== T1 — Calculadora cliente-servidor (2 terminais) ===
+Comando: python scripts/run_multiterminal.py --scenario all
+Tempo: 14.78s
+
+[T1] Diretorio de trabalho: C:\Users\RianGaião\AppData\Local\Temp\minipar-t1-2y7kj5py
+[T1] Requisicoes: [('+', '12', '30'), ('-', '30', '12'), ('*', '6', '7'), ('/', '7', '2'), ('/', '5', '0'), ('+', '12', '30'), ('%', '2', '3')]
+[SUCESSO] Executavel: C:\Users\RianGaião\AppData\Local\Temp\minipar-t1-2y7kj5py\t01_calculadora_servidor.exe
+[SUCESSO] Executavel: C:\Users\RianGaião\AppData\Local\Temp\minipar-t1-2y7kj5py\t01_calculadora_cliente.exe
+[T1] Aguardando o servidor na porta 63001...
+[T1] Servidor pronto; executando o cliente.
+
+===== SAIDA DO SERVIDOR =====
+==== T1 Calculadora - servidor (computador_2) ====
+Servidor recebeu: + 12.0 30.0
+Servidor respondeu: OK 42.0
+Servidor recebeu: - 30.0 12.0
+Servidor respondeu: OK 18.0
+Servidor recebeu: * 6.0 7.0
+Servidor respondeu: OK 42.0
+Servidor recebeu: / 7.0 2.0
+Servidor respondeu: OK 3.5
+Servidor recebeu: / 5.0 0.0
+Servidor respondeu: Erro: divisao por zero. 0.0
+Servidor recebeu: + 12.0 30.0
+Servidor respondeu: OK 42.0
+Servidor recebeu: % 2.0 3.0
+Servidor respondeu: Erro: operacao invalida. 0.0
+Servidor encerrando.
+
+===== SAIDA DO CLIENTE =====
+==== T1 Calculadora - cliente (computador_1) ====
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: + 12.0 30.0
+Resultado: 42.0
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: - 30.0 12.0
+Resultado: 18.0
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: * 6.0 7.0
+Resultado: 42.0
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: / 7.0 2.0
+Resultado: 3.5
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: / 5.0 0.0
+Erro: divisao por zero.
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: + 12.0 30.0
+Resultado: 42.0
+Operacao (+,-,*,/): Operando 1: Operando 2: Cliente enviou: % 2.0 3.0
+Erro: operacao invalida.
+Operacao (+,-,*,/): Cliente encerrando.
+
+===== VERIFICACOES =====
+  [OK] cliente retornou 0
+  [OK] servidor retornou 0
+  [OK] servidor recebeu a requisicao
+  [OK] cliente exibiu a resposta da requisicao 1
+  [OK] cliente exibiu a resposta da requisicao 2
+  [OK] cliente exibiu a resposta da requisicao 3
+  [OK] cliente exibiu a resposta da requisicao 4
+  [OK] cliente exibiu a resposta da requisicao 5
+  [OK] cliente exibiu a resposta da requisicao 6
+  [OK] cliente exibiu a resposta da requisicao 7
+

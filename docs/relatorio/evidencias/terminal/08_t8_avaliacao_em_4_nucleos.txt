@@ -1,0 +1,27 @@
+=== T8 — Avaliacao em 4 nucleos ===
+Comando: run_local(t08_avaliacao_4_nucleos.mp)
+Tempo: 0.72s
+
+Total de Atividades a Avaliar: 160 (40 alunos x 4 atividades)
+
+--- 1. Executando Modo Sequencial (Apenas 1 Nucleo / Professor) ---
+[Professor] Concluiu 160 atividades (checksum 353511540.98)
+Tempo Sequencial Concluido em: 0.49 segundos
+
+--- 2. Executando Modo Paralelo (4 Nucleos Dedicados) ---
+[Professor] Concluiu 40 atividades (checksum 86533446.50)
+[Monitor 1] Concluiu 40 atividades (checksum 89358199.33)
+[Monitor 2] Concluiu 40 atividades (checksum 87379256.64)
+[Monitor 3] Concluiu 40 atividades (checksum 90240638.51)
+Tempo Paralelo Concluido em:   0.14 segundos
+
+==========================================
+         BENCHMARK DE DESEMPENHO          
+==========================================
+Nucleos Utilizados (Paralelo) : 4
+Tempo Sequencial : 0.49 s
+Tempo Paralelo   : 0.14 s
+Aceleracao       : 3.40 x mais rapido!
+Reducao no tempo : 70.6 % de economia
+==========================================
+

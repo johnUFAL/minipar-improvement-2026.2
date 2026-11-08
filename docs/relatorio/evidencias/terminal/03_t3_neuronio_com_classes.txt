@@ -1,0 +1,264 @@
+=== T3 — Neuronio com classes ===
+Comando: run_local(t03_neuronio.mp)
+Tempo: 0.09s
+
+==== Teste 3: neuronio simples com classes e objetos ====
+Entrada: 1 | Saída desejada: 0
+#### Iteração: 1
+Peso: 0.5000
+Saída: 1
+Erro: -1
+Peso do bias: 0.5000
+#### Iteração: 2
+Peso: 0.4900
+Saída: 1
+Erro: -1
+Peso do bias: 0.4900
+#### Iteração: 3
+Peso: 0.4800
+Saída: 1
+Erro: -1
+Peso do bias: 0.4800
+#### Iteração: 4
+Peso: 0.4700
+Saída: 1
+Erro: -1
+Peso do bias: 0.4700
+#### Iteração: 5
+Peso: 0.4600
+Saída: 1
+Erro: -1
+Peso do bias: 0.4600
+#### Iteração: 6
+Peso: 0.4500
+Saída: 1
+Erro: -1
+Peso do bias: 0.4500
+#### Iteração: 7
+Peso: 0.4400
+Saída: 1
+Erro: -1
+Peso do bias: 0.4400
+#### Iteração: 8
+Peso: 0.4300
+Saída: 1
+Erro: -1
+Peso do bias: 0.4300
+#### Iteração: 9
+Peso: 0.4200
+Saída: 1
+Erro: -1
+Peso do bias: 0.4200
+#### Iteração: 10
+Peso: 0.4100
+Saída: 1
+Erro: -1
+Peso do bias: 0.4100
+#### Iteração: 11
+Peso: 0.4000
+Saída: 1
+Erro: -1
+Peso do bias: 0.4000
+#### Iteração: 12
+Peso: 0.3900
+Saída: 1
+Erro: -1
+Peso do bias: 0.3900
+#### Iteração: 13
+Peso: 0.3800
+Saída: 1
+Erro: -1
+Peso do bias: 0.3800
+#### Iteração: 14
+Peso: 0.3700
+Saída: 1
+Erro: -1
+Peso do bias: 0.3700
+#### Iteração: 15
+Peso: 0.3600
+Saída: 1
+Erro: -1
+Peso do bias: 0.3600
+#### Iteração: 16
+Peso: 0.3500
+Saída: 1
+Erro: -1
+Peso do bias: 0.3500
+#### Iteração: 17
+Peso: 0.3400
+Saída: 1
+Erro: -1
+Peso do bias: 0.3400
+#### Iteração: 18
+Peso: 0.3300
+Saída: 1
+Erro: -1
+Peso do bias: 0.3300
+#### Iteração: 19
+Peso: 0.3200
+Saída: 1
+Erro: -1
+Peso do bias: 0.3200
+#### Iteração: 20
+Peso: 0.3100
+Saída: 1
+Erro: -1
+Peso do bias: 0.3100
+#### Iteração: 21
+Peso: 0.3000
+Saída: 1
+Erro: -1
+Peso do bias: 0.3000
+#### Iteração: 22
+Peso: 0.2900
+Saída: 1
+Erro: -1
+Peso do bias: 0.2900
+#### Iteração: 23
+Peso: 0.2800
+Saída: 1
+Erro: -1
+Peso do bias: 0.2800
+#### Iteração: 24
+Peso: 0.2700
+Saída: 1
+Erro: -1
+Peso do bias: 0.2700
+#### Iteração: 25
+Peso: 0.2600
+Saída: 1
+Erro: -1
+Peso do bias: 0.2600
+#### Iteração: 26
+Peso: 0.2500
+Saída: 1
+Erro: -1
+Peso do bias: 0.2500
+#### Iteração: 27
+Peso: 0.2400
+Saída: 1
+Erro: -1
+Peso do bias: 0.2400
+#### Iteração: 28
+Peso: 0.2300
+Saída: 1
+Erro: -1
+Peso do bias: 0.2300
+#### Iteração: 29
+Peso: 0.2200
+Saída: 1
+Erro: -1
+Peso do bias: 0.2200
+#### Iteração: 30
+Peso: 0.2100
+Saída: 1
+Erro: -1
+Peso do bias: 0.2100
+#### Iteração: 31
+Peso: 0.2000
+Saída: 1
+Erro: -1
+Peso do bias: 0.2000
+#### Iteração: 32
+Peso: 0.1900
+Saída: 1
+Erro: -1
+Peso do bias: 0.1900
+#### Iteração: 33
+Peso: 0.1800
+Saída: 1
+Erro: -1
+Peso do bias: 0.1800
+#### Iteração: 34
+Peso: 0.1700
+Saída: 1
+Erro: -1
+Peso do bias: 0.1700
+#### Iteração: 35
+Peso: 0.1600
+Saída: 1
+Erro: -1
+Peso do bias: 0.1600
+#### Iteração: 36
+Peso: 0.1500
+Saída: 1
+Erro: -1
+Peso do bias: 0.1500
+#### Iteração: 37
+Peso: 0.1400
+Saída: 1
+Erro: -1
+Peso do bias: 0.1400
+#### Iteração: 38
+Peso: 0.1300
+Saída: 1
+Erro: -1
+Peso do bias: 0.1300
+#### Iteração: 39
+Peso: 0.1200
+Saída: 1
+Erro: -1
+Peso do bias: 0.1200
+#### Iteração: 40
+Peso: 0.1100
+Saída: 1
+Erro: -1
+Peso do bias: 0.1100
+#### Iteração: 41
+Peso: 0.1000
+Saída: 1
+Erro: -1
+Peso do bias: 0.1000
+#### Iteração: 42
+Peso: 0.0900
+Saída: 1
+Erro: -1
+Peso do bias: 0.0900
+#### Iteração: 43
+Peso: 0.0800
+Saída: 1
+Erro: -1
+Peso do bias: 0.0800
+#### Iteração: 44
+Peso: 0.0700
+Saída: 1
+Erro: -1
+Peso do bias: 0.0700
+#### Iteração: 45
+Peso: 0.0600
+Saída: 1
+Erro: -1
+Peso do bias: 0.0600
+#### Iteração: 46
+Peso: 0.0500
+Saída: 1
+Erro: -1
+Peso do bias: 0.0500
+#### Iteração: 47
+Peso: 0.0400
+Saída: 1
+Erro: -1
+Peso do bias: 0.0400
+#### Iteração: 48
+Peso: 0.0300
+Saída: 1
+Erro: -1
+Peso do bias: 0.0300
+#### Iteração: 49
+Peso: 0.0200
+Saída: 1
+Erro: -1
+Peso do bias: 0.0200
+#### Iteração: 50
+Peso: 0.0100
+Saída: 1
+Erro: -1
+Peso do bias: 0.0100
+#### Iteração: 51
+Peso: -0.0000
+Saída: 0
+Erro: 0
+Peso do bias: -0.0000
+✅ Parabéns! O neurônio aprendeu.
+Valor desejado: 0
+

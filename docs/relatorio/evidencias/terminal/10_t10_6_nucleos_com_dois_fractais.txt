@@ -1,0 +1,82 @@
+=== T10 — 6 nucleos com dois fractais ===
+Comando: run_local(t10_6_nucleos_avaliacao_2_fractais.mp)
+Tempo: 0.79s
+
+Carga de Trabalho: 160 atividades + Mandelbrot (ASCII) + Sierpinski (ASCII)
+
+--- 1. Executando Modo Sequencial (Apenas 1 Nucleo) ---
+[Professor] Concluiu 160 atividades (checksum 353511540.98)
+Tempo Sequencial Concluido em: 0.56 segundos
+
+--- 2. Executando Modo Paralelo (6 Nucleos Dedicados) ---
+
+=== TAPETE DE SIERPINSKI (Gerado pelo Nucleo 6) ===
+###########################
+# ## ## ## ## ## ## ## ## #
+###########################
+###   ######   ######   ###
+# #   # ## #   # ## #   # #
+###   ######   ######   ###
+###########################
+# ## ## ## ## ## ## ## ## #
+###########################
+#########         #########
+# ## ## #         # ## ## #
+#########         #########
+###   ###         ###   ###
+# #   # #         # #   # #
+###   ###         ###   ###
+#########         #########
+# ## ## #         # ## ## #
+#########         #########
+###########################
+# ## ## ## ## ## ## ## ## #
+###########################
+###   ######   ######   ###
+# #   # ## #   # ## #   # #
+###   ######   ######   ###
+###########################
+# ## ## ## ## ## ## ## ## #
+###########################
+====================================================
+
+
+=== FRACTAL DE MANDELBROT (Gerado pelo Nucleo 5) ===
+                                                  
+                                                  
+                                .                 
+                             ..=:.                
+                              @@@:                
+                        +@.@@@@@@@@@. :..         
+                       .@@@@@@@@@@@@@@:           
+                .     #@@@@@@@@@@@@@@@@@:         
+             .@:@@@- :@@@@@@@@@@@@@@@@@@:         
+          - .@@@@@@@@@@@@@@@@@@@@@@@@@@@          
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@.           
+          - .@@@@@@@@@@@@@@@@@@@@@@@@@@@          
+             .@:@@@- :@@@@@@@@@@@@@@@@@@:         
+                .     #@@@@@@@@@@@@@@@@@:         
+                       .@@@@@@@@@@@@@@:           
+                        +@.@@@@@@@@@. :..         
+                              @@@:                
+                             ..=:.                
+                                .                 
+                                                  
+====================================================
+
+[Monitor 1] Concluiu 40 atividades (checksum 89358199.33)
+[Professor] Concluiu 40 atividades (checksum 86533446.50)
+[Monitor 2] Concluiu 40 atividades (checksum 87379256.64)
+[Monitor 3] Concluiu 40 atividades (checksum 90240638.51)
+Tempo Paralelo Concluido em:   0.15 segundos
+
+==========================================
+         BENCHMARK DE DESEMPENHO          
+==========================================
+Nucleos Utilizados (Paralelo) : 6
+Tempo Sequencial : 0.56 s
+Tempo Paralelo   : 0.15 s
+Aceleracao       : 3.62 x mais rapido!
+Reducao no tempo : 72.3 % de economia
+==========================================
+

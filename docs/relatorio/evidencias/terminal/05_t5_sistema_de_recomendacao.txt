@@ -1,0 +1,36 @@
+=== T5 — Sistema de recomendacao ===
+Comando: run_local(t05_recomendacao.mp)
+Tempo: 0.08s
+
+==== Teste 5: recomendacao e-commerce com rede neural ====
+Informe o historico de compras (1 = comprou, 0 = nao comprou):
+Smartphone - comprou? (0/1):
+Laptop - comprou? (0/1):
+Tablet - comprou? (0/1):
+Fones de ouvido - comprou? (0/1):
+Camisa - comprou? (0/1):
+Jeans - comprou? (0/1):
+Jaqueta - comprou? (0/1):
+Sapatos - comprou? (0/1):
+Geladeira - comprou? (0/1):
+Micro-ondas - comprou? (0/1):
+Máquina de lavar - comprou? (0/1):
+Ar condicionado - comprou? (0/1):
+Ficção - comprou? (0/1):
+Não-ficção - comprou? (0/1):
+Ficção científica - comprou? (0/1):
+Fantasia - comprou? (0/1):
+Produtos recomendados para voce:
+Laptop probabilidade: 0.723522
+Tablet probabilidade: 0.711771
+Fones de ouvido probabilidade: 0.716263
+Camisa probabilidade: 0.564145
+Jaqueta probabilidade: 0.723522
+Sapatos probabilidade: 0.711771
+Geladeira probabilidade: 0.716263
+Máquina de lavar probabilidade: 0.7191
+Ar condicionado probabilidade: 0.723522
+Não-ficção probabilidade: 0.716263
+Ficção científica probabilidade: 0.564145
+Fantasia probabilidade: 0.7191
+

@@ -1,0 +1,6 @@
+=== T7 — Quicksort iterativo ===
+Comando: run_local(t07_quicksort_iterativo_tac.mp)
+Tempo: 0.07s
+
+Array ordenado: [5, 12, 33, 61, 98]
+
