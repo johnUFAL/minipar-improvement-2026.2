@@ -209,6 +209,21 @@ conferida no resultado da execução; não há ainda um limite mínimo configura
 
 ---
 
+### 5.2 Benchmark do T4 (XOR)
+
+O T4 foi compilado com `-O2` e comparado à referência Python
+`benchmarks/t04_rede_xor.py`, com os mesmos pesos iniciais e 20.000 épocas.
+Foram feitas 5 execuções de cada versão:
+
+| Versão | Mediana |
+|---|---|
+| C++ `-O2` | 0,0147 s |
+| Python | 0,2292 s |
+
+Speedup Python/C++: **15,62×**.
+
+Resultado detalhado em `docs/relatorio/resultados/t04_tempo.json`.
+
 ## 6. T8–T10 — fork/join em núcleos
 
 - **T8:** 160 atividades em 4 núcleos; imprime benchmark e speedup.
