@@ -496,6 +496,35 @@ inline std::vector<double> __parse_ints(const std::string& text) {
     return result;
 }
 
+inline std::vector<std::string> __minipar_dividir(const std::string& text) {
+    std::vector<std::string> parts;
+    std::istringstream stream(text);
+    std::string token;
+    while (stream >> token) {
+        parts.push_back(token);
+    }
+    return parts;
+}
+
+inline bool __minipar_eh_inteiro(const std::string& text) {
+    if (text.empty()) {
+        return false;
+    }
+    std::size_t start = 0;
+    if (text[0] == '+' || text[0] == '-') {
+        start = 1;
+    }
+    if (start == text.size()) {
+        return false;
+    }
+    for (std::size_t index = start; index < text.size(); ++index) {
+        if (std::isdigit(static_cast<unsigned char>(text[index])) == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 inline std::vector<int> __minipar_range(int end) {
     std::vector<int> values;
     for (int i = 0; i < end; ++i) {

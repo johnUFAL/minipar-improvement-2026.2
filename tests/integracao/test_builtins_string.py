@@ -27,6 +27,9 @@ seq {
     var espaco = ' '
     var numero = is_number("123.5")
     var nao_numero = is_number("12a")
+    var pedacos = dividir("10 -3 40")
+    var inteiro = eh_inteiro("-42")
+    var nao_inteiro = eh_inteiro("4.2")
 
     print("primeira:", primeira)
     print("segunda:", segunda)
@@ -35,6 +38,8 @@ seq {
     print("letra:", is_alpha(letra))
     print("espaco:", is_space(espaco))
     print("numero:", numero, nao_numero)
+    print("pedacos:", pedacos)
+    print("inteiro:", inteiro, nao_inteiro)
 
     var status = write_file("builtins_teste.txt", texto + "|" + pedaco)
     print("write_file:", status)
@@ -91,6 +96,8 @@ class BuiltinsStringIntegrationTests(unittest.TestCase):
         self.assertIn("letra: 1", result.stdout)
         self.assertIn("espaco: 1", result.stdout)
         self.assertIn("numero: 1 0", result.stdout)
+        self.assertIn("pedacos: [10, -3, 40]", result.stdout)
+        self.assertIn("inteiro: 1 0", result.stdout)
         self.assertIn("write_file: 0", result.stdout)
         self.assertTrue(self.arquivo.exists())
         self.assertEqual(

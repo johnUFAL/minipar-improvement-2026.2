@@ -145,6 +145,23 @@ END:
     assert "t0 = __parse_ints(texto);" in generated
 
 
+def test_cpp_generator_maps_input_validation_builtins() -> None:
+    tac = """goto MAIN
+MAIN:
+param texto
+t0:list<string> = call dividir, 1
+param texto
+t1:bool = call eh_inteiro, 1
+goto END
+END:
+"""
+
+    generated = CppCodeGenerator._generate_cpp(tac)
+
+    assert "t0 = __minipar_dividir(texto);" in generated
+    assert "t1 = __minipar_eh_inteiro(texto);" in generated
+
+
 def test_cpp_generator_preserves_fork_core_target() -> None:
     tac = """par_begin 1
 fork worker, core, requested_core, BRANCH
