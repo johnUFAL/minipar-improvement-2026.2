@@ -450,6 +450,13 @@ class TACExecutor:
                     precision = int(arguments[1])
                     variables[destination] = f"{value:.{precision}f}"
                     return True
+                if function_name == "len":
+                    if count_text != "1":
+                        raise ValueError("Funcao len TAC espera 1 argumento")
+                    arguments = context.pending_parameters[-1:]
+                    del context.pending_parameters[-1:]
+                    variables[destination] = len(arguments[0])
+                    return True
                 if function_name == "dividir":
                     if count_text != "1":
                         raise ValueError(
