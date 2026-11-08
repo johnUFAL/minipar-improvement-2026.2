@@ -570,6 +570,99 @@ document.addEventListener("DOMContentLoaded", () => {
             buttons.forEach(button => button.disabled = false);
         }
     }
+    async function loadBenchmarkHardware() {
+        const hardware = document.getElementById("benchmark-hardware");
+        const coreSelect = document.getElementById("benchmark-cores");
+        try {
+            const response = await fetch("/api/hardware");
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "Falha ao detectar hardware");
+            const available = Math.max(1, Number(data.available_cores));
+            const benchmarkMax = Math.max(
+                1,
+                Math.min(available, Number(data.benchmark_max_cores)),
+            );
+            hardware.textContent = `${data.logical_cores} lógicos · ${available} disponíveis`;
+            coreSelect.innerHTML = Array.from(
+                { length: benchmarkMax },
+                (_, index) => `<option value="${index + 1}">${index + 1}</option>`,
+            ).join("");
+            coreSelect.value = String(benchmarkMax);
+        } catch (error) {
+            hardware.textContent = "Hardware indisponível";
+            document.getElementById("benchmark-status").textContent =
+                error instanceof Error ? error.message : "Falha ao detectar hardware";
+        }
+    }
+    function renderBenchmarkResult(result, csvUrl) {
+        const summary = document.getElementById("benchmark-summary");
+        const results = document.getElementById("benchmark-results");
+        const parameters = result.parameters;
+        const format = value => Number(value).toFixed(3);
+        const warnings = result.warnings.length
+            ? `<ul>${result.warnings.map(message => `<li>${escape(message)}</li>`).join("")}</ul>`
+            : "";
+        summary.innerHTML = `
+            <div class="benchmark-summary-item"><span>Atividades</span><strong>${parameters.total_atividades}</strong></div>
+            <div class="benchmark-summary-item"><span>Tempo sequencial · mediana</span><strong>${format(result.sequential_seconds)} s</strong></div>
+            <div class="benchmark-summary-item"><span>Tempo paralelo · mediana</span><strong>${format(result.parallel_seconds)} s</strong></div>
+            <div class="benchmark-summary-item"><span>Speedup</span><strong>${format(result.speedup)}×</strong></div>
+            <div class="benchmark-summary-item"><span>Eficiência</span><strong>${format(result.efficiency_percent)}%</strong></div>
+            ${warnings}`;
+        document.getElementById("benchmark-cores-result").innerHTML =
+            result.cores.map(core => `
+                <tr>
+                    <td>${core.core}</td>
+                    <td>${core.task_count}</td>
+                    <td>${format(core.busy_seconds)}</td>
+                    <td>${format(core.utilization_percent)}%</td>
+                </tr>`).join("");
+        const csvLink = document.getElementById("benchmark-csv");
+        csvLink.href = csvUrl;
+        csvLink.hidden = false;
+        results.hidden = false;
+    }
+    async function runBenchmark() {
+        const button = document.getElementById("benchmark-run");
+        const status = document.getElementById("benchmark-status");
+        const results = document.getElementById("benchmark-results");
+        button.disabled = true;
+        results.hidden = true;
+        status.textContent = "Enfileirando benchmark…";
+        try {
+            const payload = {
+                alunos: Number(document.getElementById("benchmark-students").value),
+                atividades: Number(document.getElementById("benchmark-activities").value),
+                nucleos: Number(document.getElementById("benchmark-cores").value),
+                fractais: Number(document.getElementById("benchmark-fractals").value),
+                repeticoes: Number(document.getElementById("benchmark-repetitions").value),
+            };
+            const response = await fetch("/api/benchmark", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(payload),
+            });
+            const created = await response.json();
+            if (!response.ok) throw new Error(created.error || "Não foi possível iniciar o benchmark.");
+            while (true) {
+                await new Promise(resolve => window.setTimeout(resolve, 300));
+                const pollResponse = await fetch(created.status_url);
+                const job = await pollResponse.json();
+                if (!pollResponse.ok) throw new Error(job.error || "Falha ao consultar o benchmark.");
+                status.textContent = `${job.message} · ${job.progress}%`;
+                if (job.status === "failed") throw new Error(job.error || "O benchmark falhou.");
+                if (job.status === "completed") {
+                    renderBenchmarkResult(job.result, job.csv_url);
+                    status.textContent = "Benchmark concluído.";
+                    return;
+                }
+            }
+        } catch (error) {
+            status.textContent = error instanceof Error ? error.message : "Falha ao executar benchmark.";
+        } finally {
+            button.disabled = false;
+        }
+    }
     editor.on("change", () => {
         if (!result && !execution && !markers.length) return;
         result = null;
@@ -591,6 +684,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         await loadExample(selectedExample);
     });
+    document.getElementById("benchmark-run").addEventListener("click", runBenchmark);
     document.getElementById("compile-button").addEventListener("click", run);
     document.getElementById("editor-compile").addEventListener("click", run);
     editor.getWrapperElement().addEventListener("keydown", event => {
@@ -657,5 +751,5 @@ document.addEventListener("DOMContentLoaded", () => {
         syncTheme();
     });
     const initialPage = ["results", "result-detail", "configuration", "ide", "pipeline"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "dashboard";
-    loadExamples(); renderPhase(); renderDashboard(); syncTheme(); showPage(initialPage);
+    loadExamples(); loadBenchmarkHardware(); renderPhase(); renderDashboard(); syncTheme(); showPage(initialPage);
 });

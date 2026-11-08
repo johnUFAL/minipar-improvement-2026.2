@@ -101,6 +101,11 @@ python main.py programas_teste/t03_neuronio.mp
 
 O compilador grava os arquivos `.tac`, `.cpp` e o executável em `output/`. No menu, a opção web inicia a IDE em `http://127.0.0.1:5000`.
 
+Os assets do editor CodeMirror 5.65.13 são servidos localmente pela aplicação,
+incluindo o modo C-like e o tema legado. A licença MIT está em
+`interfaces/web/frontend/static/vendor/codemirror/LICENSE`; a IDE não precisa
+de acesso à CDN para carregar o editor.
+
 Com o comando `minipar` instalado pelo projeto (`uv sync` ou `pip install -e .`),
 compile e execute em um único comando:
 

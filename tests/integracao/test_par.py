@@ -60,6 +60,58 @@ par_end
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Erro de execucao: divisao por zero.", result.stderr)
 
+    @unittest.skipUnless(
+        shutil.which(os.environ.get("CXX", "g++").strip('"')),
+        "g++ is required for recursive parallel benchmark integration",
+    )
+    def test_t2_recursive_work_runs_with_overlapping_intervals(self) -> None:
+        from scripts import run_multiterminal, run_testes_2026_2
+
+        source = run_testes_2026_2.PROGRAMS / "t02_fatorial_fibonacci_par.mp"
+        with tempfile.TemporaryDirectory() as directory:
+            executable = run_multiterminal.build_program(source, Path(directory))
+            for _ in range(20):
+                result = subprocess.run(
+                    [str(executable)],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False,
+                    timeout=20,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("Fatorial de 10: 3628800", result.stdout)
+                fibonacci_values = [
+                    line.removeprefix("FIBONACCI ")
+                    for line in result.stdout.splitlines()
+                    if line.startswith("FIBONACCI ")
+                    and not line.startswith("FIBONACCI_INICIO")
+                    and not line.startswith("FIBONACCI_FIM")
+                ]
+                self.assertEqual(
+                    fibonacci_values, ["0", "1", "1", "2", "3", "5", "8", "13", "21", "34"]
+                )
+
+                intervals: dict[str, dict[str, float]] = {
+                    "FATORIAL": {},
+                    "FIBONACCI": {},
+                }
+                for line in result.stdout.splitlines():
+                    fields = line.split()
+                    if len(fields) == 2 and fields[0] in (
+                        "FATORIAL_INICIO",
+                        "FATORIAL_FIM",
+                        "FIBONACCI_INICIO",
+                        "FIBONACCI_FIM",
+                    ):
+                        task, marker = fields[0].split("_")
+                        intervals[task][marker] = float(fields[1])
+
+                starts = [intervals[task]["INICIO"] for task in intervals]
+                ends = [intervals[task]["FIM"] for task in intervals]
+                self.assertLess(max(starts), min(ends), result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,25 +41,10 @@ seq {
     while (continuar) {
         dados.receive(op, v1, v2, ignorado);
 
-        if (op == "sair") {
-            continuar = false;
-            print("Servidor encerrando.");
-        } else {
-            print("Servidor recebeu:", op, format_float(v1, 1), format_float(v2, 1));
+    print("Servidor recebeu:", op, format_float(v1, 1), format_float(v2, 1));
+    var resultado = calcular(op, v1, v2);
+    print("Servidor calculou:", format_float(resultado, 1));
 
-            var status = "OK";
-            var resultado = 0.0;
-
-            if (op != "+" && op != "-" && op != "*" && op != "/") {
-                status = "ERRO: operacao invalida";
-            } elif (op == "/" && v2 == 0.0) {
-                status = "ERRO: divisao por zero";
-            } else {
-                resultado = calcular(op, v1, v2);
-            }
-
-            print("Servidor respondeu:", status, format_float(resultado, 1));
-            dados.send(status, resultado, 0.0, 0.0);
-        }
-    }
+    dados.send("", 0.0, 0.0, resultado);
+    print("Servidor enviou a resposta.");
 }

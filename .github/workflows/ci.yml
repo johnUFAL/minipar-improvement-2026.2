@@ -39,4 +39,6 @@ jobs:
         run: python -m py_compile benchmarks/*.py
 
       - name: Testes (pytest)
-        run: pytest -v
+        env:
+          MINIPAR_REQUIRE_SANITIZERS: "1"
+        run: pytest -v --cov=components --cov=erros --cov=interfaces --cov-report=term-missing --cov-report=xml --cov-fail-under=80

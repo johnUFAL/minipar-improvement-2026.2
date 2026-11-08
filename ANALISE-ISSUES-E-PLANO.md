@@ -1,14 +1,18 @@
 # Análise das issues e plano de implementação
 
 **Data da análise:** 08/11/2026  
-**Branch analisada:** `hotfix/fix_issues32-50`  
-**Escopo:** issues T32–T50 da lista fornecida e estado do checkout nesta data.
+**Branch de acompanhamento:** `fix/quest_docs_minipar_2026`
+**Escopo:** inventário das issues T32–T50; as alterações desta branch limitam-se
+às tasks 42, 43, 44, 45 e 47.
 
 > As issues T32–T50 estavam abertas no GitHub durante a análise. O estado abaixo
 > descreve o código observado no checkout, não o status administrativo das
-> issues. A suíte executada foi `uv run pytest -q`: **229 passaram, 6 foram
-> ignorados e 61 subtestes passaram**. Uma suíte verde não comprova critérios
-> que ainda não têm testes automatizados.
+> issues. A atualização em 08/11/2026 executou a suíte completa com cobertura:
+> **247 passaram, 8 falharam, 8 foram ignorados e 89 subtestes passaram**;
+> cobertura de **81,03%** (mínimo 80%). As falhas atuais são dos testes de T1
+> (issue #32) e dos assets offline (fora do escopo desta branch). `mypy` passou;
+> Ruff continua apontando nomes não definidos no runner T1. Uma suíte verde
+> não comprova critérios que ainda não têm testes automatizados.
 
 ## Resumo por issue
 
@@ -24,12 +28,12 @@
 | [#39 — Benchmarks T8–T10](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/39) | Parcial | Programas MiniPar e baselines Python existem; T10 inclui Sierpinski no sequencial e no fork de sexto núcleo. | Medir N repetições e mediana, semear avaliadores separadamente, comparar trabalho equivalente e apresentar tabela de resultados. |
 | [#40 — Testes de integração](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/40) | Parcial | Há testes unitários, de integração e CI em [tests](tests) e [.github/workflows/ci.yml](.github/workflows/ci.yml). | Criar pelo menos 10 programas inválidos, testar cada fronteira com casos positivos e negativos e publicar/exigir cobertura mínima de 80%. |
 | [#41 — Execuções e evidências](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/41) | Parcial | Runner dos testes e instruções de rede em [run_testes_2026_2.py](scripts/run_testes_2026_2.py) e [docs/rede.md](docs/rede.md). | Gerar evidências numeradas, registrar resultados dos 10 programas e executar T1/fork remoto em duas máquinas reais com ambiente e problemas documentados. |
-| [#42 — Pseudocódigos](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/42) | Parcial | Pseudocódigo da tabela de símbolos em [docs/pseudocodigo_tabela_simbolos.md](docs/pseudocodigo_tabela_simbolos.md). | Escrever léxico, parser, semântico, concorrência e tratamento de erros, referenciando funções reais e obtendo revisão cruzada. |
-| [#43 — Product/Sprint Backlogs](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/43) | Pendente | Existe um backlog preliminar em [docs/backlog.md](docs/backlog.md). | Expandir para Product Backlog e nove sprints, com issues, status e incrementos; verificar/configurar o GitHub Project e a associação das issues aos milestones. |
-| [#44 — Relatório e entrega](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/44) | Parcial | Há relatório de execução e PDF anterior em [docs/relatorio](docs/relatorio). | Produzir relatório final com checklist dos itens 1–17, capa com link do repositório, tecnologias/ambiente, referências às evidências, tag e release `v2026.2`. |
-| [#45 — Limites de array/T7](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/45) | Quase implementada | Leituras verificam limites; atribuições expandem o vetor; existe teste de erro e código de saída não zero em [runtime](runtime/minipar_rt.hpp) e [test_runtime.py](tests/runtime/test_runtime.py). | Corrigir explicitamente a capacidade inicial da pilha no T7; compilar e executar com AddressSanitizer e UBSan; testar mensagem e saída do programa inválido conforme os critérios. |
+| [#42 — Pseudocódigos](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/42) | Implementada localmente, revisão pendente | Léxico, parser, semântico, diagnósticos e tabela de símbolos estão descritos com referências a funções reais em [docs/relatorio/pseudocodigos.md](docs/relatorio/pseudocodigos.md). | Solicitar e registrar a revisão cruzada por outro integrante; não marcar a issue remota como concluída antes disso. |
+| [#43 — Product/Sprint Backlogs](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/43) | Backlog local implementado; Project não verificado | [docs/backlog.md](docs/backlog.md) lista as 50 issues e os nove sprints; o snapshot confirmou uma associação por issue a milestone. | A listagem/configuração do board GitHub requer o escopo `read:project`, ausente na autenticação atual. |
+| [#44 — Relatório e entrega](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/44) | Parcial | O [relatório de execução](docs/relatorio/RELATORIO-TESTES-2026.2.md) registra resultados de todos os testes e pendências. | O checkout não contém o enunciado integral para mapear os 17 itens sem inferência; faltam revisão final, clone limpo, PDF final, tag e release `v2026.2`. |
+| [#45 — Limites de array/T7](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/45) | Implementada localmente; CI Linux pendente | Pilha do T7 dimensionada; runtime valida leitura e escrita fora dos limites com mensagem e código não zero; testes nativos adicionados. | O workflow agora exige ASan/UBSan; anexar e conferir o resultado do job Linux. A tentativa local Windows falhou ao linkar `-lasan`/`-lubsan`, ausentes no toolchain instalado. |
 | [#46 — Regressão T1–T10](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/46) | Parcial | O [runner](scripts/run_testes_2026_2.py) compara saídas para parte dos casos e verifica marcos dos benchmarks. | Implementar comparador adequado por teste (exato, faixa, linhas-chave, ordem não determinística), normalização definida e integração à CI. |
-| [#47 — Backend de benchmark](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/47) | Pendente | API de compilação/execução e sessões existe em [interfaces/web/api.py](interfaces/web/api.py). | Criar hardware, criação/polling de jobs, execução real sequencial/paralela, métricas por tarefa/núcleo, mediana, limite de núcleos e exportação CSV. |
+| [#47 — Backend de benchmark](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/47) | Implementada localmente; validação funcional pendente | [interfaces/web/benchmark.py](interfaces/web/benchmark.py) executa código C++ gerado do TAC MiniPar; API em [interfaces/web/api.py](interfaces/web/api.py) oferece hardware, jobs assíncronos, progresso, métricas, medianas e CSV; runtime fornece `argumento(n)` e `clock()`. | Confirmar em ambiente de entrega o job completo e a correspondência do workload gerado com os critérios específicos dos programas T8–T10 antes de fechar a issue. |
 | [#48 — Telas Flask](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/48) | Parcial | Painel, editor, resultados e configurações existem em um template e compartilham estilos em [frontend](interfaces/web/frontend). | Criar `base.html` e rotas/páginas requeridas; substituir métricas estáticas por dados do backend #47; concluir estado de execução, hardware e responsividade. |
 | [#49 — Migração da IDE e sessões](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/49) | Parcial | Editor, fases do compilador, execução e API de sessões estão disponíveis na interface atual. | Fechar paridade funcional no novo layout: explorer, editor, abas de fases, terminal, entrada, seletor `-O` e sessões; validar fluxo entre dois navegadores e documentar a paridade. |
 | [#50 — Assets offline](https://github.com/johnUFAL/minipar-improvement-2026.2/issues/50) | Pendente | CSS e JavaScript próprios já estão em [static](interfaces/web/frontend/static). | Hospedar CodeMirror, fontes, ícones e logo localmente; remover referências externas dos templates e validar a interface sem internet. |
@@ -121,9 +125,9 @@
 ### T47 — Backend de benchmark
 1. Definir contrato de hardware e validação dos parâmetros de benchmark.
 2. Implementar endpoints para iniciar job e consultar estado/progresso/resultado sem bloquear requisições do Flask.
-3. Executar os programas reais T8–T10 nos modos sequencial/paralelo; medir tarefas e núcleos e produzir a linha `@@METRICAS`.
+3. Implementar workloads parametrizados com TAC/C++ MiniPar para avaliação e zero, um ou dois fractais; medir tarefas e núcleos e produzir a linha `@@METRICAS`. Confirmar a equivalência com os programas de aceitação T8–T10 antes de fechar a issue.
 4. Calcular mediana, speedup e eficiência, limitar núcleos ao hardware disponível e permitir exportação CSV.
-5. Testar concorrência do servidor e validar que mudar parâmetros altera o trabalho executado e as métricas.
+5. Testar a responsividade do servidor e validar que os parâmetros são repassados ao binário e alteram o trabalho medido.
 
 ### T48 — Telas
 1. Criar template base compartilhado com uma única paleta, tipografia e componentes de navegação.
@@ -149,3 +153,12 @@
 2. Completar benchmarks e testes de regressão/integração (#39, #40, #46).
 3. Implementar a API de benchmark antes das telas que dependem dela (#47 → #48), preservando a IDE e as sessões (#49); empacotar assets (#50).
 4. Concluir evidências e documentação de entrega (#41–44), atualizando o relatório com resultados medidos e não estimados.
+
+## Atualização da branch de documentação/runtime — 08/11/2026
+
+As tasks #42, #43, #44, #45 e #47 são o escopo da branch atual. O código e os
+documentos foram atualizados para refletir o estado local; issues abertas não
+foram fechadas. A revisão humana dos pseudocódigos, o acesso ao GitHub Project,
+o enunciado integral para a matriz de 17 itens, a execução ASan/UBSan no CI e a
+validação final da correspondência do benchmark com T8–T10 permanecem como
+evidências externas ou pendências.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import operator
 import re
+import time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
@@ -155,6 +156,8 @@ class TACExecutor:
             ]
             if node.func.id == "len" and len(arguments) == 1:
                 return len(arguments[0])
+            if node.func.id == "clock" and not arguments:
+                return time.monotonic()
             if node.func.id == "to_number" and len(arguments) == 1:
                 value = str(arguments[0]).strip()
                 try:
@@ -426,6 +429,11 @@ class TACExecutor:
             call = re.fullmatch(r"call\s+([\w.]+)\s*,\s*(\d+)", expression)
             if call:
                 function_name, count_text = call.groups()
+                if function_name == "clock":
+                    if count_text != "0":
+                        raise ValueError("Funcao clock TAC nao aceita argumentos")
+                    variables[destination] = time.monotonic()
+                    return True
                 context.variables = self._call_function(
                     function_name,
                     int(count_text),
@@ -536,6 +544,10 @@ class TACExecutor:
         call = re.fullmatch(r"call\s+([\w.]+)\s*,\s*(\d+)", line)
         if call:
             function_name, count_text = call.groups()
+            if function_name == "clock":
+                if count_text != "0":
+                    raise ValueError("Funcao clock TAC nao aceita argumentos")
+                return True
             context.variables = self._call_function(
                 function_name,
                 int(count_text),

@@ -32,7 +32,10 @@ seq {
         dados.receive(status, resultado, r1, r2);
 
         if (status == "OK") {
-            print("Resultado:", format_float(resultado, 1));
+            if (resposta_op == "DIVISAO_POR_ZERO") {
+        print("Erro: divisao por zero.");
+    } else {
+        print("Resultado:", format_float(resultado, 1));
         } else {
             print(status);
         }
@@ -43,4 +46,5 @@ seq {
     # Mantem a aridade de quatro campos para o servidor encerrar o laco.
     dados.send("sair", 0.0, 0.0, 0.0);
     print("Cliente encerrando.");
+    }
 }

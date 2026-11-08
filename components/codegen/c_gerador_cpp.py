@@ -36,6 +36,7 @@ _BUILTIN_CALLS: dict[str, str] = {
     "matrix": "__make_matrix",
     "random": "random_val",
     "clock": "agora",
+    "argumento": "__minipar_argumento",
     "inf": "__minipar_inf",
     "exp": "std::exp",
 }
@@ -230,6 +231,7 @@ class CppCodeGenerator:
         text = re.sub(r"\bwrite_file\(", "__minipar_write_file(", text)
         text = re.sub(r"\brandom\(", "random_val(", text)
         text = re.sub(r"\bclock\(", "agora(", text)
+        text = re.sub(r"\bargumento\(", "__minipar_argumento(", text)
         text = re.sub(r"\binf\(", "__minipar_inf(", text)
         text = re.sub(r"\bexp\(", "std::exp(", text)
         text = re.sub(r"\binput\(", "input(", text)

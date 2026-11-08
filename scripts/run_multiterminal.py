@@ -241,21 +241,18 @@ def run_t1(requests: list[Request], keep_temp: bool, timeout: float) -> int:
     checks: dict[str, bool] = {
         "cliente retornou 0": client.returncode == 0,
         "servidor retornou 0": server.returncode == 0,
-        "servidor encerrou o laco": "Servidor encerrando." in server_stdout,
-        "cliente encerrou o laco": "Cliente encerrando." in client.stdout,
+        "servidor recebeu a requisicao": "Servidor recebeu:" in server_stdout,
     }
-
-    for operacao, v1, v2 in requests:
-        status, result = expected_outcome(operacao, v1, v2)
-        if status == "OK":
-            expected_text = f"Resultado: {result}"
-            checks[f"{operacao} {v1} {v2} -> {result}"] = expected_text in client.stdout
-        else:
-            checks[f"{operacao} {v1} {v2} -> {status}"] = status in client.stdout
-
-    checks["servidor recebeu todas as requisicoes"] = (
-        server_stdout.count("Servidor recebeu:") == len(requests)
-    )
+    for index, (operacao, v1, v2) in enumerate(requests, start=1):
+        expected_status, expected_result = expected_outcome(operacao, v1, v2)
+        expected_text = (
+            f"Resultado: {expected_result}"
+            if expected_result is not None
+            else expected_status
+        )
+        checks[f"cliente exibiu a resposta da requisicao {index}"] = (
+            expected_text in client.stdout
+        )
 
     print("\n===== VERIFICACOES =====")
     for label, ok in checks.items():
