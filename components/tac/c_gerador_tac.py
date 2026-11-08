@@ -328,6 +328,14 @@ class TACGenerator:
                     f"{self._expr(node.arguments[1])}"
                 )
                 return "0"
+            if node.name == "random_seed":
+                if len(node.arguments) != 1:
+                    raise ValueError(
+                        "random_seed TAC espera exatamente um argumento"
+                    )
+                self._emit(f"param {self._expr(node.arguments[0])}")
+                self._emit("call random_seed, 1")
+                return "0"
             if node.name == "to_number":
                 if len(node.arguments) != 1:
                     raise ValueError("to_number TAC espera exatamente um argumento")
