@@ -202,6 +202,8 @@ específico por programa:
 - **T5–T7:** saída completa exata após normalização. No T5, o golden test
   também confere as 12 recomendações na ordem e os acentos/UTF-8
   (`Máquina de lavar`, `Não-ficção`, `Ficção científica`).
+- **T6:** saída exata para a entrada do PDF; testes de stdin cobrem `1 a 3`
+  (reentrada com `dividir`/`eh_inteiro`), entrada vazia e vetor de 1 elemento.
 - **T1:** valida troca cliente/servidor, resultado aritmético e erro de
   divisão por zero; a ordem de linhas de processos distintos não é comparada.
 

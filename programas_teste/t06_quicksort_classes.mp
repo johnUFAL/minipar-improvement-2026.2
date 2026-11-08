@@ -47,8 +47,24 @@ class Quicksort {
 seq {
     print("==== Ordenacao com Quicksort ====");
     print("Insira os elementos do vetor separados por espaco:");
-    var entrada = input("");
-    var vetor = parse_ints(entrada);
+    var vetor = [0];
+    while (true) {
+        var entrada = input("");
+        var pedacos = dividir(entrada);
+        var valido = len(pedacos) > 0;
+        var i = 0;
+        while (i < len(pedacos)) {
+            if (not eh_inteiro(pedacos[i])) {
+                valido = false;
+            }
+            i = i + 1;
+        }
+        if (valido) {
+            vetor = parse_ints(entrada);
+            break;
+        }
+        print("Entrada invalida. Digite apenas numeros inteiros separados por espaco:");
+    }
     print("Vetor original:", vetor);
     var algoritmo = new Quicksort();
     algoritmo.carregar(vetor);
