@@ -582,11 +582,20 @@ def execute_code():
             "diagnosticos": compilation["diagnosticos"],
         })
 
+    tac = str(compilation.get("tac") or "")
+    cpp = str(compilation.get("cpp") or "")
+    optimization_level = data.get("optimization_level")
+    if tac and optimization_level is not None and str(optimization_level) in {"O0", "O1", "O2", "O3"}:
+        level = str(optimization_level)
+        optimized_tac = TACOptimizer().optimize(tac, level) if level != "O0" else tac
+        if optimized_tac and str(optimized_tac) != tac:
+            cpp = CppCodeGenerator().generate_source(str(optimized_tac))
+
     with tempfile.TemporaryDirectory(prefix="minipar-web-") as work_dir:
         work_path = Path(work_dir)
         cpp_path = work_path / "program.cpp"
         executable_path = work_path / "program"
-        cpp_path.write_text(str(compilation["cpp"]), encoding="utf-8")
+        cpp_path.write_text(cpp, encoding="utf-8")
         compiled = DriverGCC().compile(cpp_path, executable_path)
         if not compiled:
             return jsonify({

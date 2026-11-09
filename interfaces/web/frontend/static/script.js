@@ -608,7 +608,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 currentPhase = "code"; setStatus("Há erros no programa", true); renderPhase(); return;
             }
             const inputs = inputsText.split(/\r?\n/).filter(line => line.length > 0);
-            const response = await fetch("/api/executar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: source, inputs }) });
+            const executionPayload = { code: source, inputs };
+            if (optimizationLevel && optimizationLevel !== "O0") executionPayload.optimization_level = optimizationLevel;
+            const response = await fetch("/api/executar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(executionPayload) });
             execution = await response.json();
             const runItem = { file: currentFile, source, inputs: inputsText, diagnosticos: result.diagnosticos || [], compileResult: result, optimization: optimizationLevel, success: Boolean(execution.success), time: Number(execution.tempo || 0), execution };
             history.unshift(runItem);

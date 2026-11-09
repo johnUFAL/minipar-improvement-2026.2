@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 from interfaces.web import api
 from interfaces.web import benchmark
+from components.codegen.c_gerador_cpp import CppCodeGenerator
+from components.tac import TACOptimizer
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -845,6 +847,98 @@ class WebCompileTests(unittest.TestCase):
         self.assertFalse(execution.get_json()["success"])
         self.assertTrue(execution.get_json()["timed_out"])
         self.assertEqual(follow_up.status_code, 200)
+
+    @patch("interfaces.web.api._run_limited")
+    @patch("interfaces.web.api.DriverGCC.compile", return_value=True)
+    @patch("interfaces.web.api._compile_phases")
+    def test_execute_endpoint_applies_requested_optimization(
+        self, compile_phases, gcc_compile, run
+    ):
+        compile_phases.return_value = {
+            "success": True,
+            "cpp": "int main() { return 0; }",
+            "tac": "t0 = 2 + 3\nprint t0\n",
+            "diagnosticos": [],
+        }
+        run.return_value = {
+            "stdout": "42\n",
+            "stderr": "",
+            "exit_code": 0,
+            "tempo": 0.02,
+            "timed_out": False,
+            "output_limited": False,
+        }
+
+        captured_sources = []
+
+        def _capture_cpp(cpp_path, executable_path):
+            captured_sources.append(cpp_path.read_text(encoding="utf-8"))
+            return True
+
+        gcc_compile.side_effect = _capture_cpp
+
+        response = self.client.post(
+            "/api/executar",
+            json={"code": "print(42);", "inputs": [], "optimization_level": "O1"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["success"])
+        self.assertEqual(
+            captured_sources[-1],
+            CppCodeGenerator().generate_source(TACOptimizer().optimize("t0 = 2 + 3\nprint t0\n", "O1")),
+        )
+
+        response = self.client.post(
+            "/api/executar",
+            json={"code": "print(42);", "inputs": [], "optimization_level": "O0"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(captured_sources[-1], "int main() { return 0; }")
+
+    def test_session_endpoints_manage_multi_terminal_lifecycle(self):
+        filename = "t01_calculadora.mp"
+
+        try:
+            response = self.client.post("/api/session/create", json={"filename": filename})
+            self.assertEqual(response.status_code, 200)
+            created = response.get_json()
+            self.assertTrue(created["success"])
+            self.assertEqual(created["session"]["test_file"], filename)
+
+            response = self.client.get("/api/session")
+            self.assertEqual(response.status_code, 200)
+            current = response.get_json()
+            self.assertTrue(current["active"])
+            self.assertEqual(current["session"]["test_file"], filename)
+
+            response = self.client.post("/api/session/join", json={})
+            self.assertEqual(response.status_code, 200)
+            joined = response.get_json()
+            self.assertTrue(joined["success"])
+            self.assertEqual(len(joined["session"]["participants"]), 1)
+
+            response = self.client.post("/api/session/ready", json={})
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.get_json()["success"])
+
+            response = self.client.get("/api/session")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["session"]["status"], "running")
+        finally:
+            self.client.post("/api/session/clear", json={})
+
+
+    def test_editor_no_longer_renders_removed_terminal_panel(self):
+        response = self.client.get("/editor")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertNotIn('id="terminal-panel"', page)
+        self.assertNotIn('id="terminal-output"', page)
+        self.assertNotIn('id="session-progress"', page)
+        self.assertIn('id="phase-content"', page)
+        self.assertIn('id="compile-button"', page)
 
 
 if __name__ == "__main__":
