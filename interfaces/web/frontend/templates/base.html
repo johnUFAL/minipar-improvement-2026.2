@@ -27,6 +27,7 @@
     <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
     <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.7 7.3L20 12"/><path d="M17.9 15A7 7 0 0 1 5.3 16.7L4 12"/></symbol>
+    <symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l2.12-2.12a5 5 0 0 0-7.07-7.07L11 4.93"/><path d="M14 11a5 5 0 0 0-7.07 0L4.81 13.1a5 5 0 0 0 7.07 7.07L13 19.07"/></symbol>
 </svg>
 <div class="shell">
     <aside class="sidebar" aria-label="Navegação do MiniPar">
@@ -39,6 +40,7 @@
             <nav class="main-nav" aria-label="Telas do MiniPar">
                 <a class="nav-item{% if active_page == 'painel' %} active{% endif %}" href="/" data-page="dashboard"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-home"></use></svg></span><span>Painel</span></a>
                 <a class="nav-item{% if active_page == 'editor' %} active{% endif %}" href="/editor" data-page="ide"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-editor"></use></svg></span><span>Editor MiniPar</span></a>
+                <a class="nav-item{% if active_page == 'conexao' %} active{% endif %}" href="/conexao" data-page="conexao"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-link"></use></svg></span><span>Conexão</span></a>
                 <a class="nav-item{% if active_page == 'resultados' %} active{% endif %}" href="/resultados" data-page="results"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-results"></use></svg></span><span>Resultados do compilador</span></a>
                 <a class="nav-item{% if active_page == 'benchmark' %} active{% endif %}" href="/benchmark" data-page="benchmark"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-gauge"></use></svg></span><span>Benchmark</span></a>
                 <a class="nav-item{% if active_page == 'configuracoes' %} active{% endif %}" href="/configuracoes" data-page="configuration"><span class="nav-icon"><svg class="icon" aria-hidden="true"><use href="#icon-settings"></use></svg></span><span>Configurações</span></a>

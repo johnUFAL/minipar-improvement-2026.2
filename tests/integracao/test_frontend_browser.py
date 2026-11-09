@@ -716,7 +716,7 @@ class FrontendBrowserTests(unittest.TestCase):
                 self.assertNotIn("Dados não armazenados", content)
 
     def test_benchmark_screens_fit_1280_and_tablet(self):
-        for path in ("/", "/benchmark", "/resultados", "/configuracoes"):
+        for path in ("/", "/benchmark", "/resultados", "/configuracoes", "/conexao"):
             self.page.goto(f"{self.base_url}{path}", wait_until="domcontentloaded")
             for width, height in ((1280, 800), (820, 1000)):
                 with self.subTest(path=path, width=width):
@@ -745,7 +745,7 @@ class FrontendBrowserTests(unittest.TestCase):
 
         self.page.route("**/*", handle_route)
         try:
-            for path in ("/", "/benchmark", "/resultados", "/configuracoes", "/editor", "/modelo-antigo"):
+            for path in ("/", "/benchmark", "/resultados", "/configuracoes", "/editor", "/conexao", "/modelo-antigo"):
                 self.page.goto(
                     f"{self.base_url}{path}", wait_until="domcontentloaded"
                 )

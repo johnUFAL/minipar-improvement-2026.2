@@ -42,6 +42,18 @@ document.addEventListener("DOMContentLoaded", () => {
     let astReadonlyHighlights = [];
 
     const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
+    const CONEXAO_HANDOFF_KEY = "minipar-conexao-handoff";
+    function requiresMultiComputerConnection(source) {
+        return /\bc_channel\s*\(/.test(source) && /\b(?:send|receive)\s*\(/.test(source);
+    }
+    function readConexaoHandoff() {
+        try {
+            const raw = sessionStorage.getItem(CONEXAO_HANDOFF_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (error) {
+            return null;
+        }
+    }
     function saveCompilerRun(entry) {
         try {
             const previous = JSON.parse(localStorage.getItem(COMPILER_HISTORY_KEY) || "[]");
@@ -599,6 +611,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const currentFile = document.getElementById("current-file").textContent;
             const source = editor.getValue();
             const inputsText = programInput.value;
+            if (requiresMultiComputerConnection(source)) {
+                sessionStorage.setItem(CONEXAO_HANDOFF_KEY, JSON.stringify({ file: currentFile, source, inputs: inputsText }));
+                setStatus("Programa exige conexão entre computadores — abrindo o hub...");
+                window.location.href = `/conexao?program=${encodeURIComponent(currentFile)}`;
+                return;
+            }
             const compileResponse = await fetch("/api/compilar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: source }) });
             result = await compileResponse.json();
             execution = null;
@@ -714,6 +732,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.getElementById("back-to-results")?.addEventListener("click", () => showPage("results"));
     loadExamples().then(() => {
+        const handoff = readConexaoHandoff();
+        if (handoff && typeof handoff.source === "string") {
+            sessionStorage.removeItem(CONEXAO_HANDOFF_KEY);
+            editor.setValue(handoff.source);
+            document.getElementById("current-file").textContent = handoff.file || "ide_temp.minipar";
+            programInput.value = handoff.inputs || "";
+            showPage("ide");
+            setStatus("Código restaurado do hub de conexão");
+            return;
+        }
         const requested = new URLSearchParams(window.location.search).get("example");
         if (requested) loadExample(requested);
     });

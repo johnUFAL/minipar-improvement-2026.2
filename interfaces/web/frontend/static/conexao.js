@@ -1,0 +1,412 @@
+(() => {
+    "use strict";
+
+    const CLIENT_KEY = "minipar-conexao-client";
+    const CLIENT_NAME_KEY = "minipar-conexao-nome";
+    const POLL_INTERVAL = 1000;
+
+    const elements = {
+        host: document.getElementById("connection-host"),
+        port: document.getElementById("connection-port"),
+        name: document.getElementById("connection-name"),
+        startHub: document.getElementById("connection-start-hub"),
+        connect: document.getElementById("connection-connect"),
+        disconnect: document.getElementById("connection-disconnect"),
+        roomName: document.getElementById("connection-room-name"),
+        roomPassword: document.getElementById("connection-room-password"),
+        createRoom: document.getElementById("connection-create-room"),
+        roomCode: document.getElementById("connection-room-code"),
+        joinPassword: document.getElementById("connection-room-join-password"),
+        joinRoom: document.getElementById("connection-join-room"),
+        leaveRoom: document.getElementById("connection-leave-room"),
+        log: document.getElementById("connection-log"),
+        status: document.getElementById("connection-status"),
+        room: document.getElementById("connection-room"),
+        peers: document.getElementById("connection-peers"),
+        request: document.getElementById("connection-request"),
+        requestText: document.getElementById("connection-request-text"),
+        accept: document.getElementById("connection-accept"),
+        reject: document.getElementById("connection-reject"),
+        chat: document.getElementById("connection-chat"),
+        chatState: document.getElementById("connection-chat-state"),
+        chatForm: document.getElementById("connection-chat-form"),
+        chatInput: document.getElementById("connection-chat-input"),
+        chatSend: document.getElementById("connection-chat-send"),
+        programTitle: document.getElementById("connection-program-title"),
+        programInfo: document.getElementById("connection-program-info"),
+    };
+
+    function generateId() {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+            return window.crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        }
+        return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    let clientId = sessionStorage.getItem(CLIENT_KEY);
+    if (!clientId) {
+        clientId = generateId();
+        sessionStorage.setItem(CLIENT_KEY, clientId);
+    }
+
+    if (elements.name && !elements.name.value) {
+        elements.name.value = sessionStorage.getItem(CLIENT_NAME_KEY) || `Sessão-${clientId.slice(0, 4)}`;
+    }
+
+    const program = new URLSearchParams(window.location.search).get("program") || "";
+    let state = { estado: "desconectado", peers: [], chat: [], solicitacao: null, sala: null };
+    let pollTimer = null;
+    let polling = false;
+    let lastChatSignature = "";
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, character => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            "\"": "&quot;",
+            "'": "&#39;",
+        })[character]);
+    }
+
+    function timestamp() {
+        const now = new Date();
+        return [now.getHours(), now.getMinutes(), now.getSeconds()]
+            .map(value => String(value).padStart(2, "0"))
+            .join(":");
+    }
+
+    function log(message, tone = "info") {
+        if (!elements.log) return;
+        const line = document.createElement("span");
+        line.className = `connection-log-line connection-log-${tone}`;
+        line.textContent = `[${timestamp()}] ${message}`;
+        elements.log.appendChild(line);
+        elements.log.appendChild(document.createTextNode("\n"));
+        while (elements.log.childNodes.length > 400) {
+            elements.log.removeChild(elements.log.firstChild);
+        }
+        elements.log.scrollTop = elements.log.scrollHeight;
+    }
+
+    function describeEvent(event) {
+        switch (event.type) {
+            case "registrado":
+                return `Registrado no hub como ${event.nome || "participante"}.`;
+            case "sala_atual": {
+                const sala = event.sala || {};
+                const motivo = event.motivo || "entrada";
+                return `Sala ${motivo}: ${sala.nome || "?"} [${sala.codigo || "?"}].`;
+            }
+            case "aguardando":
+                return `Aguardando aceite de ${(event.peer || {}).nome || "?"}...`;
+            case "resposta":
+                return event.aceitar
+                    ? `Conexão aceita por ${(event.peer || {}).nome || "?"}.`
+                    : `${(event.peer || {}).nome || "?"} recusou a conexão.`;
+            case "conectado":
+                return `Conectado a ${(event.peer || {}).nome || "?"}.`;
+            case "peer_desconectou":
+                return `${(event.peer || {}).nome || "?"} desconectou.`;
+            case "desconectado":
+                return "Conexão encerrada.";
+            case "solicitacao":
+                return `${event.nome || "?"} quer se conectar.`;
+            case "erro":
+                return event.mensagem || "Erro no hub.";
+            default:
+                return "";
+        }
+    }
+
+    function applyEvents(events) {
+        (events || []).forEach(event => {
+            const message = describeEvent(event);
+            if (!message) return;
+            const tone = event.type === "erro" ? "error" : ["conectado", "registrado"].includes(event.type) ? "ok" : "info";
+            log(message, tone);
+        });
+    }
+
+    function applyState(data) {
+        if (data && typeof data === "object" && "estado" in data) {
+            state = { ...state, ...data };
+        }
+        applyEvents(data && data.eventos);
+        render();
+    }
+
+    function render() {
+        const connected = state.estado === "conectado";
+        const registered = state.estado === "registrado" || connected;
+        const partner = state.conectado_com;
+
+        elements.status.textContent = connected
+            ? `CONECTADO${partner ? ` · ${partner.nome}` : ""}`
+            : registered ? "NO HUB" : "DESCONECTADO";
+        elements.status.classList.toggle("connection-status-online", connected);
+        elements.status.classList.toggle("connection-status-hub", registered && !connected);
+
+        elements.disconnect.hidden = !((state.hub) || registered);
+
+        const sala = state.sala;
+        elements.room.textContent = sala
+            ? `${sala.nome} [${sala.codigo}] · ${sala.lotacao}${sala.maximo ? `/${sala.maximo}` : ""}`
+            : "Sem sala";
+
+        renderPeers();
+        renderRequest();
+        renderChat(connected, partner);
+    }
+
+    function renderPeers() {
+        const peers = Array.isArray(state.peers) ? state.peers : [];
+        if (!peers.length) {
+            elements.peers.innerHTML = '<li class="connection-empty">Nenhum participante disponível nesta sala.</li>';
+            return;
+        }
+        const connected = state.estado === "conectado";
+        elements.peers.innerHTML = peers.map(peer => {
+            const busy = peer.estado === "conectado";
+            const disabled = busy || connected;
+            return `<li class="connection-peer">
+                <span class="connection-peer-name"><b>${escapeHtml(peer.nome)}</b><small>${escapeHtml(peer.id)}${busy ? " · ocupado" : ""}</small></span>
+                <button type="button" class="button button-outline connection-peer-connect" data-peer-id="${escapeHtml(peer.id)}" ${disabled ? "disabled" : ""}>Conectar</button>
+            </li>`;
+        }).join("");
+    }
+
+    function renderRequest() {
+        const pedido = state.solicitacao;
+        if (!pedido) {
+            elements.request.hidden = true;
+            elements.requestText.textContent = "";
+            return;
+        }
+        elements.request.hidden = false;
+        elements.requestText.textContent = `${pedido.nome || "Participante"} (${pedido.de || "?"}) quer se conectar com você.`;
+    }
+
+    function renderChat(connected, partner) {
+        elements.chatInput.disabled = !connected;
+        elements.chatSend.disabled = !connected;
+        elements.chatState.textContent = connected
+            ? `conversando com ${partner ? partner.nome : "parceiro"}`
+            : "aguardando conexão";
+
+        const mensagens = Array.isArray(state.chat) ? state.chat : [];
+        const signature = mensagens.map(item => `${item.hora}-${item.proprio ? 1 : 0}-${item.texto}`).join("|");
+        if (signature !== lastChatSignature) {
+            lastChatSignature = signature;
+            if (!mensagens.length) {
+                elements.chat.innerHTML = '<p class="connection-empty">O chat fica disponível após o aceite dos dois lados.</p>';
+            } else {
+                elements.chat.innerHTML = mensagens.map(item => `
+                    <div class="connection-chat-message ${item.proprio ? "connection-chat-own" : ""}">
+                        <span class="connection-chat-meta">${escapeHtml(item.nome || "?")} · ${escapeHtml(item.hora || "")}</span>
+                        <p>${escapeHtml(item.texto)}</p>
+                    </div>`).join("");
+                elements.chat.scrollTop = elements.chat.scrollHeight;
+            }
+        }
+    }
+
+    async function requestJson(path, payload, method = "POST") {
+        const init = { method, headers: {} };
+        if (method === "POST") {
+            init.headers["Content-Type"] = "application/json";
+            init.body = JSON.stringify({ client_id: clientId, ...(payload || {}) });
+        }
+        const response = await fetch(path, init);
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (error) {
+            data = { success: false, error: "Resposta inválida do servidor." };
+        }
+        if (!response.ok || data.success === false) {
+            throw new Error(data.error || "Falha na operação.");
+        }
+        return data;
+    }
+
+    async function action(path, payload, successMessage) {
+        try {
+            const data = await requestJson(path, payload);
+            applyState(data);
+            if (successMessage) log(successMessage, "ok");
+            return data;
+        } catch (error) {
+            log(error.message, "error");
+            return null;
+        }
+    }
+
+    async function poll() {
+        if (polling) return;
+        polling = true;
+        try {
+            const response = await fetch(`/api/conexao/estado?client_id=${encodeURIComponent(clientId)}`);
+            if (response.ok) {
+                applyState(await response.json());
+            }
+        } catch (error) {
+            // O polling silencioso evita poluir o terminal quando o servidor cai.
+        } finally {
+            polling = false;
+        }
+    }
+
+    function startPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(poll, POLL_INTERVAL);
+    }
+
+    // ------------------------------------------------------------- ações
+    elements.startHub.addEventListener("click", async () => {
+        const porta = Number(elements.port.value) || 5010;
+        try {
+            const data = await requestJson("/api/conexao/hub/iniciar", { porta });
+            elements.port.value = data.porta;
+            elements.host.value = "127.0.0.1";
+            log(`Hub local ativo na porta ${data.porta}.`, "ok");
+        } catch (error) {
+            log(error.message, "error");
+        }
+    });
+
+    elements.connect.addEventListener("click", async () => {
+        const host = (elements.host.value || "").trim();
+        const porta = Number(elements.port.value) || 5010;
+        const nome = (elements.name.value || "").trim();
+        if (!nome) {
+            log("Informe o nome deste participante.", "error");
+            return;
+        }
+        sessionStorage.setItem(CLIENT_NAME_KEY, nome);
+        const data = await action(
+            "/api/conexao/conectar",
+            { host, porta, nome },
+            `Conectado ao hub ${host}:${porta}.`,
+        );
+        if (data) startPolling();
+    });
+
+    elements.disconnect.addEventListener("click", async () => {
+        const data = await action("/api/conexao/desligar", {}, "Desligado do hub.");
+        if (data) {
+            state = {
+                estado: "desconectado",
+                peers: [],
+                chat: [],
+                solicitacao: null,
+                sala: null,
+                conectado_com: null,
+                hub: null,
+            };
+            render();
+        }
+    });
+
+    elements.createRoom.addEventListener("click", async () => {
+        const nome = (elements.roomName.value || "Sala MiniPar").trim();
+        const senha = elements.roomPassword.value || "";
+        await action(
+            "/api/conexao/sala/criar",
+            { nome, senha },
+            "Sala privada criada. Compartilhe o código com a outra parte.",
+        );
+    });
+
+    elements.joinRoom.addEventListener("click", async () => {
+        const codigo = (elements.roomCode.value || "").trim().toUpperCase();
+        const senha = elements.joinPassword.value || "";
+        if (!codigo) {
+            log("Informe o código da sala.", "error");
+            return;
+        }
+        await action("/api/conexao/sala/entrar", { codigo, senha }, `Entrou na sala ${codigo}.`);
+    });
+
+    elements.leaveRoom.addEventListener("click", async () => {
+        await action("/api/conexao/sala/sair", {}, "De volta à sala pública.");
+    });
+
+    elements.peers.addEventListener("click", event => {
+        const button = event.target.closest("[data-peer-id]");
+        if (!button || button.disabled) return;
+        const peerId = button.getAttribute("data-peer-id");
+        action("/api/conexao/solicitar", { peer_id: peerId }, "Solicitação de conexão enviada.");
+    });
+
+    elements.accept.addEventListener("click", async () => {
+        const pedido = state.solicitacao;
+        if (!pedido) return;
+        await action(
+            "/api/conexao/responder",
+            { request_id: pedido.request_id, aceitar: true },
+            "Conexão aceita.",
+        );
+    });
+
+    elements.reject.addEventListener("click", async () => {
+        const pedido = state.solicitacao;
+        if (!pedido) return;
+        await action(
+            "/api/conexao/responder",
+            { request_id: pedido.request_id, aceitar: false },
+            "Conexão recusada.",
+        );
+    });
+
+    elements.chatForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        const texto = elements.chatInput.value.trim();
+        if (!texto) return;
+        elements.chatInput.value = "";
+        const data = await action("/api/conexao/chat", { texto });
+        if (data) {
+            elements.chatInput.focus();
+        } else {
+            elements.chatInput.value = texto;
+        }
+    });
+
+    window.addEventListener("beforeunload", () => {
+        const blob = new Blob(
+            [JSON.stringify({ client_id: clientId })],
+            { type: "application/json" },
+        );
+        navigator.sendBeacon("/api/conexao/desligar", blob);
+    });
+
+    async function loadProgramContext() {
+        if (!program) return;
+        try {
+            const response = await fetch("/api/test_spec", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ filename: program }),
+            });
+            if (!response.ok) return;
+            const spec = await response.json();
+            elements.programTitle.textContent = spec.titulo || program;
+            const multi = spec.multi_computer || {};
+            if (multi.required) {
+                const papeis = (multi.roles || []).join(", ");
+                elements.programInfo.textContent =
+                    `Conexão necessária entre ${multi.count || 2} participantes` +
+                    (papeis ? ` · papéis: ${papeis}` : "") +
+                    ". A conexão é exclusiva entre dois lados.";
+            }
+        } catch (error) {
+            // Contexto é opcional; a tela continua funcional.
+        }
+    }
+
+    log("Terminal de conexão pronto.");
+    loadProgramContext().then(() => {
+        poll();
+        startPolling();
+    });
+})();

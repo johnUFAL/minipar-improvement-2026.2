@@ -22,6 +22,7 @@ from components.tac.c_gerador_tac import TACGenerator
 from erros.diagnosticos import DiagnosticBag
 
 from ..program_analyzer import get_program_spec
+from .conexao_api import conexao_bp
 from .benchmark import (
     MAX_REQUESTED_CORES,
     available_cpu_count,
@@ -60,6 +61,7 @@ app = Flask(
     template_folder=os.path.join(FRONTEND_DIR, "templates"),
     static_folder=os.path.join(FRONTEND_DIR, "static"),
 )
+app.register_blueprint(conexao_bp)
 
 # Configuração de Diretórios
 TESTS_DIR = os.path.join(PROJECT_ROOT, "programas_teste")

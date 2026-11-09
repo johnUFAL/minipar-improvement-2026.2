@@ -1,0 +1,186 @@
+import time
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+
+from interfaces.conexao.cliente import ClienteHub
+from interfaces.conexao.hub import ServidorHub
+from interfaces.conexao.protocolo import SALA_PUBLICA
+
+
+def _aguardar(
+    predicado: Callable[[], Any],
+    *,
+    timeout: float = 3.0,
+    intervalo: float = 0.02,
+) -> Any:
+    limite = time.monotonic() + timeout
+    ultimo: Any = None
+    while time.monotonic() < limite:
+        ultimo = predicado()
+        if ultimo:
+            return ultimo
+        time.sleep(intervalo)
+    raise AssertionError(f"Condição não atingida; último valor: {ultimo!r}")
+
+
+@pytest.fixture()
+def hub() -> Any:
+    servidor = ServidorHub(host="127.0.0.1", porta=0)
+    porta = servidor.iniciar()
+    try:
+        yield servidor, porta
+    finally:
+        servidor.parar()
+
+
+@pytest.fixture()
+def criar_cliente(hub: Any) -> Any:
+    _, porta = hub
+    clientes: list[ClienteHub] = []
+
+    def criar(nome: str) -> ClienteHub:
+        cliente = ClienteHub()
+        cliente.conectar("127.0.0.1", porta, nome)
+        clientes.append(cliente)
+        return cliente
+
+    try:
+        yield criar
+    finally:
+        for cliente in clientes:
+            cliente.fechar()
+
+
+def test_pareamento_e_chat_entre_duas_sessoes(hub: Any, criar_cliente: Any) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    bob_id = bob.snapshot()["peer_id"]
+
+    _aguardar(
+        lambda: any(
+            peer["id"] == bob_id for peer in alice.snapshot()["peers"]
+        )
+    )
+
+    alice.solicitar(bob_id)
+    pedido = _aguardar(lambda: bob.snapshot()["solicitacao"])
+    assert pedido["de"] == alice.snapshot()["peer_id"]
+    assert pedido["nome"] == "Alice"
+
+    bob.responder(pedido["request_id"], True)
+    _aguardar(
+        lambda: (
+            alice.snapshot()["estado"] == "conectado"
+            and bob.snapshot()["estado"] == "conectado"
+        )
+    )
+    assert alice.snapshot()["conectado_com"]["nome"] == "Bob"
+    assert bob.snapshot()["conectado_com"]["nome"] == "Alice"
+
+    alice.chat("olá, Bob")
+    _aguardar(
+        lambda: any(
+            mensagem["texto"] == "olá, Bob"
+            for mensagem in bob.snapshot()["chat"]
+        )
+    )
+    assert any(
+        mensagem["proprio"] and mensagem["texto"] == "olá, Bob"
+        for mensagem in alice.snapshot()["chat"]
+    )
+
+    bob.desconectar()
+    _aguardar(lambda: alice.snapshot()["estado"] == "registrado")
+    assert alice.snapshot()["conectado_com"] is None
+
+    carol = criar_cliente("Carol")
+    carol_id = carol.snapshot()["peer_id"]
+    _aguardar(
+        lambda: any(
+            peer["id"] == carol_id for peer in alice.snapshot()["peers"]
+        )
+    )
+    alice.solicitar(carol_id)
+    novo_pedido = _aguardar(lambda: carol.snapshot()["solicitacao"])
+    carol.responder(novo_pedido["request_id"], True)
+    _aguardar(
+        lambda: (
+            alice.snapshot()["estado"] == "conectado"
+            and carol.snapshot()["estado"] == "conectado"
+        )
+    )
+    assert alice.snapshot()["chat"] == []
+
+
+def test_chat_exige_conexao_ativa(hub: Any, criar_cliente: Any) -> None:
+    alice = criar_cliente("Alice")
+
+    with pytest.raises(ValueError):
+        alice.chat("olá")
+
+
+def test_sala_privada_limita_dois_participantes_e_valida_senha(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    carol = criar_cliente("Carol")
+    dave = criar_cliente("Dave")
+
+    alice.criar_sala("Dupla", True, "segredo")
+
+    def sala_privada() -> dict[str, Any] | None:
+        sala = alice.snapshot()["sala"]
+        if isinstance(sala, dict) and sala.get("codigo") != SALA_PUBLICA:
+            return sala
+        return None
+
+    sala = _aguardar(sala_privada)
+    codigo = sala["codigo"]
+
+    bob.entrar_sala(codigo, "segredo")
+    _aguardar(
+        lambda: (bob.snapshot()["sala"] or {}).get("codigo") == codigo
+    )
+    _aguardar(
+        lambda: any(
+            peer["nome"] == "Bob" for peer in alice.snapshot()["peers"]
+        )
+    )
+
+    carol.entrar_sala(codigo, "segredo")
+    _aguardar(
+        lambda: "cheia" in str(carol.snapshot()["ultimo_erro"]).lower()
+    )
+    assert (carol.snapshot()["sala"] or {}).get("codigo") == SALA_PUBLICA
+
+    dave.entrar_sala(codigo, "errada")
+    _aguardar(
+        lambda: "senha" in str(dave.snapshot()["ultimo_erro"]).lower()
+    )
+    assert (dave.snapshot()["sala"] or {}).get("codigo") == SALA_PUBLICA
+
+
+def test_solicitacao_exige_participantes_na_mesma_sala(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    bob_id = bob.snapshot()["peer_id"]
+
+    alice.criar_sala("Isolada", True, "")
+    _aguardar(
+        lambda: (
+            (alice.snapshot()["sala"] or {}).get("codigo") != SALA_PUBLICA
+        )
+    )
+
+    alice.solicitar(bob_id)
+    _aguardar(
+        lambda: "outra sala" in str(alice.snapshot()["ultimo_erro"]).lower()
+    )
+    assert alice.snapshot()["estado"] == "registrado"

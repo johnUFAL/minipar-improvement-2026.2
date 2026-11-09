@@ -5,9 +5,42 @@
 > `python scripts/run_multiterminal.py --scenario all` para validar as quatro
 > operações, divisão por zero e operação inválida. O procedimento manual está em
 > `programas_teste/t01_multiterminal/README.md`.
-> O menu interativo apenas monitora sessões; ele não inicia os dois processos
-> nem passa `--como`/`--hosts`. Por isso, testes multi-terminal são executados
-> pelo runner scriptado.
+> O menu interativo oferece o hub de conexão (opção **3**), que pareia os dois
+> participantes e, na GUI, mantém o chat. A execução dos dois processos continua
+> sendo feita pelo runner scriptado ou por `--hosts`/`--como`: o hub encontra e
+> conecta as sessões, mas não substitui o runtime de canais.
+
+## Hub de conexao
+
+O hub é um ponto único de encontro em TCP. Ele registra participantes, isola
+salas privadas, pareia dois lados por pedido/aceite e relay as mensagens de
+chat. A conexão é sempre 1:1: um participante não pode estar conectado a dois
+outros ao mesmo tempo, e cada sala privada aceita no máximo dois membros.
+
+No terminal, abra o menu principal e escolha **3 - Conexao (Hub)**. Na GUI,
+abra o item **Conexao** na barra lateral, inicie o hub local ou informe o
+endereço de um hub existente, crie/entre em uma sala, selecione o participante
+e aguarde o aceite. O chat da GUI só é habilitado depois do aceite dos dois
+lados.
+
+Inicie o hub em uma das máquinas:
+
+```powershell
+python -m interfaces.conexao.hub --porta 5010
+```
+
+Na outra máquina, use o endereço mostrado pelo comando (`IP:5010`). A porta TCP
+precisa estar liberada no firewall da máquina que hospeda o hub. As mensagens
+trafegam em JSON por linha e não há autenticação de rede: use o hub em uma rede
+confiável.
+
+Programas MiniPar que usam `c_channel` com `send`/`receive` redirecionam para a
+tela de conexão quando executados no editor da GUI. Depois do aceite, a
+execução distribuída continua sendo feita pelo runtime de canais:
+
+```powershell
+python scripts/run_multiterminal.py --scenario all
+```
 
 ## Teste 1 — protocolo da calculadora
 

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Conexão — Hub MiniPar{% endblock %}
+{% block page_label %}Hub de Conexão{% endblock %}
+{% block current_file %}{{ program or 'nenhum programa' }}{% endblock %}
+
+{% block content %}
+<section id="page-conexao" class="page active-page connection-page">
+    <div class="page-intro">
+        <div>
+            <p class="kicker">CONEXÃO ENTRE COMPUTADORES</p>
+            <h1>Hub de Conexão</h1>
+            <p class="intro-copy">Escolha uma sala, peça conexão e aguarde o aceite da outra parte. O chat fica ativo enquanto a conexão durar.</p>
+        </div>
+        <div class="connection-program" id="connection-program">
+            <span class="tag">MULTI-COMPUTADOR</span>
+            <strong id="connection-program-title">{{ program or 'Nenhum programa selecionado' }}</strong>
+            <small id="connection-program-info">A conexão acontece somente entre dois participantes.</small>
+            {% if program %}
+            <a class="connection-back" href="/editor?example={{ program }}">Voltar ao editor deste programa</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="connection-grid">
+        <article class="card connection-terminal">
+            <div class="panel-title">
+                <span>Terminal de Conexão</span>
+                <small id="connection-status">DESCONECTADO</small>
+            </div>
+            <div class="connection-body">
+                <fieldset class="connection-fieldset">
+                    <legend>1. Entrar no hub</legend>
+                    <div class="connection-row">
+                        <label for="connection-host">Endereço</label>
+                        <input id="connection-host" class="connection-input" value="127.0.0.1" autocomplete="off">
+                        <label for="connection-port">Porta</label>
+                        <input id="connection-port" class="connection-input" type="number" min="1" max="65535" value="5010">
+                    </div>
+                    <div class="connection-row">
+                        <label for="connection-name">Seu nome</label>
+                        <input id="connection-name" class="connection-input" placeholder="Ex.: PC-do-Daniel" autocomplete="off">
+                    </div>
+                    <div class="connection-actions">
+                        <button id="connection-start-hub" class="button button-outline" type="button">Iniciar hub local</button>
+                        <button id="connection-connect" class="button button-primary" type="button">Conectar ao hub</button>
+                        <button id="connection-disconnect" class="button button-outline" type="button" hidden>Desligar do hub</button>
+                    </div>
+                </fieldset>
+
+                <fieldset class="connection-fieldset">
+                    <legend>2. Sala privada</legend>
+                    <div class="connection-row">
+                        <label for="connection-room-name">Nome da sala</label>
+                        <input id="connection-room-name" class="connection-input" value="Sala MiniPar" autocomplete="off">
+                        <label for="connection-room-password">Senha</label>
+                        <input id="connection-room-password" class="connection-input" type="password" placeholder="opcional" autocomplete="off">
+                    </div>
+                    <div class="connection-actions">
+                        <button id="connection-create-room" class="button button-outline" type="button">Criar sala privada</button>
+                    </div>
+                    <div class="connection-row connection-row-join">
+                        <label for="connection-room-code">Código da sala</label>
+                        <input id="connection-room-code" class="connection-input" placeholder="Ex.: A1B2C" autocomplete="off">
+                        <label for="connection-room-join-password">Senha</label>
+                        <input id="connection-room-join-password" class="connection-input" type="password" placeholder="se houver" autocomplete="off">
+                        <button id="connection-join-room" class="button button-primary" type="button">Entrar</button>
+                    </div>
+                    <div class="connection-actions">
+                        <button id="connection-leave-room" class="button button-outline" type="button">Sair da sala</button>
+                    </div>
+                </fieldset>
+
+                <pre id="connection-log" class="connection-console" aria-live="polite">Aguardando conexão com o hub...</pre>
+            </div>
+        </article>
+
+        <article class="card connection-side">
+            <div class="panel-title">
+                <span>Participantes</span>
+                <small id="connection-room">Sem sala</small>
+            </div>
+            <div class="connection-side-body">
+                <div id="connection-request" class="connection-request" hidden>
+                    <strong>Pedido de conexão</strong>
+                    <p id="connection-request-text"></p>
+                    <div class="connection-actions">
+                        <button id="connection-accept" class="button button-primary" type="button">Aceitar</button>
+                        <button id="connection-reject" class="button button-outline" type="button">Rejeitar</button>
+                    </div>
+                </div>
+
+                <ul id="connection-peers" class="connection-peers">
+                    <li class="connection-empty">Nenhum participante disponível.</li>
+                </ul>
+
+                <div class="connection-chat-head">
+                    <span>Chat da conexão</span>
+                    <small id="connection-chat-state">aguardando conexão</small>
+                </div>
+                <div id="connection-chat" class="connection-chat" aria-live="polite">
+                    <p class="connection-empty">O chat fica disponível após o aceite dos dois lados.</p>
+                </div>
+                <form id="connection-chat-form" class="connection-chat-form">
+                    <input id="connection-chat-input" class="connection-input" placeholder="Mensagem..." autocomplete="off" disabled>
+                    <button id="connection-chat-send" class="button button-primary" type="submit" disabled>Enviar</button>
+                </form>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='conexao.js') }}"></script>
+{% endblock %}

@@ -5,6 +5,7 @@ import sys
 
 from components.controle.c_controle import compile_file
 
+from .conexao.terminal import executar_menu_conexao, resumo_programa
 from .program_analyzer import get_program_spec
 from .test_orchestrator import (
     _load_session,
@@ -74,15 +75,19 @@ def _exibir_info_teste(test_path: str) -> None:
         print(f"  Multi-terminal: {mc['count']} participante(s)")
 
 
-def rodar_teste(test_path: str) -> None:
+def rodar_teste(test_path: str, permitir_hub: bool = True) -> None:
     spec = get_program_spec(test_path)
     if spec.get("multi_computer"):
-        print("\n  [INFO] Teste multi-terminal detectado.")
-        print("  O menu interativo apenas monitora a sessao; ele nao inicia os")
-        print("  dois processos nem passa --como/--hosts.")
-        print("  Para executar a troca real de mensagens use:")
-        print("    python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5")
-        print("  Documentacao: programas_teste/t01_multiterminal/README.md")
+        resumo_programa(spec)
+        print("\n  [INFO] Este programa exige conexao entre dois participantes.")
+        if not permitir_hub:
+            print("  Pulando no modo automatico. Use a opcao 3 - Conexao (Hub).")
+            return
+        resposta = input("  Abrir o hub de conexao agora? (s/n): ").strip().lower()
+        if resposta in ("s", "sim", "y", "yes"):
+            executar_menu_conexao(spec)
+        else:
+            print("  Voce pode abrir depois pelo menu principal: opcao 3 - Conexao (Hub).")
         return
 
     base_name = os.path.splitext(os.path.basename(test_path))[0]
@@ -126,7 +131,7 @@ def rodar_todos():
         return
     print(f"\n=== Rodando todos os testes ({len(testes)} encontrados) ===")
     for teste in testes:
-        rodar_teste(teste)
+        rodar_teste(teste, permitir_hub=False)
 
 
 def escolher_teste():
@@ -178,6 +183,7 @@ def exibir_menu():
         print("=" * 45)
         print("1 - Rodar todos os testes automaticamente")
         print("2 - Escolher 1 teste para rodar")
+        print("3 - Conexao (Hub)")
         print("0 - Sair")
         print("=" * 45)
 
@@ -187,6 +193,8 @@ def exibir_menu():
             rodar_todos()
         elif opcao == "2":
             escolher_teste()
+        elif opcao == "3":
+            executar_menu_conexao()
         elif opcao == "0":
             print("Saindo...")
             break
