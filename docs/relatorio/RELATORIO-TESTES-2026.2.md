@@ -253,6 +253,30 @@ O TAC de referência do PDF está em
 e é conferido por `tests/programas/test_t07.py` apenas quanto aos rótulos
 estruturais (`LOOP`, `PARTITION_LOOP`, `PARTITION_END`, `END`).
 
+### 5.4 Integração por fronteira
+
+A suíte `tests/integracao/test_pipeline_boundaries.py` cobre cada fronteira com
+um caso positivo e um negativo:
+
+| Fronteira | Positivo | Negativo |
+|---|---|---|
+| Léxico → Parser | fonte válida gera tokens/AST | `01_caractere_invalido.mp` |
+| Parser → Semântico | AST válida passa | `04_variavel_nao_declarada.mp` |
+| Semântico → TAC | análise OK gera TAC | `05_tipo_incompativel.mp` (para antes do TAC) |
+| TAC → C++ | TAC válido gera C++ | instrução TAC desconhecida → `ValueError` |
+| C++ → GCC | compila e executa | C++ inválido → `compile` falso |
+
+A matriz de aceitação percorre T2–T7 por léxico → parser → semântico → TAC →
+C++; o GCC e a execução continuam nos testes de aceitação
+(`test_programas.py` e `test_t0*.py`). T1, multi-terminal, é coberto por
+`test_t01.py` e `test_multiterminal_t1.py`.
+
+`tests/programas/invalidos/` tem **13** programas, cobrindo erros léxico,
+sintático, semântico e de concorrência, cada um com a mensagem esperada em
+`test_invalid_programs.py`.
+
+O CI publica `coverage.xml` como artefato e mantém o limite de 80%.
+
 ## 6. T8–T10 — fork/join em núcleos
 
 - **T8:** 160 atividades em 4 núcleos; imprime benchmark e speedup.
