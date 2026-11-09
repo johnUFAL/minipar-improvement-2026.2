@@ -114,6 +114,97 @@ def test_pareamento_e_chat_entre_duas_sessoes(hub: Any, criar_cliente: Any) -> N
     assert alice.snapshot()["chat"] == []
 
 
+def _parear(alice: ClienteHub, bob: ClienteHub) -> None:
+    bob_id = bob.snapshot()["peer_id"]
+    _aguardar(
+        lambda: any(
+            peer["id"] == bob_id for peer in alice.snapshot()["peers"]
+        )
+    )
+    alice.solicitar(bob_id)
+    pedido = _aguardar(lambda: bob.snapshot()["solicitacao"])
+    bob.responder(pedido["request_id"], True)
+    _aguardar(
+        lambda: (
+            alice.snapshot()["estado"] == "conectado"
+            and bob.snapshot()["estado"] == "conectado"
+        )
+    )
+
+
+def test_execucao_troca_contexto_e_relay(hub: Any, criar_cliente: Any) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    _parear(alice, bob)
+    canal = {
+        "nome": "dados",
+        "conecta": "computador_1",
+        "escuta": "computador_2",
+    }
+
+    alice.anunciar_execucao(
+        "cliente.mp",
+        "computador_1",
+        [canal],
+        host="127.0.0.1",
+        modo="conecta",
+    )
+    bob.anunciar_execucao(
+        "servidor.mp",
+        "computador_2",
+        [canal],
+        host="127.0.0.1",
+        porta=5102,
+        modo="escuta",
+    )
+
+    _aguardar(
+        lambda: (
+            (alice.snapshot()["execucao"].get("peer") or {}).get("papel")
+            == "computador_2"
+            and (bob.snapshot()["execucao"].get("peer") or {}).get("papel")
+            == "computador_1"
+        )
+    )
+    assert alice.snapshot()["execucao"]["peer_endereco"] == "127.0.0.1"
+
+    alice.marcar_execucao_preparada()
+    _aguardar(lambda: bob.snapshot()["execucao"]["peer_preparado"])
+
+    bob.marcar_execucao_pronta(host="127.0.0.1", porta=5102)
+    _aguardar(lambda: alice.snapshot()["execucao"]["peer_pronto"])
+
+    bob.parar_execucao("teste")
+    _aguardar(lambda: alice.snapshot()["execucao"]["parar_solicitado"])
+
+
+def test_execucao_rejeita_papeis_iguais(hub: Any, criar_cliente: Any) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    _parear(alice, bob)
+    canal = {
+        "nome": "dados",
+        "conecta": "computador_1",
+        "escuta": "computador_2",
+    }
+
+    alice.anunciar_execucao("cliente.mp", "computador_1", [canal])
+    bob.anunciar_execucao("cliente.mp", "computador_1", [canal])
+
+    erro = _aguardar(
+        lambda: next(
+            (
+                evento
+                for evento in bob.drenar_eventos()
+                if evento.get("type") == "exec_erro"
+                and evento.get("origem") == "hub"
+            ),
+            None,
+        )
+    )
+    assert "mesmo papel" in erro["mensagem"]
+
+
 def test_chat_exige_conexao_ativa(hub: Any, criar_cliente: Any) -> None:
     alice = criar_cliente("Alice")
 

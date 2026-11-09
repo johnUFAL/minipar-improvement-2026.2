@@ -579,7 +579,11 @@ class WebCompileTests(unittest.TestCase):
         self.assertLess(predictions[3], 0.1)
 
     def test_calculadora_compiles_through_web_but_channel_execution_needs_peer(self):
-        source = (PROGRAMS_DIR / "t01_calculadora.mp").read_text(encoding="utf-8")
+        source = (
+            PROGRAMS_DIR
+            / "t01_multiterminal"
+            / "t01_calculadora_cliente.mp"
+        ).read_text(encoding="utf-8")
         response = self.client.post(
             "/api/compilar", json={"code": source}
         )

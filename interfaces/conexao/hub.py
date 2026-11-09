@@ -24,6 +24,7 @@ from .protocolo import (
     Sala,
     codificar,
     decodificar,
+    normalizar_contexto_execucao,
     normalizar_nome,
     normalizar_texto_chat,
 )
@@ -47,6 +48,7 @@ class _Conexao:
     estado: str = "disponivel"
     sala: str = SALA_PUBLICA
     parceiro: str | None = None
+    execucao: dict[str, Any] | None = None
     enviar_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def peer_dict(self) -> dict[str, str]:
@@ -292,6 +294,16 @@ class ServidorHub:
             self._responder(conexao, mensagem)
         elif tipo == "chat":
             self._chat(conexao, mensagem)
+        elif tipo == "exec_contexto":
+            self._exec_contexto(conexao, mensagem)
+        elif tipo in (
+            "exec_preparado",
+            "exec_pronto",
+            "exec_fim",
+            "exec_erro",
+            "exec_parar",
+        ):
+            self._relay_execucao(conexao, mensagem)
         elif tipo == "desconectar":
             self._encerrar_conexao(conexao, notificar=True)
             conexao.estado = "disponivel"
@@ -398,6 +410,7 @@ class ServidorHub:
         conexao.sala = destino.codigo
         conexao.estado = "disponivel"
         conexao.parceiro = None
+        conexao.execucao = None
         self._cancelar_solicitacoes(conexao.peer_id)
         self._enviar(
             conexao,
@@ -547,6 +560,115 @@ class ServidorHub:
             },
         )
 
+    @staticmethod
+    def _assinatura_canais(contexto: dict[str, Any]) -> set[tuple[str, str, str]]:
+        canais = contexto.get("canais")
+        if not isinstance(canais, list):
+            return set()
+        return {
+            (
+                str(canal.get("nome") or ""),
+                str(canal.get("conecta") or ""),
+                str(canal.get("escuta") or ""),
+            )
+            for canal in canais
+            if isinstance(canal, dict)
+        }
+
+    def _validar_execucao(
+        self,
+        conexao: _Conexao,
+        parceiro: _Conexao,
+    ) -> None:
+        meu = conexao.execucao
+        outro = parceiro.execucao
+        if not isinstance(meu, dict) or not isinstance(outro, dict):
+            return
+        mensagem = ""
+        if meu.get("papel") == outro.get("papel"):
+            mensagem = (
+                "Os dois lados escolheram o mesmo papel. "
+                "Use um papel que conecta e outro que escuta."
+            )
+        elif self._assinatura_canais(meu) != self._assinatura_canais(outro):
+            mensagem = (
+                "Os programas não declaram o mesmo canal. "
+                "Abra o cliente em um lado e o servidor no outro."
+            )
+        if mensagem:
+            for destino in (conexao, parceiro):
+                self._enviar(
+                    destino,
+                    {"type": "exec_erro", "mensagem": mensagem, "origem": "hub"},
+                )
+
+    def _exec_contexto(
+        self,
+        conexao: _Conexao,
+        mensagem: dict[str, Any],
+    ) -> None:
+        if conexao.estado != "conectado" or conexao.parceiro is None:
+            self._erro(
+                conexao,
+                "Conecte-se a outro participante antes de preparar a execução.",
+            )
+            return
+        try:
+            contexto = normalizar_contexto_execucao(mensagem.get("contexto"))
+        except ProtocoloErro as erro:
+            self._erro(conexao, str(erro))
+            return
+        parceiro = self._conexoes.get(conexao.parceiro)
+        if parceiro is None:
+            self._erro(conexao, "O outro participante não está mais disponível.")
+            return
+        conexao.execucao = contexto
+        self._enviar(
+            parceiro,
+            {
+                "type": "exec_contexto",
+                "de": conexao.peer_id,
+                "nome": conexao.nome,
+                "endereco": conexao.endereco[0],
+                "contexto": contexto,
+            },
+        )
+        self._validar_execucao(conexao, parceiro)
+
+    def _relay_execucao(
+        self,
+        conexao: _Conexao,
+        mensagem: dict[str, Any],
+    ) -> None:
+        if conexao.estado != "conectado" or conexao.parceiro is None:
+            self._erro(conexao, "Não há conexão ativa para coordenar a execução.")
+            return
+        parceiro = self._conexoes.get(conexao.parceiro)
+        if parceiro is None:
+            self._erro(conexao, "O outro participante não está mais disponível.")
+            return
+        tipo = str(mensagem.get("type"))
+        retorno: dict[str, Any] = {
+            "type": tipo,
+            "de": conexao.peer_id,
+            "nome": conexao.nome,
+            "hora": _agora(),
+        }
+        if tipo == "exec_erro":
+            retorno["mensagem"] = str(mensagem.get("mensagem") or "")[
+                :MAX_TEXTO_CHAT
+            ]
+        elif tipo == "exec_fim":
+            codigo = mensagem.get("exit_code")
+            retorno["exit_code"] = (
+                int(codigo)
+                if isinstance(codigo, int) and not isinstance(codigo, bool)
+                else None
+            )
+        elif tipo == "exec_parar":
+            retorno["motivo"] = str(mensagem.get("motivo") or "")[:MAX_TEXTO_CHAT]
+        self._enviar(parceiro, retorno)
+
     def _encerrar_conexao(
         self,
         conexao: _Conexao,
@@ -556,12 +678,24 @@ class ServidorHub:
         parceiro_id = conexao.parceiro
         conexao.parceiro = None
         conexao.estado = "disponivel"
+        conexao.execucao = None
         if parceiro_id:
             parceiro = self._conexoes.get(parceiro_id)
             if parceiro is not None:
                 parceiro.parceiro = None
                 parceiro.estado = "disponivel"
+                parceiro.execucao = None
                 if notificar:
+                    self._enviar(
+                        parceiro,
+                        {
+                            "type": "exec_parar",
+                            "motivo": "O outro participante desconectou.",
+                            "de": conexao.peer_id,
+                            "nome": conexao.nome,
+                            "hora": _agora(),
+                        },
+                    )
                     self._enviar(
                         parceiro,
                         {

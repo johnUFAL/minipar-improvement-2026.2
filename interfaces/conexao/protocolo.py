@@ -15,6 +15,10 @@ MAX_FRAME_BYTES = 64 * 1024
 MAX_NOME = 48
 MAX_TEXTO_CHAT = 4000
 MAX_MEMBROS_SALA = 2
+MAX_PROGRAMA = 160
+MAX_PAPEL = 48
+MAX_HOST = 255
+MAX_CANAIS_EXECUCAO = 8
 SALA_PUBLICA = "publica"
 
 
@@ -78,6 +82,65 @@ def normalizar_texto_chat(valor: object) -> str:
             f"A mensagem excede {MAX_TEXTO_CHAT} caracteres."
         )
     return texto
+
+
+def _texto_limitado(valor: object, campo: str, limite: int) -> str:
+    if not isinstance(valor, str):
+        raise ProtocoloErro(f"{campo} inválido.")
+    texto = valor.strip()
+    if not texto or len(texto) > limite:
+        raise ProtocoloErro(
+            f"{campo} deve ter entre 1 e {limite} caracteres."
+        )
+    return texto
+
+
+def normalizar_contexto_execucao(valor: object) -> dict[str, Any]:
+    """Valida o contexto trocado entre dois lados antes da execução."""
+    if not isinstance(valor, dict):
+        raise ProtocoloErro("Contexto de execução inválido.")
+    programa = _texto_limitado(
+        valor.get("programa"), "Programa", MAX_PROGRAMA
+    )
+    papel = _texto_limitado(valor.get("papel"), "Papel", MAX_PAPEL)
+    modo = valor.get("modo")
+    if modo not in (None, "", "conecta", "escuta"):
+        raise ProtocoloErro("Modo de execução inválido.")
+    host = valor.get("host") or ""
+    if not isinstance(host, str) or len(host) > MAX_HOST:
+        raise ProtocoloErro("Host de execução inválido.")
+    porta = valor.get("porta")
+    if porta is not None:
+        if isinstance(porta, bool) or not isinstance(porta, int):
+            raise ProtocoloErro("Porta de execução inválida.")
+        if porta < 1 or porta > 65535:
+            raise ProtocoloErro("A porta deve estar entre 1 e 65535.")
+    canais = valor.get("canais")
+    if not isinstance(canais, list) or not canais:
+        raise ProtocoloErro("Informe ao menos um canal de execução.")
+    if len(canais) > MAX_CANAIS_EXECUCAO:
+        raise ProtocoloErro("Quantidade de canais acima do limite.")
+    canais_normalizados: list[dict[str, str]] = []
+    for canal in canais:
+        if not isinstance(canal, dict):
+            raise ProtocoloErro("Canal de execução inválido.")
+        canais_normalizados.append({
+            "nome": _texto_limitado(canal.get("nome"), "Nome do canal", MAX_PAPEL),
+            "conecta": _texto_limitado(
+                canal.get("conecta"), "Papel que conecta", MAX_PAPEL
+            ),
+            "escuta": _texto_limitado(
+                canal.get("escuta"), "Papel que escuta", MAX_PAPEL
+            ),
+        })
+    return {
+        "programa": programa,
+        "papel": papel,
+        "modo": modo or "",
+        "host": host.strip(),
+        "porta": porta,
+        "canais": canais_normalizados,
+    }
 
 
 @dataclass

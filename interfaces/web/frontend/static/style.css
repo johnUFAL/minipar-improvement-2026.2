@@ -634,5 +634,17 @@ body.light-theme .connection-peer,
 body.light-theme .connection-chat-message{background:#f8fafc}
 body.light-theme .connection-request{background:#eef2fb;border-color:#9eb4e5}
 body.light-theme .connection-program{background:#f1f5fb}
-@media (max-width:900px){.connection-grid{grid-template-columns:1fr}}
+.connection-execution{grid-column:1/-1;min-width:0;overflow:hidden}
+.connection-execution-body{padding:16px}
+.connection-exec-warning{margin:0 0 12px;padding:10px 12px;border:1px solid #d9a441;border-radius:6px;background:rgba(217,164,65,.12);color:#e8c173;font-size:12px}
+.connection-exec-hint{color:var(--muted);font-size:11px}
+.connection-exec-inputs{width:100%;min-height:86px;margin-bottom:10px;resize:vertical}
+.connection-exec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.connection-exec-panel{min-width:0}
+.connection-exec-label{display:block;margin-bottom:5px;color:var(--muted);font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.connection-exec-output{min-height:110px;max-height:260px;margin:0;padding:10px 12px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:#0d1625;color:#b9c7de;font:11px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word}
+.connection-exec-error{color:#f0a0a0}
+body.light-theme .connection-exec-output{background:#f8fafc;color:var(--text)}
+body.light-theme .connection-exec-warning{background:#fff7e3;color:#8a5c00}
+@media (max-width:900px){.connection-grid{grid-template-columns:1fr}.connection-exec-grid{grid-template-columns:1fr}}
 @media (max-width:700px){.connection-program{max-width:100%}.connection-row-join .connection-input{flex:1 1 100%}.connection-chat-form{flex-wrap:wrap}}

@@ -106,6 +106,50 @@
                 </form>
             </div>
         </article>
+
+        <article class="card connection-execution" id="connection-execution" hidden>
+            <div class="panel-title">
+                <span>Execução automática</span>
+                <small id="connection-exec-status">AGUARDANDO CONEXÃO</small>
+            </div>
+            <div class="connection-execution-body">
+                <p id="connection-exec-warning" class="connection-exec-warning" hidden></p>
+                <div class="connection-row">
+                    <label for="connection-exec-role">Papel</label>
+                    <select id="connection-exec-role" class="connection-input"></select>
+                    <label for="connection-exec-host">Host anunciado</label>
+                    <input id="connection-exec-host" class="connection-input" value="127.0.0.1" autocomplete="off">
+                    <label for="connection-exec-port">Porta</label>
+                    <input id="connection-exec-port" class="connection-input" type="number" min="1" max="65535" placeholder="automática">
+                </div>
+                <div class="connection-row">
+                    <label for="connection-exec-timeout">Timeout (s)</label>
+                    <input id="connection-exec-timeout" class="connection-input" type="number" min="1" max="3600" value="60">
+                    <span class="connection-exec-hint" id="connection-exec-hint">O lado que escuta abre a porta; o outro inicia em seguida.</span>
+                </div>
+                <label class="connection-exec-label" for="connection-exec-inputs">Entradas (uma por linha)</label>
+                <textarea id="connection-exec-inputs" class="connection-input connection-exec-inputs" rows="4" placeholder="Digite as entradas do programa, uma por linha."></textarea>
+                <div class="connection-actions">
+                    <button id="connection-exec-prepare" class="button button-outline" type="button">Preparar</button>
+                    <button id="connection-exec-start" class="button button-primary" type="button" disabled>Executar</button>
+                    <button id="connection-exec-stop" class="button button-outline" type="button" disabled>Parar</button>
+                </div>
+                <div class="connection-exec-grid">
+                    <div class="connection-exec-panel">
+                        <span class="connection-exec-label">Estado</span>
+                        <pre id="connection-exec-state" class="connection-exec-output">Sem execução preparada.</pre>
+                    </div>
+                    <div class="connection-exec-panel">
+                        <span class="connection-exec-label">Saída</span>
+                        <pre id="connection-exec-output" class="connection-exec-output" aria-live="polite"></pre>
+                    </div>
+                    <div class="connection-exec-panel">
+                        <span class="connection-exec-label">Erros</span>
+                        <pre id="connection-exec-error" class="connection-exec-output connection-exec-error" aria-live="polite"></pre>
+                    </div>
+                </div>
+            </div>
+        </article>
     </div>
 </section>
 {% endblock %}

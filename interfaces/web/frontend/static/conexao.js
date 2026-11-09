@@ -3,6 +3,7 @@
 
     const CLIENT_KEY = "minipar-conexao-client";
     const CLIENT_NAME_KEY = "minipar-conexao-nome";
+    const CONEXAO_HANDOFF_KEY = "minipar-conexao-handoff";
     const POLL_INTERVAL = 1000;
 
     const elements = {
@@ -34,6 +35,21 @@
         chatSend: document.getElementById("connection-chat-send"),
         programTitle: document.getElementById("connection-program-title"),
         programInfo: document.getElementById("connection-program-info"),
+        execution: document.getElementById("connection-execution"),
+        execStatus: document.getElementById("connection-exec-status"),
+        execWarning: document.getElementById("connection-exec-warning"),
+        execRole: document.getElementById("connection-exec-role"),
+        execHost: document.getElementById("connection-exec-host"),
+        execPort: document.getElementById("connection-exec-port"),
+        execTimeout: document.getElementById("connection-exec-timeout"),
+        execInputs: document.getElementById("connection-exec-inputs"),
+        execPrepare: document.getElementById("connection-exec-prepare"),
+        execStart: document.getElementById("connection-exec-start"),
+        execStop: document.getElementById("connection-exec-stop"),
+        execState: document.getElementById("connection-exec-state"),
+        execOutput: document.getElementById("connection-exec-output"),
+        execError: document.getElementById("connection-exec-error"),
+        execHint: document.getElementById("connection-exec-hint"),
     };
 
     function generateId() {
@@ -58,6 +74,22 @@
     let pollTimer = null;
     let polling = false;
     let lastChatSignature = "";
+    let programSpec = null;
+    let executionHandoff = null;
+    let execStarting = false;
+    let execStopRequested = false;
+    let freeSuggestedPort = "";
+
+    function readConexaoHandoff() {
+        try {
+            const raw = sessionStorage.getItem(CONEXAO_HANDOFF_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    executionHandoff = readConexaoHandoff();
 
     function escapeHtml(value) {
         return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -112,6 +144,21 @@
                 return "Conexão encerrada.";
             case "solicitacao":
                 return `${event.nome || "?"} quer se conectar.`;
+            case "exec_contexto": {
+                const contexto = event.contexto || {};
+                return `Parceiro preparou o papel ${contexto.papel || "?"}` +
+                    (contexto.host ? ` em ${contexto.host}:${contexto.porta || "?"}` : ".") ;
+            }
+            case "exec_preparado":
+                return "O outro lado terminou de preparar a execução.";
+            case "exec_pronto":
+                return `O outro lado abriu a porta ${event.porta || "do canal"}.`;
+            case "exec_fim":
+                return `O outro lado terminou com código ${event.exit_code ?? "?"}.`;
+            case "exec_erro":
+                return `Execução: ${event.mensagem || "falha no outro lado"}`;
+            case "exec_parar":
+                return `Execução encerrada: ${event.motivo || "pedido do outro lado"}.`;
             case "erro":
                 return event.mensagem || "Erro no hub.";
             default:
@@ -123,7 +170,11 @@
         (events || []).forEach(event => {
             const message = describeEvent(event);
             if (!message) return;
-            const tone = event.type === "erro" ? "error" : ["conectado", "registrado"].includes(event.type) ? "ok" : "info";
+            const tone = ["erro", "exec_erro"].includes(event.type)
+                ? "error"
+                : ["conectado", "registrado", "exec_pronto"].includes(event.type)
+                    ? "ok"
+                    : "info";
             log(message, tone);
         });
     }
@@ -134,6 +185,177 @@
         }
         applyEvents(data && data.eventos);
         render();
+    }
+
+    let execAutoBlocked = false;
+
+    function isAutoExecution() {
+        return Boolean(programSpec && programSpec.multi_computer && programSpec.multi_computer.auto_execution);
+    }
+
+    function roleMode(papel) {
+        const multi = (programSpec && programSpec.multi_computer) || {};
+        const modes = multi.role_modes || {};
+        if (modes[papel]) return modes[papel];
+        const canal = (multi.channels || [])[0] || {};
+        if (canal.conecta === papel) return "conecta";
+        if (canal.escuta === papel) return "escuta";
+        return "";
+    }
+
+    function handoffMatchesProgram() {
+        if (!executionHandoff || typeof executionHandoff.source !== "string") return false;
+        if (!program) return true;
+        return !executionHandoff.file || executionHandoff.file === program;
+    }
+
+    function renderExecution() {
+        if (!elements.execution) return;
+        if (!programSpec || !programSpec.multi_computer) {
+            elements.execution.hidden = true;
+            return;
+        }
+        const multi = programSpec.multi_computer;
+        const auto = Boolean(multi.auto_execution);
+        elements.execution.hidden = false;
+        elements.execWarning.hidden = auto;
+        if (!auto) {
+            elements.execWarning.textContent = multi.instrucoes || "Execução automática indisponível para este programa.";
+            elements.execPrepare.disabled = true;
+            elements.execStart.disabled = true;
+            elements.execStop.disabled = true;
+            elements.execStatus.textContent = "MANUAL";
+            elements.execHint.textContent = "Use um par com canal declarativo, como t01_multiterminal.";
+            return;
+        }
+
+        const connected = state.estado === "conectado";
+        const exec = state.execucao || {};
+        const local = state.execucao_local || {};
+        const status = String(local.status || "");
+        const papel = elements.execRole.value || exec.papel || "";
+        const modo = roleMode(papel);
+        const locked = ["preparando", "preparado", "executando", "parando"].includes(status);
+        const preparado = Boolean(local.compilado) && status === "preparado";
+        const active = Boolean(local.ativo);
+        const podeIniciar = preparado
+            && !execStarting
+            && !execAutoBlocked
+            && (modo === "escuta" ? Boolean(exec.peer_preparado) : Boolean(exec.peer_pronto));
+        const podeParar = active && ["preparando", "preparado", "executando"].includes(status);
+
+        elements.execRole.disabled = locked || !connected;
+        elements.execHost.disabled = locked || !connected || modo !== "escuta";
+        elements.execPort.disabled = locked || !connected || modo !== "escuta";
+        elements.execTimeout.disabled = locked;
+        elements.execInputs.disabled = locked;
+        elements.execPrepare.disabled = !connected || locked;
+        elements.execStart.disabled = !connected || !podeIniciar;
+        elements.execStop.disabled = !connected || !podeParar;
+
+        const protocolo = String(exec.estado || "");
+        elements.execStatus.textContent = connected
+            ? (status || protocolo || "OCIOSO").toUpperCase()
+            : "DESCONECTADO";
+        elements.execHint.textContent = modo === "escuta"
+            ? "Este lado abre a porta e avisa quando estiver pronto."
+            : "Este lado aguarda a porta do outro lado para iniciar.";
+
+        const proc = local.processo || {};
+        elements.execState.textContent = [
+            `Papel: ${papel || "-"} (${modo || "-"})`,
+            `Parceiro: ${(exec.peer && exec.peer.papel) || "-"} (${(exec.peer && exec.peer.modo) || "-"})`,
+            `Porta: ${local.porta || exec.porta || "-"}`,
+            `Peer preparado: ${exec.peer_preparado ? "sim" : "não"}`,
+            `Peer pronto: ${exec.peer_pronto ? "sim" : "não"}`,
+            `Processo: ${proc.rodando ? "em execução" : active ? "encerrado" : "não iniciado"}`,
+        ].join("\n");
+        elements.execOutput.textContent = proc.stdout || "";
+        elements.execError.textContent = proc.stderr || local.erro || exec.erro || "";
+
+        if (connected && preparado && !execStarting && !execAutoBlocked) {
+            const deveIniciar = modo === "escuta"
+                ? Boolean(exec.peer_preparado)
+                : Boolean(exec.peer_pronto);
+            if (deveIniciar) startExecution(true);
+        }
+        if (!execStopRequested && active
+            && ["preparando", "preparado", "executando"].includes(status)
+            && (exec.parar_solicitado || exec.estado === "erro")) {
+            execStopRequested = true;
+            stopExecution(false);
+        }
+    }
+
+    async function prepareExecution() {
+        if (!isAutoExecution()) return;
+        const multi = programSpec.multi_computer;
+        const canal = (multi.channels || [])[0];
+        const papel = elements.execRole.value;
+        if (!canal || !papel) {
+            log("Escolha um papel para preparar a execução.", "error");
+            return;
+        }
+        const payload = {
+            filename: program,
+            papel,
+            canal: {
+                nome: canal.nome,
+                conecta: canal.conecta,
+                escuta: canal.escuta,
+            },
+            host: (elements.execHost.value || "").trim(),
+            porta: elements.execPort.value ? Number(elements.execPort.value) : null,
+            entradas: elements.execInputs.value || "",
+            timeout: Number(elements.execTimeout.value) || 60,
+        };
+        if (handoffMatchesProgram()) payload.code = executionHandoff.source;
+        execAutoBlocked = false;
+        execStopRequested = false;
+        elements.execPrepare.disabled = true;
+        const data = await action("/api/conexao/execucao/preparar", payload);
+        if (!data) {
+            elements.execPrepare.disabled = false;
+            return;
+        }
+        const local = data.execucao_local || {};
+        if (local.erro) {
+            log(local.erro, "error");
+        } else {
+            log("Execução preparada; aguardando o outro lado.", "ok");
+        }
+    }
+
+    async function startExecution(auto = false) {
+        if (execStarting || (auto && execAutoBlocked)) return;
+        execStarting = true;
+        try {
+            const data = await requestJson("/api/conexao/execucao/iniciar", {});
+            applyState(data);
+            log(auto ? "Execução iniciada automaticamente." : "Execução iniciada.", "ok");
+        } catch (error) {
+            if (auto) {
+                execAutoBlocked = true;
+                log(`Não foi possível iniciar automaticamente: ${error.message}`, "error");
+            } else {
+                log(error.message, "error");
+            }
+        } finally {
+            execStarting = false;
+        }
+    }
+
+    async function stopExecution(notificar = true) {
+        try {
+            const data = await requestJson("/api/conexao/execucao/parar", {
+                motivo: notificar ? "Execução encerrada pelo usuário." : "Execução encerrada pelo parceiro.",
+                notificar,
+            });
+            applyState(data);
+            if (notificar) log("Execução encerrada.", "ok");
+        } catch (error) {
+            if (notificar) log(error.message, "error");
+        }
     }
 
     function render() {
@@ -157,6 +379,7 @@
         renderPeers();
         renderRequest();
         renderChat(connected, partner);
+        renderExecution();
     }
 
     function renderPeers() {
@@ -372,6 +595,28 @@
         }
     });
 
+    elements.execPrepare.addEventListener("click", () => {
+        prepareExecution();
+    });
+
+    elements.execStart.addEventListener("click", () => {
+        startExecution(false);
+    });
+
+    elements.execStop.addEventListener("click", () => {
+        execStopRequested = true;
+        stopExecution(true);
+    });
+
+    elements.execRole.addEventListener("change", () => {
+        if (roleMode(elements.execRole.value) === "escuta"
+            && !elements.execPort.value
+            && freeSuggestedPort) {
+            elements.execPort.value = freeSuggestedPort;
+        }
+        renderExecution();
+    });
+
     window.addEventListener("beforeunload", () => {
         const blob = new Blob(
             [JSON.stringify({ client_id: clientId })],
@@ -390,15 +635,50 @@
             });
             if (!response.ok) return;
             const spec = await response.json();
+            programSpec = spec;
             elements.programTitle.textContent = spec.titulo || program;
             const multi = spec.multi_computer || {};
-            if (multi.required) {
-                const papeis = (multi.roles || []).join(", ");
-                elements.programInfo.textContent =
-                    `Conexão necessária entre ${multi.count || 2} participantes` +
-                    (papeis ? ` · papéis: ${papeis}` : "") +
-                    ". A conexão é exclusiva entre dois lados.";
+            if (!multi.required) return;
+
+            const papeis = (multi.roles || []).join(", ");
+            const execucao = multi.auto_execution
+                ? "Execução automática disponível."
+                : "Execução automática indisponível.";
+            elements.programInfo.textContent =
+                `Conexão necessária entre ${multi.count || 2} participantes` +
+                (papeis ? ` · papéis: ${papeis}` : "") +
+                `. ${execucao}`;
+
+            const roles = Array.isArray(multi.roles) ? multi.roles : [];
+            elements.execRole.innerHTML = roles.map(papel => (
+                `<option value="${escapeHtml(papel)}">${escapeHtml(papel)} (${escapeHtml(roleMode(papel))})</option>`
+            )).join("");
+            let indice = 0;
+            if (/servidor|server|_2\b/i.test(program)) {
+                indice = Math.min(1, Math.max(0, roles.length - 1));
             }
+            const papelPadrao = roles[indice] || "";
+            if (papelPadrao) elements.execRole.value = papelPadrao;
+            if (handoffMatchesProgram()) {
+                elements.execInputs.value = executionHandoff.inputs || "";
+            }
+
+            try {
+                const redeResponse = await fetch("/api/conexao/rede");
+                if (redeResponse.ok) {
+                    const rede = await redeResponse.json();
+                    if (rede.ip_local) elements.execHost.value = rede.ip_local;
+                    if (rede.porta_livre) {
+                        freeSuggestedPort = String(rede.porta_livre);
+                        if (roleMode(papelPadrao) === "escuta") {
+                            elements.execPort.value = freeSuggestedPort;
+                        }
+                    }
+                }
+            } catch (error) {
+                // O host manual continua disponível se a rede não responder.
+            }
+            renderExecution();
         } catch (error) {
             // Contexto é opcional; a tela continua funcional.
         }

@@ -44,7 +44,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
     const CONEXAO_HANDOFF_KEY = "minipar-conexao-handoff";
     function requiresMultiComputerConnection(source) {
-        return /\bc_channel\s*\(/.test(source) && /\b(?:send|receive)\s*\(/.test(source);
+        const withoutComments = String(source || "").replace(/#[^\n]*/g, "");
+        return /\bc_channel\b/.test(withoutComments) && /\b(?:send|receive)\s*\(/.test(withoutComments);
     }
     function readConexaoHandoff() {
         try {

@@ -6,6 +6,7 @@ fila. As interfaces (terminal e web) usam os métodos públicos e consultam
 """
 from __future__ import annotations
 
+import copy
 import queue
 import socket
 import threading
@@ -16,6 +17,7 @@ from .protocolo import (
     ProtocoloErro,
     codificar,
     decodificar,
+    normalizar_contexto_execucao,
     normalizar_nome,
     normalizar_texto_chat,
 )
@@ -25,6 +27,30 @@ MAX_HISTORICO_CHAT = 200
 
 def _agora() -> str:
     return datetime.now().strftime("%H:%M:%S")
+
+
+def _execucao_inicial() -> dict[str, Any]:
+    return {
+        "estado": "ocioso",
+        "programa": None,
+        "papel": None,
+        "modo": "",
+        "host": "",
+        "porta": None,
+        "peer": None,
+        "peer_endereco": None,
+        "peer_host": "",
+        "peer_porta": None,
+        "peer_preparado": False,
+        "peer_pronto": False,
+        "peer_fim": None,
+        "preparado": False,
+        "pronto": False,
+        "erro": "",
+        "motivo_parar": "",
+        "parar_solicitado": False,
+        "exit_code": None,
+    }
 
 
 class ClienteHub:
@@ -50,6 +76,7 @@ class ClienteHub:
         self.solicitacao: dict[str, Any] | None = None
         self.aguardando: dict[str, Any] | None = None
         self.historico_chat: list[dict[str, Any]] = []
+        self.execucao: dict[str, Any] = _execucao_inicial()
         self.ultimo_erro = ""
 
     # ---------------------------------------------------------------- conexão
@@ -72,6 +99,7 @@ class ClienteHub:
             self._host = host
             self._porta = int(porta)
             self.nome = nome_normalizado
+            self.execucao = _execucao_inicial()
             self._fechado = False
         self._thread = threading.Thread(
             target=self._ler,
@@ -99,6 +127,7 @@ class ClienteHub:
             self.conectado_com = None
             self.solicitacao = None
             self.aguardando = None
+            self.execucao = _execucao_inicial()
         self._registro.set()
         if sock is not None:
             try:
@@ -177,6 +206,7 @@ class ClienteHub:
             elif tipo == "conectado":
                 peer = mensagem.get("peer")
                 self.historico_chat = []
+                self.execucao = _execucao_inicial()
                 self.conectado_com = peer if isinstance(peer, dict) else None
                 self.estado = "conectado"
                 self.solicitacao = None
@@ -186,9 +216,68 @@ class ClienteHub:
             elif tipo == "peer_desconectou":
                 self.estado = "registrado"
                 self.conectado_com = None
+                self._marcar_peer_ausente(
+                    "O outro participante desconectou."
+                )
             elif tipo == "desconectado":
                 self.estado = "registrado"
                 self.conectado_com = None
+                self.execucao = _execucao_inicial()
+            elif tipo == "exec_contexto":
+                contexto = mensagem.get("contexto")
+                if isinstance(contexto, dict):
+                    self.execucao["peer"] = contexto
+                    self.execucao["peer_endereco"] = str(
+                        mensagem.get("endereco") or ""
+                    )
+                    self.execucao["peer_host"] = str(
+                        contexto.get("host") or ""
+                    )
+                    porta = contexto.get("porta")
+                    self.execucao["peer_porta"] = (
+                        int(porta)
+                        if isinstance(porta, int)
+                        and not isinstance(porta, bool)
+                        else None
+                    )
+                    self.execucao["peer_preparado"] = False
+                    self.execucao["peer_pronto"] = False
+                    self.execucao["peer_fim"] = None
+            elif tipo == "exec_preparado":
+                self.execucao["peer_preparado"] = True
+            elif tipo == "exec_pronto":
+                self.execucao["peer_pronto"] = True
+                self.execucao["pronto"] = True
+                host = mensagem.get("host")
+                if isinstance(host, str) and host:
+                    self.execucao["peer_host"] = host
+                porta = mensagem.get("porta")
+                if isinstance(porta, int) and not isinstance(porta, bool):
+                    self.execucao["peer_porta"] = porta
+            elif tipo == "exec_fim":
+                codigo = mensagem.get("exit_code")
+                self.execucao["peer_fim"] = (
+                    int(codigo)
+                    if isinstance(codigo, int) and not isinstance(codigo, bool)
+                    else None
+                )
+            elif tipo == "exec_erro":
+                self.execucao["erro"] = str(
+                    mensagem.get("mensagem") or "Falha na execução."
+                )
+                self.execucao["estado"] = "erro"
+                self.execucao["parar_solicitado"] = True
+            elif tipo == "exec_parar":
+                self.execucao["parar_solicitado"] = True
+                self.execucao["motivo_parar"] = str(
+                    mensagem.get("motivo") or "Encerrado pelo outro participante."
+                )
+                if self.execucao["estado"] in (
+                    "preparando",
+                    "aguardando",
+                    "executando",
+                ):
+                    self.execucao["estado"] = "parando"
             elif tipo == "chat":
                 self._registrar_chat({
                     "de": str(mensagem.get("de") or ""),
@@ -212,6 +301,23 @@ class ClienteHub:
         self.historico_chat.append(entrada)
         if len(self.historico_chat) > MAX_HISTORICO_CHAT:
             self.historico_chat = self.historico_chat[-MAX_HISTORICO_CHAT:]
+
+    def _marcar_peer_ausente(self, motivo: str) -> None:
+        execucao = self.execucao
+        execucao["peer"] = None
+        execucao["peer_host"] = ""
+        execucao["peer_porta"] = None
+        execucao["peer_preparado"] = False
+        execucao["peer_pronto"] = False
+        if execucao["estado"] in (
+            "preparando",
+            "aguardando",
+            "executando",
+            "parando",
+        ):
+            execucao["estado"] = "erro"
+            execucao["erro"] = motivo
+            execucao["parar_solicitado"] = True
 
     # ----------------------------------------------------------------- envio
     def _enviar(self, mensagem: dict[str, Any]) -> None:
@@ -279,6 +385,107 @@ class ClienteHub:
                 "proprio": True,
             })
 
+    def _exigir_conexao_ativa(self) -> None:
+        with self._lock:
+            if self.estado != "conectado":
+                raise ValueError(
+                    "Conecte-se a outro participante antes de executar."
+                )
+
+    def anunciar_execucao(
+        self,
+        programa: str,
+        papel: str,
+        canais: list[dict[str, str]],
+        *,
+        host: str = "",
+        porta: int | None = None,
+        modo: str = "",
+    ) -> None:
+        """Envia o contexto local de execução para o parceiro via hub."""
+        self._exigir_conexao_ativa()
+        contexto = normalizar_contexto_execucao({
+            "programa": programa,
+            "papel": papel,
+            "canais": canais,
+            "host": host,
+            "porta": porta,
+            "modo": modo,
+        })
+        with self._lock:
+            self.execucao.update({
+                "estado": "preparando",
+                "programa": contexto["programa"],
+                "papel": contexto["papel"],
+                "modo": contexto["modo"],
+                "host": contexto["host"],
+                "porta": contexto["porta"],
+                "preparado": False,
+                "pronto": False,
+                "erro": "",
+                "motivo_parar": "",
+                "parar_solicitado": False,
+                "exit_code": None,
+            })
+        self._enviar({"type": "exec_contexto", "contexto": contexto})
+
+    def marcar_execucao_preparada(self) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["preparado"] = True
+            self.execucao["estado"] = "aguardando"
+        self._enviar({"type": "exec_preparado"})
+
+    def marcar_execucao_pronta(
+        self,
+        *,
+        host: str = "",
+        porta: int | None = None,
+    ) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["pronto"] = True
+            self.execucao["estado"] = "executando"
+            if host:
+                self.execucao["host"] = host
+            if porta is not None:
+                self.execucao["porta"] = porta
+        self._enviar({
+            "type": "exec_pronto",
+            "host": host,
+            "porta": porta,
+        })
+
+    def informar_execucao_fim(self, exit_code: int | None) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["exit_code"] = exit_code
+            self.execucao["estado"] = "concluido"
+        self._enviar({"type": "exec_fim", "exit_code": exit_code})
+
+    def informar_execucao_erro(self, mensagem: str) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["erro"] = mensagem
+            self.execucao["estado"] = "erro"
+        self._enviar({"type": "exec_erro", "mensagem": mensagem})
+
+    def parar_execucao(self, motivo: str = "") -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["parar_solicitado"] = True
+            if self.execucao["estado"] in (
+                "preparando",
+                "aguardando",
+                "executando",
+            ):
+                self.execucao["estado"] = "parando"
+        self._enviar({"type": "exec_parar", "motivo": motivo})
+
+    def resetar_execucao(self) -> None:
+        with self._lock:
+            self.execucao = _execucao_inicial()
+
     def desconectar(self) -> None:
         self._enviar({"type": "desconectar"})
 
@@ -300,6 +507,7 @@ class ClienteHub:
                 "solicitacao": self.solicitacao,
                 "aguardando": self.aguardando,
                 "chat": list(self.historico_chat),
+                "execucao": copy.deepcopy(self.execucao),
                 "ultimo_erro": self.ultimo_erro,
             }
 

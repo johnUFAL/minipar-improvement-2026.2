@@ -85,7 +85,7 @@ def rodar_teste(test_path: str, permitir_hub: bool = True) -> None:
             return
         resposta = input("  Abrir o hub de conexao agora? (s/n): ").strip().lower()
         if resposta in ("s", "sim", "y", "yes"):
-            executar_menu_conexao(spec)
+            executar_menu_conexao(spec, test_path)
         else:
             print("  Voce pode abrir depois pelo menu principal: opcao 3 - Conexao (Hub).")
         return
