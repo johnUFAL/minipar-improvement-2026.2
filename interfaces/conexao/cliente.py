@@ -253,6 +253,7 @@ class ClienteHub:
                 self.convite_enviado = mensagem
                 self.convite_resultado = None
             elif tipo == "exec_convite_aceito":
+                self.execucao = _execucao_inicial()
                 self.convite_enviado = None
                 self.convite_resultado = {
                     "resultado": "aceito",
@@ -268,6 +269,7 @@ class ClienteHub:
                     "parceiro": mensagem.get("peer"),
                 }
             elif tipo == "exec_convite_confirmado":
+                self.execucao = _execucao_inicial()
                 self.convites = [
                     c for c in self.convites
                     if c.get("convite_id") != mensagem.get("convite_id")

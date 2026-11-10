@@ -31,6 +31,8 @@
         let inicioMs = 0;
         let consoleKey = "";
         let aviso = "";
+        let ultimoConvite = null;
+        let conviteEm = 0;
 
         function editor() {
             return window.MiniparEditor || null;
@@ -110,6 +112,7 @@
             try {
                 const data = await lib.post("/api/conexao/execucao/convidar", { filename: arquivo });
                 fase = "convidando";
+                conviteEm = Date.now();
                 mostrar(true);
                 const n = (data.convite_enviado || {}).destinatarios;
                 definirStatus(
@@ -309,12 +312,17 @@
         }
 
         lib.subscribe(state => {
-            if (state.execucao_multi && !["preparando", "executando"].includes(fase)) {
-                comecar(state.execucao_multi);
+            const novo = state.execucao_multi;
+            if (novo && novo.convite_id !== ultimoConvite) {
+                // Um convite novo sempre substitui a execução anterior, mesmo
+                // que ela tenha ficado pendurada (parceiro que saiu, erro, etc.).
+                ultimoConvite = novo.convite_id;
+                comecar(novo);
                 return;
             }
             if (fase === "convidando") {
-                if (!state.convite_enviado && !state.execucao_multi) {
+                // O estado pode chegar antes de o hub confirmar o envio do convite.
+                if (!state.convite_enviado && !state.execucao_multi && Date.now() - conviteEm > 3000) {
                     fase = "encerrado";
                     definirStatus(resultadoConvite(state), "erro");
                     botoes();

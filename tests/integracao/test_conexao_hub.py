@@ -563,3 +563,49 @@ def test_convite_some_quando_o_iniciador_sai(
     _aguardar(lambda: bob.snapshot()["convites"])
     alice.fechar()
     _aguardar(lambda: bob.snapshot()["convites"] == [])
+
+
+def test_segunda_execucao_com_papeis_trocados_nao_herda_estado_da_primeira(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    _parear(alice, bob)
+
+    def contexto(papel: str, modo: str) -> dict[str, Any]:
+        return {
+            "programa": "x.mp",
+            "papel": papel,
+            "canais": [{"nome": "d", "conecta": "computador_1", "escuta": "computador_2"}],
+            "modo": modo,
+        }
+
+    # 1ª execução: Alice cliente, Bob servidor; Alice manda parar.
+    alice.convidar_execucao(CONVITE)
+    convite = _aguardar(lambda: bob.snapshot()["convites"])[0]
+    bob.responder_convite(convite["convite_id"], True)
+    _aguardar(lambda: alice.snapshot()["execucao_multi"])
+    alice.anunciar_execucao("x.mp", "computador_1", contexto("computador_1", "conecta")["canais"], modo="conecta")
+    bob.anunciar_execucao("x.mp", "computador_2", contexto("computador_2", "escuta")["canais"], modo="escuta")
+    alice.parar_execucao("fim")
+    _aguardar(lambda: bob.snapshot()["execucao"]["parar_solicitado"])
+
+    # 2ª execução, agora Bob inicia (papéis trocados): nada de erro/parada herdados.
+    alice.limpar_execucao_multi()
+    bob.limpar_execucao_multi()
+    bob.convidar_execucao(CONVITE)
+    convite = _aguardar(lambda: alice.snapshot()["convites"])[0]
+    alice.responder_convite(convite["convite_id"], True)
+    _aguardar(lambda: bob.snapshot()["execucao_multi"])
+    _aguardar(lambda: alice.snapshot()["execucao_multi"])
+    for cliente in (alice, bob):
+        execucao = cliente.snapshot()["execucao"]
+        assert execucao["parar_solicitado"] is False
+        assert execucao["estado"] == "ocioso"
+
+    bob.anunciar_execucao("x.mp", "computador_1", contexto("computador_1", "conecta")["canais"], modo="conecta")
+    alice.anunciar_execucao("x.mp", "computador_2", contexto("computador_2", "escuta")["canais"], modo="escuta")
+    time.sleep(0.4)
+    for cliente in (alice, bob):
+        assert cliente.snapshot()["execucao"]["estado"] != "erro"

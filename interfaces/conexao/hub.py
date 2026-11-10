@@ -906,6 +906,10 @@ class ServidorHub:
         outros = convite.alvos - {conexao.peer_id}
         if not ja_conectados:
             self._conectar_par(iniciador, conexao)
+        # Nova execução: o contexto da anterior (papel/canais) não pode ser
+        # comparado com o do novo programa, senão a validação acusa erro falso.
+        iniciador.execucao = None
+        conexao.execucao = None
         self._enviar(
             iniciador,
             {
