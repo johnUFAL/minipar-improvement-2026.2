@@ -202,6 +202,8 @@ específico por programa:
 - **T5–T7:** saída completa exata após normalização. No T5, o golden test
   também confere as 12 recomendações na ordem e os acentos/UTF-8
   (`Máquina de lavar`, `Não-ficção`, `Ficção científica`).
+- **T6:** saída exata para a entrada do PDF; testes de stdin cobrem `1 a 3`
+  (reentrada com `dividir`/`eh_inteiro`), entrada vazia e vetor de 1 elemento.
 - **T1:** valida troca cliente/servidor, resultado aritmético e erro de
   divisão por zero; a ordem de linhas de processos distintos não é comparada.
 
@@ -226,6 +228,55 @@ Speedup Python/C++: **15,62×**.
 
 Resultado detalhado em `docs/relatorio/resultados/t04_tempo.json`.
 
+### 5.3 TAC do T7 — PDF × gerado
+
+O T7 é o único teste com TAC publicado no PDF. A comparação é por
+**equivalência de execução** (decisão da #17), não por texto idêntico: tanto o
+TAC gerado quanto o binário produzem `Array ordenado: [5, 12, 33, 61, 98]`.
+
+O gerador usa rótulos genéricos e temporários tipados; o PDF usa nomes
+semânticos e `if ... goto`. Mapa dos pontos equivalentes:
+
+| PDF | Gerado | Observação |
+|---|---|---|
+| `LOOP` | `WHILE_0` | laço externo da pilha |
+| `PARTITION_LOOP` | `WHILE_3` | laço interno de partição |
+| `SWAP` | bloco inline no `if` de troca | a troca virou código no `ENDIF_5` |
+| `PARTITION_END` | após `ENDWHILE_4` | fim da partição |
+| `END` | `ENDWHILE_1` | pilha vazia |
+| `S[...]` | `stack[...]` | pilha explícita |
+| `A[...]` | `arr[...]` | array de entrada |
+| `if ... goto` | `ifFalse ... goto` | lowering do gerador |
+
+O TAC de referência do PDF está em
+`tests/integracao/expected_results/t07_quicksort_iterativo_tac.expected.tac`
+e é conferido por `tests/programas/test_t07.py` apenas quanto aos rótulos
+estruturais (`LOOP`, `PARTITION_LOOP`, `PARTITION_END`, `END`).
+
+### 5.4 Integração por fronteira
+
+A suíte `tests/integracao/test_pipeline_boundaries.py` cobre cada fronteira com
+um caso positivo e um negativo:
+
+| Fronteira | Positivo | Negativo |
+|---|---|---|
+| Léxico → Parser | fonte válida gera tokens/AST | `01_caractere_invalido.mp` |
+| Parser → Semântico | AST válida passa | `04_variavel_nao_declarada.mp` |
+| Semântico → TAC | análise OK gera TAC | `05_tipo_incompativel.mp` (para antes do TAC) |
+| TAC → C++ | TAC válido gera C++ | instrução TAC desconhecida → `ValueError` |
+| C++ → GCC | compila e executa | C++ inválido → `compile` falso |
+
+A matriz de aceitação percorre T2–T7 por léxico → parser → semântico → TAC →
+C++; o GCC e a execução continuam nos testes de aceitação
+(`test_programas.py` e `test_t0*.py`). T1, multi-terminal, é coberto por
+`test_t01.py` e `test_multiterminal_t1.py`.
+
+`tests/programas/invalidos/` tem **13** programas, cobrindo erros léxico,
+sintático, semântico e de concorrência, cada um com a mensagem esperada em
+`test_invalid_programs.py`.
+
+O CI publica `coverage.xml` como artefato e mantém o limite de 80%.
+
 ## 6. T8–T10 — fork/join em núcleos
 
 - **T8:** 160 atividades em 4 núcleos; imprime benchmark e speedup.
@@ -235,6 +286,40 @@ Resultado detalhado em `docs/relatorio/resultados/t04_tempo.json`.
 O runner não compara tempos exatos (variam por máquina); valida os marcos de
 saída: total de atividades, cabeçalho do benchmark, número de núcleos e presença
 dos fractais.
+
+### 6.1 Medições T8–T10
+
+As avaliações usam `random_seed(t)` por atividade. Assim o modo sequencial e o
+paralelo executam exatamente o mesmo trabalho, e a soma dos quatro checksums
+paralelos confere com o checksum sequencial. O T10 inclui o Sierpinski ASCII
+nos dois modos (no paralelo, no núcleo 6).
+
+Ambiente: Windows, Python 3.11.15, **14 CPUs lógicas** (núcleos físicos não
+detectados sem `psutil`). MiniPar compilado com `-O2`, 5 amostras (mediana).
+Linha de base Python com 1 amostra.
+
+| Teste | Seq (s) | Par (s) | Speedup | Núcleos |
+|---|---|---|---|---|
+| T8 | 0,41 | 0,13 | **3,15×** | 4 |
+| T9 | 0,40 | 0,13 | **3,08×** | 5 |
+| T10 | 0,40 | 0,13 | **3,08×** | 6 |
+
+Linha de base Python:
+
+| Teste | Seq (s) | Par (s) | Speedup |
+|---|---|---|---|
+| T8 | 0,56 | 0,50 | 1,12× |
+| T9 | 0,62 | 0,52 | 1,19× |
+| T10 | 0,69 | 0,53 | 1,29× |
+
+O T8 atinge o critério de **> 2,5×**. A linha de base Python fica perto de
+1,1–1,3× por causa do custo de *spawn* do `multiprocessing` no Windows e da
+carga de trabalho curta. No T10 original o Sierpinski usa Turtle/Tk e não roda
+headless; a linha de base desativa essa etapa e o relatório registra a
+diferença.
+
+Script: `scripts/benchmark_t08_t10.py`. Dados brutos:
+`docs/relatorio/resultados/t08_t10_tempo.json`.
 
 ---
 

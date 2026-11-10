@@ -21,6 +21,8 @@ _BUILTIN_CALLS: dict[str, str] = {
     "len": "__minipar_len",
     "format_float": "__minipar_format_float",
     "parse_ints": "__parse_ints",
+    "dividir": "__minipar_dividir",
+    "eh_inteiro": "__minipar_eh_inteiro",
     "range": "__minipar_range",
     "sum": "__minipar_sum",
     "max": "__minipar_max",
@@ -35,6 +37,7 @@ _BUILTIN_CALLS: dict[str, str] = {
     "write_file": "__minipar_write_file",
     "matrix": "__make_matrix",
     "random": "random_val",
+    "random_seed": "__minipar_random_seed",
     "clock": "agora",
     "argumento": "__minipar_argumento",
     "inf": "__minipar_inf",
@@ -217,6 +220,8 @@ class CppCodeGenerator:
         text = re.sub(r"\blen\(", "__minipar_len(", text)
         text = re.sub(r"\bto_number\(", "__minipar_to_float(", text)
         text = re.sub(r"\bparse_ints\(", "__parse_ints(", text)
+        text = re.sub(r"\bdividir\(", "__minipar_dividir(", text)
+        text = re.sub(r"\beh_inteiro\(", "__minipar_eh_inteiro(", text)
         text = re.sub(r"\bsum\(", "__minipar_sum(", text)
         text = re.sub(r"\bmax\(", "__minipar_max(", text)
         text = re.sub(r"\brange\(", "__minipar_range(", text)

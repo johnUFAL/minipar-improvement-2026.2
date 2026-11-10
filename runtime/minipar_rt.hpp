@@ -178,17 +178,16 @@ inline void minipar_init_console() {
 }
 
 inline std::uint32_t& __minipar_random_state() {
-    static std::uint32_t state = 123456789u;
+    thread_local std::uint32_t state = 123456789u;
     return state;
 }
 
-inline std::mutex& __minipar_random_mutex() {
-    static std::mutex mutex;
-    return mutex;
+inline void __minipar_random_seed(std::int64_t seed) {
+    __minipar_random_state() =
+        static_cast<std::uint32_t>(seed) & 0x7fffffffu;
 }
 
 inline double random_val() {
-    std::lock_guard<std::mutex> lock(__minipar_random_mutex());
     auto& state = __minipar_random_state();
     state = (state * 1103515245u + 12345u) & 0x7fffffffu;
     return static_cast<double>(state) / 2147483647.0;

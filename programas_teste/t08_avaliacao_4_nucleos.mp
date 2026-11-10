@@ -4,7 +4,8 @@
 # 160 atividades (40 alunos x 4 atividades) sao corrigidas por 4 avaliadores,
 # cada um fixado em um nucleo de CPU diferente via fork ... em core(n).
 
-func avaliar_atividade(tarefa: string, avaliador: string) {
+func avaliar_atividade(tarefa: string, avaliador: string, semente: int) {
+    random_seed(semente);
     var tempo_correcao = random_uniforme(0.05, 0.15);
     var iteracoes = int(tempo_correcao * 20000000.0);
     var soma = 0.0;
@@ -24,7 +25,7 @@ func trabalhador(avaliador: string, inicio: int, quantidade: int) {
         var aluno = t / 4 + 1;
         var atividade = t % 4 + 1;
         var tarefa = "Aluno " + str(aluno) + " - Atividade " + str(atividade);
-        total = total + avaliar_atividade(tarefa, avaliador);
+        total = total + avaliar_atividade(tarefa, avaliador, t);
         k = k + 1;
     }
     print("[" + avaliador + "] Concluiu " + str(quantidade) + " atividades (checksum " + format_float(total, 2) + ")");

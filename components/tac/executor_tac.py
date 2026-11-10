@@ -165,6 +165,11 @@ class TACExecutor:
                 except ValueError as error:
                     raise ValueError(f"Valor numerico TAC invalido: {value}") from error
                 return int(number) if re.fullmatch(r"[+-]?\d+", value) else number
+            if node.func.id == "dividir" and len(arguments) == 1:
+                return str(arguments[0]).split()
+            if node.func.id == "eh_inteiro" and len(arguments) == 1:
+                value = str(arguments[0]).strip()
+                return bool(re.fullmatch(r"[+-]?\d+", value))
             if node.func.id == "c_channel" and len(arguments) == 2:
                 key = tuple(arguments)
                 return channels.setdefault(key, _Channel())
@@ -444,6 +449,34 @@ class TACExecutor:
                     value = float(arguments[0])
                     precision = int(arguments[1])
                     variables[destination] = f"{value:.{precision}f}"
+                    return True
+                if function_name == "len":
+                    if count_text != "1":
+                        raise ValueError("Funcao len TAC espera 1 argumento")
+                    arguments = context.pending_parameters[-1:]
+                    del context.pending_parameters[-1:]
+                    variables[destination] = len(arguments[0])
+                    return True
+                if function_name == "dividir":
+                    if count_text != "1":
+                        raise ValueError(
+                            "Funcao dividir TAC espera 1 argumento"
+                        )
+                    arguments = context.pending_parameters[-1:]
+                    del context.pending_parameters[-1:]
+                    variables[destination] = str(arguments[0]).split()
+                    return True
+                if function_name == "eh_inteiro":
+                    if count_text != "1":
+                        raise ValueError(
+                            "Funcao eh_inteiro TAC espera 1 argumento"
+                        )
+                    arguments = context.pending_parameters[-1:]
+                    del context.pending_parameters[-1:]
+                    value = str(arguments[0]).strip()
+                    variables[destination] = bool(
+                        re.fullmatch(r"[+-]?\d+", value)
+                    )
                     return True
                 context.variables = self._call_function(
                     function_name,

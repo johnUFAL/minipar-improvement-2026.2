@@ -1,0 +1,2 @@
+SEQ
+    print(exp("texto"))

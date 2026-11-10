@@ -5,7 +5,8 @@
 # Nucleo 5: Mandelbrot ASCII.
 # Nucleo 6: Tapete de Sierpinski ASCII (substitui o Turtle do original).
 
-func avaliar_atividade(tarefa: string, avaliador: string) {
+func avaliar_atividade(tarefa: string, avaliador: string, semente: int) {
+    random_seed(semente);
     var tempo_correcao = random_uniforme(0.05, 0.15);
     var iteracoes = int(tempo_correcao * 20000000.0);
     var soma = 0.0;
@@ -25,7 +26,7 @@ func trabalhador_avaliacao(avaliador: string, inicio: int, quantidade: int) {
         var aluno = t / 4 + 1;
         var atividade = t % 4 + 1;
         var tarefa = "Aluno " + str(aluno) + " - Atividade " + str(atividade);
-        total = total + avaliar_atividade(tarefa, avaliador);
+        total = total + avaliar_atividade(tarefa, avaliador, t);
         k = k + 1;
     }
     print("[" + avaliador + "] Concluiu " + str(quantidade) + " atividades (checksum " + format_float(total, 2) + ")");

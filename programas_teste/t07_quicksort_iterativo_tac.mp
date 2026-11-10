@@ -1,6 +1,10 @@
 func quicksort_iterativo(arr) {
-    var stack = [0, 4, 0, 0, 0, 0];
-    var sp = 2;
+    var stack = [0, 0, 0, 0, 0, 0];
+    var sp = 0;
+    stack[sp] = 0;
+    sp = sp + 1;
+    stack[sp] = len(arr) - 1;
+    sp = sp + 1;
     while (sp > 0) {
         sp = sp - 1;
         var fim = stack[sp];
