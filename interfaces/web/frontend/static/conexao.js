@@ -4,15 +4,21 @@
     const CLIENT_KEY = "minipar-conexao-client";
     const CLIENT_NAME_KEY = "minipar-conexao-nome";
     const CONEXAO_HANDOFF_KEY = "minipar-conexao-handoff";
+    const SERVER_KEY = "minipar-conexao-servers";
     const POLL_INTERVAL = 1000;
 
     const elements = {
         host: document.getElementById("connection-host"),
         port: document.getElementById("connection-port"),
         name: document.getElementById("connection-name"),
+        hubHost: document.getElementById("connection-hub-host"),
         startHub: document.getElementById("connection-start-hub"),
+        stopHub: document.getElementById("connection-stop-hub"),
         connect: document.getElementById("connection-connect"),
         disconnect: document.getElementById("connection-disconnect"),
+        serverList: document.getElementById("connection-server-list"),
+        serverRefresh: document.getElementById("connection-server-refresh"),
+        serverDiscover: document.getElementById("connection-server-discover"),
         roomName: document.getElementById("connection-room-name"),
         roomPassword: document.getElementById("connection-room-password"),
         createRoom: document.getElementById("connection-create-room"),
@@ -79,6 +85,8 @@
     let execStarting = false;
     let execStopRequested = false;
     let freeSuggestedPort = "";
+    let hubAtivo = false;
+    let serverSignature = "";
 
     function readConexaoHandoff() {
         try {
@@ -90,6 +98,126 @@
     }
 
     executionHandoff = readConexaoHandoff();
+
+    function readServers() {
+        try {
+            const raw = localStorage.getItem(SERVER_KEY);
+            const lista = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(lista)) return [];
+            return lista.filter(item => (
+                item
+                && typeof item.host === "string"
+                && item.host.trim()
+                && Number.isInteger(Number(item.porta))
+                && Number(item.porta) >= 1
+                && Number(item.porta) <= 65535
+            )).slice(0, 20);
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function saveServers(lista) {
+        try {
+            localStorage.setItem(SERVER_KEY, JSON.stringify(lista.slice(0, 20)));
+        } catch (error) {
+            // O armazenamento local pode estar indisponível em modo privado.
+        }
+    }
+
+    function serverId(host, porta) {
+        return `${String(host || "").trim()}:${Number(porta) || 0}`;
+    }
+
+    function rememberServer(host, porta, nome = "") {
+        const endereco = String(host || "").trim();
+        const numero = Number(porta);
+        if (!endereco || !Number.isInteger(numero) || numero < 1 || numero > 65535) return;
+        const lista = readServers().filter(
+            item => serverId(item.host, item.porta) !== serverId(endereco, numero)
+        );
+        lista.unshift({
+            host: endereco,
+            porta: numero,
+            nome: String(nome || "").trim(),
+        });
+        saveServers(lista);
+    }
+
+    function forgetServer(host, porta) {
+        const alvo = serverId(host, porta);
+        saveServers(readServers().filter(
+            item => serverId(item.host, item.porta) !== alvo
+        ));
+    }
+
+    function renderServers(hubs) {
+        if (!elements.serverList) return;
+        const lista = Array.isArray(hubs) ? hubs : [];
+        const assinatura = JSON.stringify(lista);
+        if (assinatura === serverSignature) return;
+        serverSignature = assinatura;
+        if (!lista.length) {
+            elements.serverList.innerHTML =
+                '<li class="connection-empty">Nenhum servidor salvo. Inicie um hub local ou conecte a um endereço.</li>';
+            return;
+        }
+        elements.serverList.innerHTML = lista.map(item => {
+            const host = escapeHtml(item.host || "");
+            const porta = Number(item.porta) || 0;
+            const nome = escapeHtml(item.nome || item.host || "Servidor");
+            const ativo = Boolean(item.ativo);
+            const local = item.local ? " · local" : "";
+            return `<li class="connection-server ${ativo ? "connection-server-online" : "connection-server-offline"}">
+                <button type="button" class="connection-server-pick" data-host="${host}" data-port="${porta}" title="Usar este servidor">
+                    <span class="connection-server-name">${nome}</span>
+                    <small>${host}:${porta}${local} · ${ativo ? "disponível" : "sem resposta"}</small>
+                </button>
+                <button type="button" class="connection-server-remove" data-host="${host}" data-port="${porta}" title="Remover servidor">×</button>
+            </li>`;
+        }).join("");
+    }
+
+    async function refreshServers(descobrir = false) {
+        if (!elements.serverList) return;
+        const salvos = readServers();
+        try {
+            const data = await requestJson("/api/conexao/hubs", { hubs: salvos, descobrir });
+            const hubs = data.hubs || [];
+            hubs.filter(item => item.descoberto).forEach(item => {
+                rememberServer(item.host, item.porta, item.nome);
+            });
+            renderServers(hubs);
+        } catch (error) {
+            renderServers(salvos.map(item => ({ ...item, ativo: false, local: false })));
+        }
+    }
+
+    function updateHubButtons() {
+        if (elements.stopHub) elements.stopHub.hidden = !hubAtivo;
+    }
+
+    async function loadNetwork() {
+        try {
+            const response = await fetch("/api/conexao/rede");
+            if (!response.ok) return;
+            const rede = await response.json();
+            const ips = Array.isArray(rede.ips_locais) ? rede.ips_locais : [];
+            if (elements.hubHost) {
+                const atual = elements.hubHost.value;
+                const opcoes = ["0.0.0.0", ...ips.filter(ip => ip !== "0.0.0.0")];
+                elements.hubHost.innerHTML = opcoes.map(ip => (
+                    `<option value="${escapeHtml(ip)}">${ip === "0.0.0.0" ? "Todos os endereços (0.0.0.0)" : escapeHtml(ip)}</option>`
+                )).join("");
+                elements.hubHost.value = opcoes.includes(atual) ? atual : "0.0.0.0";
+            }
+            hubAtivo = Boolean(rede.hub_ativo);
+            updateHubButtons();
+            await refreshServers();
+        } catch (error) {
+            renderServers([]);
+        }
+    }
 
     function escapeHtml(value) {
         return String(value ?? "").replace(/[&<>"']/g, character => ({
@@ -487,15 +615,68 @@
 
     // ------------------------------------------------------------- ações
     elements.startHub.addEventListener("click", async () => {
+        const host = (elements.hubHost.value || "0.0.0.0").trim() || "0.0.0.0";
         const porta = Number(elements.port.value) || 5010;
         try {
-            const data = await requestJson("/api/conexao/hub/iniciar", { porta });
+            const data = await requestJson("/api/conexao/hub/iniciar", { host, porta });
             elements.port.value = data.porta;
-            elements.host.value = "127.0.0.1";
-            log(`Hub local ativo na porta ${data.porta}.`, "ok");
+            if (!elements.host.value || elements.host.value === "0.0.0.0") {
+                elements.host.value = data.host === "0.0.0.0" ? "127.0.0.1" : data.host;
+            }
+            hubAtivo = true;
+            updateHubButtons();
+            rememberServer("127.0.0.1", data.porta, "Hub local");
+            (data.enderecos || []).forEach(endereco => {
+                rememberServer(endereco, data.porta, "Hub local");
+            });
+            await refreshServers();
+            const enderecos = (data.enderecos || []).join(", ");
+            log(
+                `Hub local ativo em ${data.host}:${data.porta}` +
+                (enderecos ? ` — endereços: ${enderecos}` : "") + ".",
+                "ok",
+            );
         } catch (error) {
             log(error.message, "error");
         }
+    });
+
+    elements.stopHub.addEventListener("click", async () => {
+        try {
+            await requestJson("/api/conexao/hub/parar", {});
+            hubAtivo = false;
+            updateHubButtons();
+            await refreshServers();
+            log("Hub local parado.", "ok");
+        } catch (error) {
+            log(error.message, "error");
+        }
+    });
+
+    elements.serverRefresh.addEventListener("click", async () => {
+        await refreshServers();
+        log("Lista de servidores atualizada.");
+    });
+
+    elements.serverDiscover.addEventListener("click", async () => {
+        log("Procurando hubs MiniPar na rede local...");
+        await refreshServers(true);
+        log("Busca na rede concluída.", "ok");
+    });
+
+    elements.serverList.addEventListener("click", async event => {
+        const remover = event.target.closest("[data-host][data-port].connection-server-remove");
+        if (remover) {
+            forgetServer(remover.getAttribute("data-host"), remover.getAttribute("data-port"));
+            serverSignature = "";
+            await refreshServers();
+            return;
+        }
+        const escolher = event.target.closest("[data-host][data-port].connection-server-pick");
+        if (!escolher) return;
+        elements.host.value = escolher.getAttribute("data-host") || "";
+        elements.port.value = escolher.getAttribute("data-port") || "";
+        log(`Servidor selecionado: ${elements.host.value}:${elements.port.value}.`);
     });
 
     elements.connect.addEventListener("click", async () => {
@@ -512,7 +693,11 @@
             { host, porta, nome },
             `Conectado ao hub ${host}:${porta}.`,
         );
-        if (data) startPolling();
+        if (data) {
+            rememberServer(host, porta, host);
+            await refreshServers();
+            startPolling();
+        }
     });
 
     elements.disconnect.addEventListener("click", async () => {
@@ -685,7 +870,7 @@
     }
 
     log("Terminal de conexão pronto.");
-    loadProgramContext().then(() => {
+    Promise.all([loadNetwork(), loadProgramContext()]).then(() => {
         poll();
         startPolling();
     });

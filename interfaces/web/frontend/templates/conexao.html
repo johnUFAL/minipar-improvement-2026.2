@@ -31,7 +31,7 @@
                 <fieldset class="connection-fieldset">
                     <legend>1. Entrar no hub</legend>
                     <div class="connection-row">
-                        <label for="connection-host">Endereço</label>
+                        <label for="connection-host">Endereço do hub</label>
                         <input id="connection-host" class="connection-input" value="127.0.0.1" autocomplete="off">
                         <label for="connection-port">Porta</label>
                         <input id="connection-port" class="connection-input" type="number" min="1" max="65535" value="5010">
@@ -40,10 +40,27 @@
                         <label for="connection-name">Seu nome</label>
                         <input id="connection-name" class="connection-input" placeholder="Ex.: PC-do-Daniel" autocomplete="off">
                     </div>
+                    <div class="connection-row">
+                        <label for="connection-hub-host">Ouvir em</label>
+                        <select id="connection-hub-host" class="connection-input"></select>
+                    </div>
                     <div class="connection-actions">
                         <button id="connection-start-hub" class="button button-outline" type="button">Iniciar hub local</button>
+                        <button id="connection-stop-hub" class="button button-outline" type="button" hidden>Parar hub local</button>
                         <button id="connection-connect" class="button button-primary" type="button">Conectar ao hub</button>
                         <button id="connection-disconnect" class="button button-outline" type="button" hidden>Desligar do hub</button>
+                    </div>
+                    <div class="connection-server-block">
+                        <div class="connection-server-head">
+                            <span>Servidores disponíveis</span>
+                            <div class="connection-server-actions">
+                                <button id="connection-server-discover" class="button button-outline" type="button">Procurar na rede</button>
+                                <button id="connection-server-refresh" class="button button-outline" type="button">Atualizar</button>
+                            </div>
+                        </div>
+                        <ul id="connection-server-list" class="connection-server-list">
+                            <li class="connection-empty">Nenhum servidor salvo.</li>
+                        </ul>
                     </div>
                 </fieldset>
 

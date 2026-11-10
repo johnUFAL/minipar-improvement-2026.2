@@ -1,8 +1,10 @@
+import socket
 import time
 import unittest
 from collections.abc import Callable
 from typing import Any
 
+from interfaces.conexao.hub import PORTA_DESCOBERTA, ServidorHub
 from interfaces.web import api, conexao_api
 
 
@@ -69,10 +71,82 @@ class TestConexaoWeb(unittest.TestCase):
         self.assertIn('id="connection-log"', pagina)
         self.assertIn('id="connection-peers"', pagina)
         self.assertIn('id="connection-chat"', pagina)
+        self.assertIn('id="connection-hub-host"', pagina)
+        self.assertIn('id="connection-server-list"', pagina)
         self.assertIn("Conexão", pagina)
         self.assertIn("t01_calculadora.mp", pagina)
         self.assertIn("/static/conexao.js", pagina)
         self.assertEqual(self.cliente.get("/static/conexao.js").status_code, 200)
+
+    def test_hub_iniciar_aceita_endereco_de_escuta(self) -> None:
+        resposta = self._post(
+            "/api/conexao/hub/iniciar",
+            {"host": "127.0.0.1", "porta": 0},
+        )
+
+        self.assertEqual(resposta.status_code, 200, resposta.get_data(as_text=True))
+        dados = resposta.get_json()
+        self.assertTrue(dados["ativo"])
+        self.assertEqual(dados["host"], "127.0.0.1")
+        self.assertIn("127.0.0.1", dados["enderecos"])
+
+        rede = self.cliente.get("/api/conexao/rede").get_json()
+        self.assertTrue(rede["hub_ativo"])
+        self.assertEqual(rede["hub_host"], "127.0.0.1")
+        self.assertEqual(rede["hub_porta"], dados["porta"])
+        self.assertIn("ips_locais", rede)
+
+    def test_hub_iniciar_rejeita_endereco_com_porta(self) -> None:
+        resposta = self._post(
+            "/api/conexao/hub/iniciar",
+            {"host": "127.0.0.1:5010", "porta": 0},
+        )
+
+        self.assertEqual(resposta.status_code, 400)
+        self.assertFalse(resposta.get_json()["success"])
+
+    def test_hubs_disponiveis_inclui_e_testa_hub_local(self) -> None:
+        porta = self._iniciar_hub()
+
+        resposta = self._post("/api/conexao/hubs", {"hubs": []})
+
+        self.assertEqual(resposta.status_code, 200, resposta.get_data(as_text=True))
+        hubs = resposta.get_json()["hubs"]
+        self.assertTrue(any(
+            hub["ativo"] and hub["porta"] == porta and hub["local"]
+            for hub in hubs
+        ))
+
+    def test_hubs_descobre_hub_por_udp_na_rede_local(self) -> None:
+        sonda = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            sonda.bind(("", PORTA_DESCOBERTA))
+        except OSError:
+            self.skipTest("porta de descoberta indisponível")
+        finally:
+            sonda.close()
+
+        hub = ServidorHub(host="127.0.0.1", porta=0)
+        porta = hub.iniciar()
+        try:
+            time.sleep(0.05)
+            resposta = self._post(
+                "/api/conexao/hubs",
+                {"hubs": [], "descobrir": True},
+            )
+
+            self.assertEqual(
+                resposta.status_code,
+                200,
+                resposta.get_data(as_text=True),
+            )
+            hubs = resposta.get_json()["hubs"]
+            self.assertTrue(any(
+                hub["descoberto"] and hub["porta"] == porta
+                for hub in hubs
+            ))
+        finally:
+            hub.parar()
 
     def test_editor_redireciona_programas_com_canal(self) -> None:
         script = self.cliente.get("/static/script.js").get_data(as_text=True)

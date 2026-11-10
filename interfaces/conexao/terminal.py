@@ -26,7 +26,7 @@ from .execucao import (
     remover_diretorio,
     wait_for_listening,
 )
-from .hub import ServidorHub, _ip_local
+from .hub import ServidorHub, _ip_local, ips_locais
 
 
 def _separador(char: str = "=", largura: int = 55) -> None:
@@ -453,15 +453,20 @@ def executar_menu_conexao(
         if opcao == "0":
             return
         if opcao == "1":
+            host_hub = input("  Endereco para ouvir [0.0.0.0]: ").strip() or "0.0.0.0"
             porta = _ler_porta(5010)
-            hub = ServidorHub(host="0.0.0.0", porta=porta)
+            hub = ServidorHub(host=host_hub, porta=porta)
             try:
                 porta_efetiva = hub.iniciar()
             except OSError as erro:
                 print(f"  [ERRO] Nao foi possivel iniciar o hub: {erro}")
                 continue
-            print(f"\n  [OK] Hub iniciado na porta {porta_efetiva}.")
-            print(f"  Outros computadores devem usar: {_ip_local()}:{porta_efetiva}")
+            print(f"\n  [OK] Hub iniciado em {host_hub}:{porta_efetiva}.")
+            if host_hub in ("", "0.0.0.0"):
+                for endereco in ips_locais():
+                    print(f"  Outros computadores podem usar: {endereco}:{porta_efetiva}")
+            else:
+                print(f"  Outros computadores podem usar: {host_hub}:{porta_efetiva}")
             print("  Este terminal sera conectado ao hub local para participar.\n")
             try:
                 _conectar_como_cliente("127.0.0.1", porta_efetiva, source_path, spec)

@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 
 from interfaces.conexao.cliente import ClienteHub
-from interfaces.conexao.hub import ServidorHub
+from interfaces.conexao.hub import ServidorHub, ips_locais
 from interfaces.conexao.protocolo import SALA_PUBLICA
 
 
@@ -210,6 +210,14 @@ def test_chat_exige_conexao_ativa(hub: Any, criar_cliente: Any) -> None:
 
     with pytest.raises(ValueError):
         alice.chat("olá")
+
+
+def test_ips_locais_inclui_loopback_sem_duplicatas() -> None:
+    enderecos = ips_locais()
+
+    assert enderecos
+    assert "127.0.0.1" in enderecos
+    assert len(enderecos) == len(set(enderecos))
 
 
 def test_sala_privada_limita_dois_participantes_e_valida_senha(

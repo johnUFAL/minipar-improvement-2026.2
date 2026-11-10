@@ -172,13 +172,17 @@ python -m interfaces.conexao.hub --porta 5010
 
 O outro lado usa o endereço `IP:5010` mostrado pelo hub. Também é possível
 iniciar o hub pela própria GUI em **Conexão → Iniciar hub local** e liberar a
-porta TCP no firewall da máquina que hospeda o hub. As salas privadas aceitam no
-máximo dois membros; a sala pública serve para encontrar participantes.
+porta TCP no firewall da máquina que hospeda o hub. Na GUI, **Ouvir em** permite
+escolher `0.0.0.0` (todas as interfaces) ou um IP específico, e a lista
+**Servidores disponíveis** guarda e testa os hubs já usados. Use **Atualizar**
+para verificar se eles continuam acessíveis ou **Procurar na rede** para
+descobrir hubs por UDP (porta `5011`). As salas privadas aceitam no máximo dois
+membros; a sala pública serve para encontrar participantes.
 
-Depois do aceite, a execução distribuída do programa continua sendo feita pelo
-runtime de canais descrito em [docs/rede.md](docs/rede.md), com
-`scripts/run_multiterminal.py` ou com `--hosts`/`--como`. O hub cuida do
-encontro dos participantes e do chat; ele não substitui a camada de execução.
+Depois do aceite, o hub também coordena a execução automática dos dois lados
+quando o programa declara um canal com `c_channel`. A execução manual pelo
+runtime de canais continua disponível em [docs/rede.md](docs/rede.md), com
+`scripts/run_multiterminal.py` ou com `--hosts`/`--como`.
 
 Para executar os testes unitários:
 

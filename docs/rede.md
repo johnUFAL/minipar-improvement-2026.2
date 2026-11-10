@@ -6,9 +6,9 @@
 > operações, divisão por zero e operação inválida. O procedimento manual está em
 > `programas_teste/t01_multiterminal/README.md`.
 > O menu interativo oferece o hub de conexão (opção **3**), que pareia os dois
-> participantes e, na GUI, mantém o chat. A execução dos dois processos continua
-> sendo feita pelo runner scriptado ou por `--hosts`/`--como`: o hub encontra e
-> conecta as sessões, mas não substitui o runtime de canais.
+> participantes. Na GUI, o chat e a execução automática (quando o programa usa
+> um canal declarativo) ficam disponíveis depois do aceite. Também é possível
+> executar manualmente pelo runner scriptado ou por `--hosts`/`--como`.
 
 ## Hub de conexao
 
@@ -22,6 +22,32 @@ abra o item **Conexao** na barra lateral, inicie o hub local ou informe o
 endereço de um hub existente, crie/entre em uma sala, selecione o participante
 e aguarde o aceite. O chat da GUI só é habilitado depois do aceite dos dois
 lados.
+
+### Endereço de escuta e servidores disponíveis
+
+Na GUI, o campo **Ouvir em** define em qual interface o hub local aceita
+conexões:
+
+- `0.0.0.0` escuta em todas as interfaces (recomendado quando a máquina tem
+  Wi-Fi, Ethernet ou VPN e você não sabe qual será usada);
+- um IP específico limita o hub àquela interface.
+
+Depois de iniciar, a lista **Servidores disponíveis** mostra o hub local e os
+endereços já usados/salvos neste navegador, com indicação de disponibilidade.
+Clique em um servidor para preencher **Endereço do hub** e **Porta**, ou use
+**Atualizar** para testar novamente os servidores salvos. O botão **Procurar na
+rede** envia uma descoberta UDP e adiciona hubs MiniPar encontrados na mesma
+rede. O campo **Endereço do hub** é o endereço remoto usado para conectar; ele
+não altera o endereço de escuta do hub local.
+
+Para a descoberta automática funcionar, libere também a porta UDP `5011` no
+firewall da máquina que hospeda o hub. Se a rede bloquear broadcast, informe o
+endereço manualmente e use **Atualizar** para testar.
+
+Se outro computador não conseguir conectar, confira se o hub está escutando em
+`0.0.0.0` (ou no IP correto), se a porta TCP está liberada no firewall e se o
+endereço informado pertence à mesma rede. Evite usar endereços de VPN ou
+adaptadores virtuais quando os dois computadores estiverem na LAN.
 
 Inicie o hub em uma das máquinas:
 

@@ -601,6 +601,21 @@ body.light-theme .pagination-page.active{border-color:#728ddc;background:var(--p
 .connection-input{min-width:0;flex:1 1 140px;padding:8px 10px;border:1px solid var(--border);border-radius:4px;background:#111c2c;color:var(--text);font:12px var(--mono)}
 .connection-input:disabled{opacity:.55;cursor:not-allowed}
 .connection-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.connection-server-block{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.connection-server-head{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--muted);font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase}
+.connection-server-actions{display:flex;gap:6px}
+.connection-server-head .button{padding:5px 9px;font-size:10px;text-transform:none;letter-spacing:0}
+.connection-server-list{display:grid;gap:6px;max-height:170px;margin:8px 0 0;padding:0;overflow:auto;list-style:none}
+.connection-server{display:flex;align-items:stretch;gap:6px}
+.connection-server-pick{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-left:3px solid var(--border);border-radius:5px;background:var(--card-2);color:var(--text);text-align:left;cursor:pointer}
+.connection-server-pick:hover{border-color:var(--primary-light)}
+.connection-server-name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.connection-server-pick small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;color:var(--muted);font:10px var(--mono)}
+.connection-server-online .connection-server-pick{border-left-color:var(--success)}
+.connection-server-offline .connection-server-pick{border-left-color:var(--danger)}
+.connection-server-remove{width:30px;border:1px solid var(--border);border-radius:5px;background:transparent;color:var(--muted);font-size:16px;line-height:1;cursor:pointer}
+.connection-server-remove:hover{border-color:var(--danger);color:var(--danger)}
+body.light-theme .connection-server-pick{background:#f8fafc}
 .connection-console{min-height:190px;max-height:320px;margin:0;padding:12px 14px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:#0d1625;color:#b9c7de;font:11px/1.6 var(--mono);white-space:pre-wrap;word-break:break-word}
 .connection-log-line{display:block}
 .connection-log-ok{color:var(--success)}

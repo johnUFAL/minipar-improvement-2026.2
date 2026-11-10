@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import socket
 import threading
 import time
@@ -28,6 +29,9 @@ from .protocolo import (
     normalizar_nome,
     normalizar_texto_chat,
 )
+
+PORTA_DESCOBERTA = 5011
+PEDIDO_DESCOBERTA = b"MINIPAR_HUB_DISCOVER_1"
 
 
 def _agora() -> str:
@@ -69,6 +73,8 @@ class ServidorHub:
         self._solicitacoes: dict[str, tuple[str, str]] = {}
         self._listener: socket.socket | None = None
         self._thread: threading.Thread | None = None
+        self._udp: socket.socket | None = None
+        self._udp_thread: threading.Thread | None = None
         self._ativo = threading.Event()
 
     # ------------------------------------------------------------------ ciclo
@@ -90,6 +96,7 @@ class ServidorHub:
             daemon=True,
         )
         self._thread.start()
+        self._iniciar_descoberta()
         return self.porta
 
     def parar(self) -> None:
@@ -108,6 +115,16 @@ class ServidorHub:
             self._solicitacoes.clear()
         for conexao in conexoes:
             self._fechar_conexao(conexao)
+        udp, self._udp = self._udp, None
+        if udp is not None:
+            try:
+                udp.close()
+            except OSError:
+                pass
+        udp_thread = self._udp_thread
+        self._udp_thread = None
+        if udp_thread is not None:
+            udp_thread.join(timeout=1.0)
         thread = self._thread
         self._thread = None
         if thread is not None:
@@ -131,6 +148,52 @@ class ServidorHub:
                 name="minipar-hub-peer",
                 daemon=True,
             ).start()
+
+    # -------------------------------------------------------------- descoberta
+    def _iniciar_descoberta(self) -> None:
+        udp: socket.socket | None = None
+        try:
+            udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            udp.bind(("", PORTA_DESCOBERTA))
+            udp.settimeout(0.5)
+        except OSError:
+            if udp is not None:
+                try:
+                    udp.close()
+                except OSError:
+                    pass
+            return
+        self._udp = udp
+        self._udp_thread = threading.Thread(
+            target=self._responder_descoberta,
+            name="minipar-hub-discovery",
+            daemon=True,
+        )
+        self._udp_thread.start()
+
+    def _responder_descoberta(self) -> None:
+        udp = self._udp
+        if udp is None:
+            return
+        while self._ativo.is_set():
+            try:
+                dados, endereco = udp.recvfrom(1024)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            if dados.strip() != PEDIDO_DESCOBERTA:
+                continue
+            resposta = json.dumps({
+                "type": "minipar_hub",
+                "porta": self.porta,
+                "nome": socket.gethostname(),
+            }).encode("utf-8")
+            try:
+                udp.sendto(resposta, endereco)
+            except OSError:
+                pass
 
     def _atender(
         self,
@@ -719,11 +782,106 @@ class ServidorHub:
                 return codigo
 
 
-def _ip_local() -> str:
+def ips_locais() -> list[str]:
+    """Lista os endereços IPv4 desta máquina, sem repetição.
+
+    A primeira posição é o endereço usado pela rota padrão (quando disponível),
+    seguida dos demais endereços resolvidos pelo nome da máquina. O loopback é
+    incluído no final para permitir conexões locais.
+    """
+    enderecos: list[str] = []
     try:
-        return socket.gethostbyname(socket.gethostname())
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sonda:
+            sonda.connect(("8.8.8.8", 80))
+            rota = sonda.getsockname()[0]
+        if rota:
+            enderecos.append(rota)
     except OSError:
-        return "127.0.0.1"
+        pass
+    try:
+        _, _, resolvidos = socket.gethostbyname_ex(socket.gethostname())
+    except OSError:
+        resolvidos = []
+    for endereco in resolvidos:
+        if endereco not in enderecos:
+            enderecos.append(endereco)
+    if "127.0.0.1" not in enderecos:
+        enderecos.append("127.0.0.1")
+    return enderecos or ["127.0.0.1"]
+
+
+def _ip_local() -> str:
+    return ips_locais()[0]
+
+
+def descobrir_hubs(timeout: float = 0.6) -> list[dict[str, Any]]:
+    """Procura hubs MiniPar na rede local via UDP broadcast."""
+    locais = ips_locais()
+    destinos: set[tuple[str, int]] = {
+        ("255.255.255.255", PORTA_DESCOBERTA),
+        ("127.0.0.1", PORTA_DESCOBERTA),
+    }
+    for endereco in locais:
+        if endereco == "127.0.0.1":
+            continue
+        partes = endereco.split(".")
+        if len(partes) == 4:
+            destinos.add((".".join([*partes[:3], "255"]), PORTA_DESCOBERTA))
+
+    resultados: list[dict[str, Any]] = []
+    vistos: set[tuple[str, int]] = set()
+    sock: socket.socket | None = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind(("", 0))
+        sock.settimeout(0.15)
+        for destino in destinos:
+            try:
+                sock.sendto(PEDIDO_DESCOBERTA, destino)
+            except OSError:
+                pass
+        limite = time.monotonic() + max(0.1, timeout)
+        while time.monotonic() < limite:
+            try:
+                dados, origem = sock.recvfrom(2048)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            try:
+                resposta = json.loads(dados.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(resposta, dict) or resposta.get("type") != "minipar_hub":
+                continue
+            valor_porta = resposta.get("porta")
+            if not isinstance(valor_porta, (int, str)):
+                continue
+            try:
+                porta = int(valor_porta)
+            except (TypeError, ValueError):
+                continue
+            if not 1 <= porta <= 65535:
+                continue
+            host = origem[0] if origem[0] != "0.0.0.0" else "127.0.0.1"
+            chave = (host, porta)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            nome = resposta.get("nome")
+            resultados.append({
+                "nome": nome if isinstance(nome, str) and nome else host,
+                "host": host,
+                "porta": porta,
+                "ativo": True,
+                "local": host in locais,
+                "descoberto": True,
+            })
+    finally:
+        if sock is not None:
+            sock.close()
+    return resultados
 
 
 def main() -> int:
@@ -740,7 +898,11 @@ def main() -> int:
     print("  MINIPAR — HUB DE CONEXÃO")
     print("=" * 55)
     print(f"\n  Escutando em {args.host}:{porta}")
-    print(f"  Endereço para os outros computadores: {_ip_local()}:{porta}")
+    if args.host in ("0.0.0.0", ""):
+        for endereco in ips_locais():
+            print(f"  Endereço para os outros computadores: {endereco}:{porta}")
+    else:
+        print(f"  Endereço para os outros computadores: {args.host}:{porta}")
     print("\n  Pressione Ctrl+C para encerrar.\n")
     try:
         while True:

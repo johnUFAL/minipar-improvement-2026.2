@@ -18,7 +18,7 @@ from flask import Blueprint, jsonify, render_template, request
 
 from ..conexao.cliente import ClienteHub
 from ..conexao.execucao import ExecucaoErro, free_port
-from ..conexao.hub import ServidorHub
+from ..conexao.hub import ServidorHub, descobrir_hubs, ips_locais
 from ..program_analyzer import get_program_spec
 from ..test_orchestrator import resolve_test_file
 from .conexao_execucao import ExecutorConexao
@@ -34,10 +34,7 @@ MAX_EXECUCAO_SOURCE = 1_000_000
 
 
 def _ip_local() -> str:
-    try:
-        return socket.gethostbyname(socket.gethostname())
-    except OSError:
-        return "127.0.0.1"
+    return ips_locais()[0]
 
 
 def _dados() -> dict[str, Any]:
@@ -129,6 +126,45 @@ def _erro(mensagem: str, status: int = 400) -> Any:
     return jsonify({"success": False, "error": mensagem}), status
 
 
+def _normalizar_host_hub(valor: Any) -> str:
+    if valor is None:
+        return "0.0.0.0"
+    if not isinstance(valor, str):
+        raise ValueError("Endereço de escuta inválido.")
+    host = valor.strip()
+    if not host:
+        return "0.0.0.0"
+    if "://" in host or "/" in host or ":" in host:
+        raise ValueError("Informe o endereço de escuta sem porta nem protocolo.")
+    if host.lower() == "localhost":
+        return "127.0.0.1"
+    return host
+
+
+def _enderecos_hub(host: str) -> list[str]:
+    if host in ("", "0.0.0.0"):
+        return ips_locais()
+    return [host]
+
+
+def _hub_dict(hub: ServidorHub) -> dict[str, Any]:
+    return {
+        "success": True,
+        "ativo": True,
+        "host": hub.host,
+        "porta": hub.porta,
+        "enderecos": _enderecos_hub(hub.host),
+    }
+
+
+def _probe_hub(host: str, porta: int) -> bool:
+    try:
+        with socket.create_connection((host, porta), timeout=0.35):
+            return True
+    except OSError:
+        return False
+
+
 def _executar(client_id: str | None, acao: Any) -> Any:
     try:
         if client_id is None:
@@ -155,11 +191,23 @@ def conexao_page() -> Any:
 # ------------------------------------------------------------------ hub local
 @conexao_bp.route("/api/conexao/rede", methods=["GET"])
 def rede() -> Any:
-    return jsonify({
+    enderecos = ips_locais()
+    with _hub_lock:
+        hub = _hub
+    resposta: dict[str, Any] = {
         "success": True,
-        "ip_local": _ip_local(),
+        "ip_local": enderecos[0],
+        "ips_locais": enderecos,
         "porta_livre": free_port(),
-    })
+        "hub_ativo": hub is not None,
+    }
+    if hub is not None:
+        resposta.update({
+            "hub_host": hub.host,
+            "hub_porta": hub.porta,
+            "hub_enderecos": _enderecos_hub(hub.host),
+        })
+    return jsonify(resposta)
 
 
 @conexao_bp.route("/api/conexao/hub", methods=["GET"])
@@ -167,18 +215,17 @@ def hub_status() -> Any:
     with _hub_lock:
         if _hub is None:
             return jsonify({"success": True, "ativo": False})
-        return jsonify({
-            "success": True,
-            "ativo": True,
-            "porta": _hub.porta,
-            "host": _hub.host,
-        })
+        return jsonify(_hub_dict(_hub))
 
 
 @conexao_bp.route("/api/conexao/hub/iniciar", methods=["POST"])
 def hub_iniciar() -> Any:
     global _hub
     dados = _dados()
+    try:
+        host = _normalizar_host_hub(dados.get("host"))
+    except ValueError as erro:
+        return _erro(str(erro))
     porta_bruta = dados.get("porta", 5010)
     try:
         porta = int(porta_bruta)
@@ -186,26 +233,26 @@ def hub_iniciar() -> Any:
         return _erro("Porta inválida.")
     if not 0 <= porta <= 65535:
         return _erro("Porta fora do intervalo.")
+
+    antigo: ServidorHub | None = None
     with _hub_lock:
         if _hub is not None:
-            return jsonify({
-                "success": True,
-                "ativo": True,
-                "porta": _hub.porta,
-                "host": _hub.host,
-            })
-        hub = ServidorHub(host="0.0.0.0", porta=porta)
-        try:
-            porta_efetiva = hub.iniciar()
-        except OSError as erro:
-            return _erro(f"Não foi possível iniciar o hub: {erro}", 409)
+            mesma_porta = porta == 0 or _hub.porta == porta
+            if _hub.host == host and mesma_porta:
+                return jsonify(_hub_dict(_hub))
+            antigo = _hub
+            _hub = None
+    if antigo is not None:
+        antigo.parar()
+
+    hub = ServidorHub(host=host, porta=porta)
+    try:
+        hub.iniciar()
+    except OSError as erro:
+        return _erro(f"Não foi possível iniciar o hub: {erro}", 409)
+    with _hub_lock:
         _hub = hub
-        return jsonify({
-            "success": True,
-            "ativo": True,
-            "porta": porta_efetiva,
-            "host": hub.host,
-        })
+    return jsonify(_hub_dict(hub))
 
 
 @conexao_bp.route("/api/conexao/hub/parar", methods=["POST"])
@@ -217,6 +264,75 @@ def hub_parar() -> Any:
     if hub is not None:
         hub.parar()
     return jsonify({"success": True, "ativo": False})
+
+
+@conexao_bp.route("/api/conexao/hubs", methods=["POST"])
+def hubs_disponiveis() -> Any:
+    """Lista o hub local e testa os servidores informados pelo frontend."""
+    dados = _dados()
+    candidatos = dados.get("hubs")
+    if candidatos is None:
+        candidatos = []
+    if not isinstance(candidatos, list):
+        return _erro("Lista de servidores inválida.")
+
+    resultados: list[dict[str, Any]] = []
+    vistos: set[tuple[str, int]] = set()
+    with _hub_lock:
+        hub = _hub
+    if hub is not None:
+        for endereco in _enderecos_hub(hub.host):
+            chave = (endereco, hub.porta)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            resultados.append({
+                "nome": "Hub local",
+                "host": endereco,
+                "porta": hub.porta,
+                "ativo": True,
+                "local": True,
+            })
+
+    if bool(dados.get("descobrir")):
+        for descoberto in descobrir_hubs():
+            chave = (str(descoberto.get("host")), int(descoberto.get("porta", 0)))
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            resultados.append(descoberto)
+
+    for item in candidatos[:20]:
+        if not isinstance(item, dict):
+            continue
+        host = item.get("host")
+        porta = item.get("porta")
+        if not isinstance(host, str) or not host.strip():
+            continue
+        if not isinstance(porta, (int, str)):
+            continue
+        try:
+            porta_int = int(porta)
+        except (TypeError, ValueError):
+            continue
+        if not 1 <= porta_int <= 65535:
+            continue
+        host = host.strip()
+        if "://" in host or "/" in host or ":" in host:
+            continue
+        chave = (host, porta_int)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        nome = item.get("nome")
+        resultados.append({
+            "nome": nome.strip() if isinstance(nome, str) and nome.strip() else host,
+            "host": host,
+            "porta": porta_int,
+            "ativo": _probe_hub(host, porta_int),
+            "local": host in ips_locais(),
+        })
+    return jsonify({"success": True, "hubs": resultados})
 
 
 # ------------------------------------------------------------------- cliente
