@@ -41,21 +41,23 @@
         chatSend: document.getElementById("connection-chat-send"),
         programTitle: document.getElementById("connection-program-title"),
         programInfo: document.getElementById("connection-program-info"),
-        execution: document.getElementById("connection-execution"),
-        execStatus: document.getElementById("connection-exec-status"),
-        execWarning: document.getElementById("connection-exec-warning"),
-        execRole: document.getElementById("connection-exec-role"),
-        execHost: document.getElementById("connection-exec-host"),
-        execPort: document.getElementById("connection-exec-port"),
-        execTimeout: document.getElementById("connection-exec-timeout"),
-        execInputs: document.getElementById("connection-exec-inputs"),
-        execPrepare: document.getElementById("connection-exec-prepare"),
-        execStart: document.getElementById("connection-exec-start"),
-        execStop: document.getElementById("connection-exec-stop"),
-        execState: document.getElementById("connection-exec-state"),
-        execOutput: document.getElementById("connection-exec-output"),
-        execError: document.getElementById("connection-exec-error"),
-        execHint: document.getElementById("connection-exec-hint"),
+        statusbar: document.getElementById("connection-statusbar"),
+        barTimer: document.getElementById("connection-bar-timer"),
+        reconnect: document.getElementById("connection-reconnect"),
+        viewHubs: document.getElementById("connection-view-hubs"),
+        viewHub: document.getElementById("connection-view-hub"),
+        roomsCard: document.getElementById("connection-rooms-card"),
+        rooms: document.getElementById("connection-rooms"),
+        roomsCount: document.getElementById("connection-rooms-count"),
+        joinBox: document.getElementById("connection-join-box"),
+        joinTitle: document.getElementById("connection-join-title"),
+        joinConfirm: document.getElementById("connection-join-confirm"),
+        joinCancel: document.getElementById("connection-join-cancel"),
+        roomCard: document.getElementById("connection-room-card"),
+        roomTitle: document.getElementById("connection-room-title"),
+        roomInfo: document.getElementById("connection-room-info"),
+        roomHint: document.getElementById("connection-room-hint"),
+        toasts: document.getElementById("connection-toasts"),
     };
 
     function generateId() {
@@ -81,23 +83,15 @@
     let polling = false;
     let lastChatSignature = "";
     let programSpec = null;
-    let executionHandoff = null;
-    let execStarting = false;
-    let execStopRequested = false;
-    let freeSuggestedPort = "";
     let hubAtivo = false;
     let serverSignature = "";
-
-    function readConexaoHandoff() {
-        try {
-            const raw = sessionStorage.getItem(CONEXAO_HANDOFF_KEY);
-            return raw ? JSON.parse(raw) : null;
-        } catch (error) {
-            return null;
-        }
-    }
-
-    executionHandoff = readConexaoHandoff();
+    let wasOnline = false;
+    let userLeft = false;
+    let lastHub = null;
+    let fechaRef = null;
+    let roomsSignature = "";
+    let pendingJoin = null;
+    const PUBLICA = "publica";
 
     function readServers() {
         try {
@@ -159,7 +153,7 @@
         serverSignature = assinatura;
         if (!lista.length) {
             elements.serverList.innerHTML =
-                '<li class="connection-empty">Nenhum servidor salvo. Inicie um hub local ou conecte a um endereço.</li>';
+                '<li class="connection-empty">Nenhum hub encontrado. Verifique se está na mesma rede, clique em "Procurar na rede" ou adicione manualmente.</li>';
             return;
         }
         elements.serverList.innerHTML = lista.map(item => {
@@ -169,9 +163,9 @@
             const ativo = Boolean(item.ativo);
             const local = item.local ? " · local" : "";
             return `<li class="connection-server ${ativo ? "connection-server-online" : "connection-server-offline"}">
-                <button type="button" class="connection-server-pick" data-host="${host}" data-port="${porta}" title="Usar este servidor">
+                <button type="button" class="connection-server-pick" data-host="${host}" data-port="${porta}" title="Entrar neste hub" ${ativo ? "" : "disabled"}>
                     <span class="connection-server-name">${nome}</span>
-                    <small>${host}:${porta}${local} · ${ativo ? "disponível" : "sem resposta"}</small>
+                    <small>${host}:${porta}${local} · ${ativo ? "disponível — clique para entrar" : "sem resposta"}</small>
                 </button>
                 <button type="button" class="connection-server-remove" data-host="${host}" data-port="${porta}" title="Remover servidor">×</button>
             </li>`;
@@ -256,6 +250,8 @@
             case "sala_atual": {
                 const sala = event.sala || {};
                 const motivo = event.motivo || "entrada";
+                if (motivo === "inatividade") return "A sala foi fechada por inatividade.";
+                if (motivo === "sala_encerrada") return "O dono encerrou a sala.";
                 return `Sala ${motivo}: ${sala.nome || "?"} [${sala.codigo || "?"}].`;
             }
             case "aguardando":
@@ -294,6 +290,20 @@
         }
     }
 
+    function toast(message, tone = "info") {
+        if (!elements.toasts || !message) return;
+        const item = document.createElement("div");
+        item.className = `connection-toast connection-toast-${tone}`;
+        item.textContent = message;
+        elements.toasts.appendChild(item);
+        while (elements.toasts.childNodes.length > 4) {
+            elements.toasts.removeChild(elements.toasts.firstChild);
+        }
+        setTimeout(() => item.remove(), 5000);
+    }
+
+    const TOAST_EVENTS = ["solicitacao", "conectado", "peer_desconectou", "exec_erro", "erro"];
+
     function applyEvents(events) {
         (events || []).forEach(event => {
             const message = describeEvent(event);
@@ -304,216 +314,116 @@
                     ? "ok"
                     : "info";
             log(message, tone);
+            const sala = event.type === "sala_atual"
+                && ["inatividade", "sala_encerrada"].includes(event.motivo);
+            const recusa = event.type === "resposta" && !event.aceitar;
+            if (TOAST_EVENTS.includes(event.type) || sala || recusa) {
+                toast(message, tone === "ok" ? "ok" : tone === "error" ? "error" : "info");
+            }
+        });
+    }
+
+    function diffPeers(anterior, atual) {
+        if (!anterior || !atual || !anterior.sala || !atual.sala) return;
+        if (anterior.sala.codigo !== atual.sala.codigo) return;
+        const antes = new Map((anterior.peers || []).map(peer => [peer.id, peer.nome]));
+        const depois = new Map((atual.peers || []).map(peer => [peer.id, peer.nome]));
+        depois.forEach((nome, id) => {
+            if (!antes.has(id)) toast(`${nome} entrou na sala.`);
+        });
+        antes.forEach((nome, id) => {
+            if (!depois.has(id)) toast(`${nome} saiu da sala.`);
         });
     }
 
     function applyState(data) {
         if (data && typeof data === "object" && "estado" in data) {
+            const anterior = state;
             state = { ...state, ...data };
+            if (["registrado", "conectado"].includes(anterior.estado)) {
+                diffPeers(anterior, state);
+            }
         }
         applyEvents(data && data.eventos);
         render();
     }
 
-    let execAutoBlocked = false;
-
-    function isAutoExecution() {
-        return Boolean(programSpec && programSpec.multi_computer && programSpec.multi_computer.auto_execution);
-    }
-
-    function roleMode(papel) {
-        const multi = (programSpec && programSpec.multi_computer) || {};
-        const modes = multi.role_modes || {};
-        if (modes[papel]) return modes[papel];
-        const canal = (multi.channels || [])[0] || {};
-        if (canal.conecta === papel) return "conecta";
-        if (canal.escuta === papel) return "escuta";
-        return "";
-    }
-
-    function handoffMatchesProgram() {
-        if (!executionHandoff || typeof executionHandoff.source !== "string") return false;
-        if (!program) return true;
-        return !executionHandoff.file || executionHandoff.file === program;
-    }
-
-    function renderExecution() {
-        if (!elements.execution) return;
-        if (!programSpec || !programSpec.multi_computer) {
-            elements.execution.hidden = true;
-            return;
-        }
-        const multi = programSpec.multi_computer;
-        const auto = Boolean(multi.auto_execution);
-        elements.execution.hidden = false;
-        elements.execWarning.hidden = auto;
-        if (!auto) {
-            elements.execWarning.textContent = multi.instrucoes || "Execução automática indisponível para este programa.";
-            elements.execPrepare.disabled = true;
-            elements.execStart.disabled = true;
-            elements.execStop.disabled = true;
-            elements.execStatus.textContent = "MANUAL";
-            elements.execHint.textContent = "Use um par com canal declarativo, como t01_multiterminal.";
-            return;
-        }
-
-        const connected = state.estado === "conectado";
-        const exec = state.execucao || {};
-        const local = state.execucao_local || {};
-        const status = String(local.status || "");
-        const papel = elements.execRole.value || exec.papel || "";
-        const modo = roleMode(papel);
-        const locked = ["preparando", "preparado", "executando", "parando"].includes(status);
-        const preparado = Boolean(local.compilado) && status === "preparado";
-        const active = Boolean(local.ativo);
-        const podeIniciar = preparado
-            && !execStarting
-            && !execAutoBlocked
-            && (modo === "escuta" ? Boolean(exec.peer_preparado) : Boolean(exec.peer_pronto));
-        const podeParar = active && ["preparando", "preparado", "executando"].includes(status);
-
-        elements.execRole.disabled = locked || !connected;
-        elements.execHost.disabled = locked || !connected || modo !== "escuta";
-        elements.execPort.disabled = locked || !connected || modo !== "escuta";
-        elements.execTimeout.disabled = locked;
-        elements.execInputs.disabled = locked;
-        elements.execPrepare.disabled = !connected || locked;
-        elements.execStart.disabled = !connected || !podeIniciar;
-        elements.execStop.disabled = !connected || !podeParar;
-
-        const protocolo = String(exec.estado || "");
-        elements.execStatus.textContent = connected
-            ? (status || protocolo || "OCIOSO").toUpperCase()
-            : "DESCONECTADO";
-        elements.execHint.textContent = modo === "escuta"
-            ? "Este lado abre a porta e avisa quando estiver pronto."
-            : "Este lado aguarda a porta do outro lado para iniciar.";
-
-        const proc = local.processo || {};
-        elements.execState.textContent = [
-            `Papel: ${papel || "-"} (${modo || "-"})`,
-            `Parceiro: ${(exec.peer && exec.peer.papel) || "-"} (${(exec.peer && exec.peer.modo) || "-"})`,
-            `Porta: ${local.porta || exec.porta || "-"}`,
-            `Peer preparado: ${exec.peer_preparado ? "sim" : "não"}`,
-            `Peer pronto: ${exec.peer_pronto ? "sim" : "não"}`,
-            `Processo: ${proc.rodando ? "em execução" : active ? "encerrado" : "não iniciado"}`,
-        ].join("\n");
-        elements.execOutput.textContent = proc.stdout || "";
-        elements.execError.textContent = proc.stderr || local.erro || exec.erro || "";
-
-        if (connected && preparado && !execStarting && !execAutoBlocked) {
-            const deveIniciar = modo === "escuta"
-                ? Boolean(exec.peer_preparado)
-                : Boolean(exec.peer_pronto);
-            if (deveIniciar) startExecution(true);
-        }
-        if (!execStopRequested && active
-            && ["preparando", "preparado", "executando"].includes(status)
-            && (exec.parar_solicitado || exec.estado === "erro")) {
-            execStopRequested = true;
-            stopExecution(false);
-        }
-    }
-
-    async function prepareExecution() {
-        if (!isAutoExecution()) return;
-        const multi = programSpec.multi_computer;
-        const canal = (multi.channels || [])[0];
-        const papel = elements.execRole.value;
-        if (!canal || !papel) {
-            log("Escolha um papel para preparar a execução.", "error");
-            return;
-        }
-        const payload = {
-            filename: program,
-            papel,
-            canal: {
-                nome: canal.nome,
-                conecta: canal.conecta,
-                escuta: canal.escuta,
-            },
-            host: (elements.execHost.value || "").trim(),
-            porta: elements.execPort.value ? Number(elements.execPort.value) : null,
-            entradas: elements.execInputs.value || "",
-            timeout: Number(elements.execTimeout.value) || 60,
-        };
-        if (handoffMatchesProgram()) payload.code = executionHandoff.source;
-        execAutoBlocked = false;
-        execStopRequested = false;
-        elements.execPrepare.disabled = true;
-        const data = await action("/api/conexao/execucao/preparar", payload);
-        if (!data) {
-            elements.execPrepare.disabled = false;
-            return;
-        }
-        const local = data.execucao_local || {};
-        if (local.erro) {
-            log(local.erro, "error");
-        } else {
-            log("Execução preparada; aguardando o outro lado.", "ok");
-        }
-    }
-
-    async function startExecution(auto = false) {
-        if (execStarting || (auto && execAutoBlocked)) return;
-        execStarting = true;
-        try {
-            const data = await requestJson("/api/conexao/execucao/iniciar", {});
-            applyState(data);
-            log(auto ? "Execução iniciada automaticamente." : "Execução iniciada.", "ok");
-        } catch (error) {
-            if (auto) {
-                execAutoBlocked = true;
-                log(`Não foi possível iniciar automaticamente: ${error.message}`, "error");
-            } else {
-                log(error.message, "error");
-            }
-        } finally {
-            execStarting = false;
-        }
-    }
-
-    async function stopExecution(notificar = true) {
-        try {
-            const data = await requestJson("/api/conexao/execucao/parar", {
-                motivo: notificar ? "Execução encerrada pelo usuário." : "Execução encerrada pelo parceiro.",
-                notificar,
-            });
-            applyState(data);
-            if (notificar) log("Execução encerrada.", "ok");
-        } catch (error) {
-            if (notificar) log(error.message, "error");
-        }
-    }
+    const lib = window.MiniparConexao;
 
     function render() {
-        const connected = state.estado === "conectado";
-        const registered = state.estado === "registrado" || connected;
-        const partner = state.conectado_com;
-
-        elements.status.textContent = connected
-            ? `CONECTADO${partner ? ` · ${partner.nome}` : ""}`
-            : registered ? "NO HUB" : "DESCONECTADO";
-        elements.status.classList.toggle("connection-status-online", connected);
-        elements.status.classList.toggle("connection-status-hub", registered && !connected);
-
-        elements.disconnect.hidden = !((state.hub) || registered);
-
+        const info = lib.describe(state);
+        const registered = info.registered;
+        const connected = info.connected;
+        const perdida = info.perdida;
         const sala = state.sala;
+        const publica = info.publica;
+        const dono = info.dono;
+        if (registered) userLeft = false;
+
+        elements.status.textContent = info.texto;
+        elements.statusbar.className = `connection-statusbar connection-bar-${info.tom}`;
+        elements.barTimer.hidden = info.restante === null;
+        if (info.restante !== null) {
+            elements.barTimer.textContent = `A sala fecha em ${info.restante}s por inatividade`;
+        }
+
+        elements.disconnect.hidden = !registered;
+        elements.reconnect.hidden = !perdida || !lastHub;
+        elements.leaveRoom.hidden = !registered || publica;
+        elements.leaveRoom.textContent = dono ? "Encerrar sala" : "Sair da sala";
+
+        elements.viewHubs.hidden = registered;
+        elements.viewHub.hidden = !registered;
+        elements.roomsCard.hidden = !publica;
+        elements.roomCard.hidden = publica;
         elements.room.textContent = sala
             ? `${sala.nome} [${sala.codigo}] · ${sala.lotacao}${sala.maximo ? `/${sala.maximo}` : ""}`
             : "Sem sala";
 
+        if (!publica && sala) {
+            elements.roomTitle.textContent = `${sala.com_senha ? "🔒 " : ""}${sala.nome}`;
+            elements.roomInfo.textContent = `código ${sala.codigo} · dono: ${sala.dono || "-"}`;
+            elements.roomHint.textContent = connected
+                ? "Vocês estão conectados. Para executar em par, volte ao editor e clique em Executar."
+                : sala.lotacao < (sala.maximo || 2)
+                    ? `Aguardando outro participante. Compartilhe o código ${sala.codigo}${sala.com_senha ? " e a senha" : ""}, ou ele pode escolher a sala na lista.`
+                    : "Para executar em par, volte ao editor e clique em Executar: o convite chega ao outro participante.";
+        }
+
+        renderRooms();
         renderPeers();
         renderRequest();
-        renderChat(connected, partner);
-        renderExecution();
+        renderChat(registered);
+        lib.publish(state);
+    }
+
+    function renderRooms() {
+        const salas = Array.isArray(state.salas) ? state.salas : [];
+        elements.roomsCount.textContent = `${salas.length} ${salas.length === 1 ? "sala" : "salas"}`;
+        const assinatura = JSON.stringify(salas);
+        if (assinatura === roomsSignature) return;
+        roomsSignature = assinatura;
+        if (!salas.length) {
+            elements.rooms.innerHTML = '<li class="connection-empty">Nenhuma sala criada. Crie uma abaixo ou peça conexão a alguém da sala pública.</li>';
+            return;
+        }
+        elements.rooms.innerHTML = salas.map(sala => {
+            const cheia = sala.maximo && sala.lotacao >= sala.maximo;
+            const cadeado = sala.com_senha
+                ? '<span class="connection-lock" title="Sala com senha" aria-label="Sala com senha">🔒</span>'
+                : '<span class="connection-lock connection-lock-open" title="Sala sem senha" aria-label="Sala sem senha"></span>';
+            return `<li class="connection-room-item">
+                ${cadeado}
+                <span class="connection-peer-name"><b>${escapeHtml(sala.nome)}</b><small>${sala.lotacao}/${sala.maximo || "∞"} · dono: ${escapeHtml(sala.dono || "-")} · ${escapeHtml(sala.codigo)}</small></span>
+                <button type="button" class="button button-outline connection-room-join" data-room-code="${escapeHtml(sala.codigo)}" data-room-name="${escapeHtml(sala.nome)}" data-room-locked="${sala.com_senha ? "1" : "0"}" ${cheia ? "disabled" : ""}>${cheia ? "Cheia" : "Entrar"}</button>
+            </li>`;
+        }).join("");
     }
 
     function renderPeers() {
         const peers = Array.isArray(state.peers) ? state.peers : [];
         if (!peers.length) {
-            elements.peers.innerHTML = '<li class="connection-empty">Nenhum participante disponível nesta sala.</li>';
+            elements.peers.innerHTML = '<li class="connection-empty">Ninguém mais nesta sala.</li>';
             return;
         }
         const connected = state.estado === "conectado";
@@ -522,7 +432,7 @@
             const disabled = busy || connected;
             return `<li class="connection-peer">
                 <span class="connection-peer-name"><b>${escapeHtml(peer.nome)}</b><small>${escapeHtml(peer.id)}${busy ? " · ocupado" : ""}</small></span>
-                <button type="button" class="button button-outline connection-peer-connect" data-peer-id="${escapeHtml(peer.id)}" ${disabled ? "disabled" : ""}>Conectar</button>
+                <button type="button" class="button button-outline connection-peer-connect" data-peer-id="${escapeHtml(peer.id)}" ${disabled ? "disabled" : ""}>Pedir conexão</button>
             </li>`;
         }).join("");
     }
@@ -535,22 +445,24 @@
             return;
         }
         elements.request.hidden = false;
-        elements.requestText.textContent = `${pedido.nome || "Participante"} (${pedido.de || "?"}) quer se conectar com você.`;
+        const sala = state.sala && state.sala.codigo !== PUBLICA ? "na sua sala" : "na sala pública";
+        elements.requestText.textContent = `${pedido.nome || "Participante"} quer se conectar com você ${sala}.`;
     }
 
-    function renderChat(connected, partner) {
-        elements.chatInput.disabled = !connected;
-        elements.chatSend.disabled = !connected;
-        elements.chatState.textContent = connected
-            ? `conversando com ${partner ? partner.nome : "parceiro"}`
-            : "aguardando conexão";
+    function renderChat(registered) {
+        const sala = state.sala;
+        elements.chatInput.disabled = !registered;
+        elements.chatSend.disabled = !registered;
+        elements.chatState.textContent = registered && sala
+            ? (sala.codigo === PUBLICA ? "sala pública" : `sala ${sala.nome}`)
+            : "sem sala";
 
         const mensagens = Array.isArray(state.chat) ? state.chat : [];
         const signature = mensagens.map(item => `${item.hora}-${item.proprio ? 1 : 0}-${item.texto}`).join("|");
         if (signature !== lastChatSignature) {
             lastChatSignature = signature;
             if (!mensagens.length) {
-                elements.chat.innerHTML = '<p class="connection-empty">O chat fica disponível após o aceite dos dois lados.</p>';
+                elements.chat.innerHTML = '<p class="connection-empty">Nenhuma mensagem nesta sala ainda.</p>';
             } else {
                 elements.chat.innerHTML = mensagens.map(item => `
                     <div class="connection-chat-message ${item.proprio ? "connection-chat-own" : ""}">
@@ -664,6 +576,33 @@
         log("Busca na rede concluída.", "ok");
     });
 
+    async function enterHub(host, porta, nome) {
+        const data = await action(
+            "/api/conexao/conectar",
+            { host, porta, nome },
+            `Conectado ao hub ${host}:${porta}.`,
+        );
+        if (data) {
+            lastHub = { host, porta, nome };
+            userLeft = false;
+            rememberServer(host, porta, host);
+            startPolling();
+        }
+        return data;
+    }
+
+    function currentName() {
+        const nome = (elements.name.value || "").trim();
+        if (!nome) {
+            log("Informe o nome deste participante.", "error");
+            toast("Informe seu nome antes de entrar em um hub.", "error");
+            elements.name.focus();
+            return "";
+        }
+        sessionStorage.setItem(CLIENT_NAME_KEY, nome);
+        return nome;
+    }
+
     elements.serverList.addEventListener("click", async event => {
         const remover = event.target.closest("[data-host][data-port].connection-server-remove");
         if (remover) {
@@ -673,46 +612,56 @@
             return;
         }
         const escolher = event.target.closest("[data-host][data-port].connection-server-pick");
-        if (!escolher) return;
-        elements.host.value = escolher.getAttribute("data-host") || "";
-        elements.port.value = escolher.getAttribute("data-port") || "";
-        log(`Servidor selecionado: ${elements.host.value}:${elements.port.value}.`);
+        if (!escolher || escolher.disabled) return;
+        const host = escolher.getAttribute("data-host") || "";
+        const porta = Number(escolher.getAttribute("data-port")) || 5010;
+        elements.host.value = host;
+        elements.port.value = String(porta);
+        const nome = currentName();
+        if (!nome) return;
+        await enterHub(host, porta, nome);
     });
 
     elements.connect.addEventListener("click", async () => {
         const host = (elements.host.value || "").trim();
         const porta = Number(elements.port.value) || 5010;
-        const nome = (elements.name.value || "").trim();
-        if (!nome) {
-            log("Informe o nome deste participante.", "error");
-            return;
-        }
-        sessionStorage.setItem(CLIENT_NAME_KEY, nome);
-        const data = await action(
-            "/api/conexao/conectar",
-            { host, porta, nome },
-            `Conectado ao hub ${host}:${porta}.`,
-        );
-        if (data) {
-            rememberServer(host, porta, host);
-            await refreshServers();
-            startPolling();
-        }
+        const nome = currentName();
+        if (!nome) return;
+        await enterHub(host, porta, nome);
     });
 
+    elements.reconnect.addEventListener("click", async () => {
+        if (!lastHub) return;
+        await enterHub(lastHub.host, lastHub.porta, lastHub.nome);
+    });
+
+    function execucaoAtiva() {
+        const local = state.execucao_local || {};
+        return Boolean(local.ativo && ["preparando", "preparado", "executando"].includes(local.status));
+    }
+
     elements.disconnect.addEventListener("click", async () => {
+        if (execucaoAtiva() && !window.confirm("Há uma execução em andamento. Deseja mesmo desligar do hub?")) return;
+        userLeft = true;
+        lib.markLeft();
         const data = await action("/api/conexao/desligar", {}, "Desligado do hub.");
         if (data) {
+            wasOnline = false;
             state = {
                 estado: "desconectado",
                 peers: [],
+                salas: [],
                 chat: [],
                 solicitacao: null,
                 sala: null,
                 conectado_com: null,
                 hub: null,
             };
+            roomsSignature = "";
+            lastChatSignature = "";
+            lib.markLeft();
             render();
+            refreshServers(true);
         }
     });
 
@@ -726,18 +675,76 @@
         );
     });
 
+    async function joinRoom(codigo, senha = "") {
+        const data = await action("/api/conexao/sala/entrar", { codigo, senha }, `Entrou na sala ${codigo}.`);
+        if (data) {
+            pendingJoin = null;
+            elements.joinBox.hidden = true;
+            elements.joinPassword.value = "";
+        }
+        return data;
+    }
+
     elements.joinRoom.addEventListener("click", async () => {
         const codigo = (elements.roomCode.value || "").trim().toUpperCase();
-        const senha = elements.joinPassword.value || "";
         if (!codigo) {
             log("Informe o código da sala.", "error");
             return;
         }
-        await action("/api/conexao/sala/entrar", { codigo, senha }, `Entrou na sala ${codigo}.`);
+        // O código pode ser de uma sala com senha: pedimos a senha (pode ficar vazia).
+        pendingJoin = { codigo, nome: codigo };
+        elements.joinTitle.textContent = `Entrar na sala ${codigo} (senha, se houver)`;
+        elements.joinBox.hidden = false;
+        elements.joinPassword.value = "";
+        elements.joinPassword.focus();
+    });
+
+    elements.rooms.addEventListener("click", event => {
+        const botao = event.target.closest(".connection-room-join");
+        if (!botao || botao.disabled) return;
+        const codigo = botao.getAttribute("data-room-code");
+        const nome = botao.getAttribute("data-room-name") || codigo;
+        if (botao.getAttribute("data-room-locked") === "1") {
+            pendingJoin = { codigo, nome };
+            elements.joinTitle.textContent = `Entrar na sala ${nome} 🔒`;
+            elements.joinBox.hidden = false;
+            elements.joinPassword.value = "";
+            elements.joinPassword.focus();
+            return;
+        }
+        joinRoom(codigo, "");
+    });
+
+    elements.joinConfirm.addEventListener("click", () => {
+        if (!pendingJoin) return;
+        joinRoom(pendingJoin.codigo, elements.joinPassword.value || "");
+    });
+
+    elements.joinPassword.addEventListener("keydown", event => {
+        if (event.key === "Enter" && pendingJoin) {
+            event.preventDefault();
+            joinRoom(pendingJoin.codigo, elements.joinPassword.value || "");
+        } else if (event.key === "Escape") {
+            elements.joinCancel.click();
+        }
+    });
+
+    elements.joinCancel.addEventListener("click", () => {
+        pendingJoin = null;
+        elements.joinBox.hidden = true;
+        elements.joinPassword.value = "";
     });
 
     elements.leaveRoom.addEventListener("click", async () => {
-        await action("/api/conexao/sala/sair", {}, "De volta à sala pública.");
+        const sala = state.sala || {};
+        const dono = sala.dono_id && sala.dono_id === state.peer_id;
+        if (execucaoAtiva() && !window.confirm("Há uma execução em andamento. Deseja mesmo sair da sala?")) return;
+        if (dono && !window.confirm("Você é o dono: encerrar a sala remove os outros participantes dela. Continuar?")) return;
+        await action(
+            "/api/conexao/sala/sair",
+            {},
+            dono ? "Sala encerrada. De volta à sala pública." : "De volta à sala pública.",
+        );
     });
 
     elements.peers.addEventListener("click", event => {
@@ -780,28 +787,6 @@
         }
     });
 
-    elements.execPrepare.addEventListener("click", () => {
-        prepareExecution();
-    });
-
-    elements.execStart.addEventListener("click", () => {
-        startExecution(false);
-    });
-
-    elements.execStop.addEventListener("click", () => {
-        execStopRequested = true;
-        stopExecution(true);
-    });
-
-    elements.execRole.addEventListener("change", () => {
-        if (roleMode(elements.execRole.value) === "escuta"
-            && !elements.execPort.value
-            && freeSuggestedPort) {
-            elements.execPort.value = freeSuggestedPort;
-        }
-        renderExecution();
-    });
-
     async function loadProgramContext() {
         if (!program) return;
         try {
@@ -812,50 +797,14 @@
             });
             if (!response.ok) return;
             const spec = await response.json();
-            programSpec = spec;
             elements.programTitle.textContent = spec.titulo || program;
             const multi = spec.multi_computer || {};
             if (!multi.required) return;
-
             const papeis = (multi.roles || []).join(", ");
-            const execucao = multi.auto_execution
-                ? "Execução automática disponível."
-                : "Execução automática indisponível.";
             elements.programInfo.textContent =
                 `Conexão necessária entre ${multi.count || 2} participantes` +
                 (papeis ? ` · papéis: ${papeis}` : "") +
-                `. ${execucao}`;
-
-            const roles = Array.isArray(multi.roles) ? multi.roles : [];
-            elements.execRole.innerHTML = roles.map(papel => (
-                `<option value="${escapeHtml(papel)}">${escapeHtml(papel)} (${escapeHtml(roleMode(papel))})</option>`
-            )).join("");
-            let indice = 0;
-            if (/servidor|server|_2\b/i.test(program)) {
-                indice = Math.min(1, Math.max(0, roles.length - 1));
-            }
-            const papelPadrao = roles[indice] || "";
-            if (papelPadrao) elements.execRole.value = papelPadrao;
-            if (handoffMatchesProgram()) {
-                elements.execInputs.value = executionHandoff.inputs || "";
-            }
-
-            try {
-                const redeResponse = await fetch("/api/conexao/rede");
-                if (redeResponse.ok) {
-                    const rede = await redeResponse.json();
-                    if (rede.ip_local) elements.execHost.value = rede.ip_local;
-                    if (rede.porta_livre) {
-                        freeSuggestedPort = String(rede.porta_livre);
-                        if (roleMode(papelPadrao) === "escuta") {
-                            elements.execPort.value = freeSuggestedPort;
-                        }
-                    }
-                }
-            } catch (error) {
-                // O host manual continua disponível se a rede não responder.
-            }
-            renderExecution();
+                ". Depois de conectar, volte ao editor e clique em executar.";
         } catch (error) {
             // Contexto é opcional; a tela continua funcional.
         }
@@ -865,5 +814,10 @@
     Promise.all([loadNetwork(), loadProgramContext()]).then(() => {
         poll();
         startPolling();
+        refreshServers(true);
     });
+    setInterval(() => {
+        if (state.estado === "desconectado" || !state.estado) refreshServers(true);
+    }, 15000);
+    render();
 })();

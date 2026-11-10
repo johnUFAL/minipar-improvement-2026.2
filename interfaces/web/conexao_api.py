@@ -8,6 +8,7 @@ Flask.
 from __future__ import annotations
 
 import atexit
+import re
 import socket
 import threading
 import uuid
@@ -120,6 +121,42 @@ def _canal_execucao(
             "escuta": str(candidato.get("escuta") or ""),
         }
     raise ValueError("Informe um canal declarativo válido.")
+
+
+_TROCAS_PAR = (
+    ("cliente", "servidor"),
+    ("servidor", "cliente"),
+    ("client", "server"),
+    ("server", "client"),
+)
+
+
+def _par_do_arquivo(filename: str) -> str | None:
+    """Descobre o programa par (cliente <-> servidor) de um exemplo."""
+    pasta, _, nome = filename.replace("\\", "/").rpartition("/")
+    for origem, destino in _TROCAS_PAR:
+        if origem not in nome:
+            continue
+        candidato = nome.replace(origem, destino, 1)
+        relativo = f"{pasta}/{candidato}" if pasta else candidato
+        try:
+            caminho = resolve_test_file(relativo)
+        except ValueError:
+            continue
+        if Path(caminho).is_file():
+            return relativo
+    return None
+
+
+def _papeis_do_arquivo(filename: str, papeis: list[str]) -> tuple[str, str]:
+    """Papel deste arquivo e papel do programa par, pelo nome do arquivo."""
+    if len(papeis) < 2:
+        raise ValueError("O programa precisa declarar dois papéis.")
+    nome = filename.replace("\\", "/").rpartition("/")[2].lower()
+    segundo = bool(re.search(r"servidor|server|_2\b", nome))
+    meu = papeis[1] if segundo else papeis[0]
+    outro = papeis[0] if segundo else papeis[1]
+    return meu, outro
 
 
 def _erro(mensagem: str, status: int = 400) -> Any:
@@ -563,6 +600,101 @@ def execucao_iniciar() -> Any:
         return _erro(str(erro), 409)
     except (OSError, ConnectionError, TimeoutError) as erro:
         return _erro(str(erro), 502)
+    return _snapshot(cliente, client_id)
+
+
+@conexao_bp.route("/api/conexao/execucao/convidar", methods=["POST"])
+def execucao_convidar() -> Any:
+    dados = _dados()
+    try:
+        client_id = _client_id(dados)
+        if client_id is None:
+            return _erro("Informe client_id.")
+        cliente = _obter_cliente(client_id)
+        filename = dados.get("filename")
+        if not isinstance(filename, str) or not filename.strip():
+            raise ValueError("Abra um programa de exemplo para executar em par.")
+        filename = filename.strip()
+        try:
+            caminho = resolve_test_file(filename)
+        except ValueError:
+            raise ValueError(
+                "Só é possível executar em par os exemplos cliente/servidor."
+            ) from None
+        if not Path(caminho).is_file():
+            raise ValueError("Arquivo do programa não encontrado.")
+        spec = get_program_spec(caminho)
+        multi = spec.get("multi_computer") or {}
+        if not multi.get("auto_execution"):
+            raise ValueError("Este programa não tem execução automática entre máquinas.")
+        par = _par_do_arquivo(filename)
+        if par is None:
+            raise ValueError(
+                "Não encontrei o programa par (cliente/servidor) deste exemplo."
+            )
+        meu, outro = _papeis_do_arquivo(filename, list(multi.get("roles") or []))
+        titulo = str(spec.get("titulo") or Path(filename).stem)
+        cliente.convidar_execucao({
+            "programa": titulo[:150],
+            "arquivo": filename,
+            "par_arquivo": par,
+            "papel_iniciador": meu,
+            "papel_convidado": outro,
+        })
+    except ValueError as erro:
+        return _erro(str(erro), 400)
+    except (OSError, ConnectionError, TimeoutError) as erro:
+        return _erro(str(erro), 502)
+    return _snapshot(cliente, client_id)
+
+
+@conexao_bp.route("/api/conexao/execucao/convite/responder", methods=["POST"])
+def execucao_convite_responder() -> Any:
+    dados = _dados()
+    convite_id = dados.get("convite_id")
+    if not isinstance(convite_id, str) or not convite_id:
+        return _erro("Convite inválido.")
+    aceitar = bool(dados.get("aceitar"))
+    return _executar(
+        _client_id(dados, obrigatorio=False),
+        lambda cliente: cliente.responder_convite(convite_id, aceitar),
+    )
+
+
+@conexao_bp.route("/api/conexao/execucao/convite/cancelar", methods=["POST"])
+def execucao_convite_cancelar() -> Any:
+    dados = _dados()
+    return _executar(
+        _client_id(dados, obrigatorio=False),
+        lambda cliente: cliente.cancelar_convite(),
+    )
+
+
+@conexao_bp.route("/api/conexao/execucao/multi/limpar", methods=["POST"])
+def execucao_multi_limpar() -> Any:
+    dados = _dados()
+    return _executar(
+        _client_id(dados, obrigatorio=False),
+        lambda cliente: cliente.limpar_execucao_multi(),
+    )
+
+
+@conexao_bp.route("/api/conexao/execucao/entrada", methods=["POST"])
+def execucao_entrada() -> Any:
+    dados = _dados()
+    try:
+        client_id = _client_id(dados)
+        if client_id is None:
+            return _erro("Informe client_id.")
+        cliente = _obter_cliente(client_id)
+        texto = dados.get("texto")
+        if not isinstance(texto, str) or len(texto) > 4000:
+            raise ValueError("Entrada inválida.")
+        _executor.enviar_entrada(client_id, texto)
+    except ValueError as erro:
+        return _erro(str(erro), 400)
+    except ExecucaoErro as erro:
+        return _erro(str(erro), 409)
     return _snapshot(cliente, client_id)
 
 

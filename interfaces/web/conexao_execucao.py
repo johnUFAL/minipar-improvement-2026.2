@@ -289,6 +289,19 @@ class ExecutorConexao:
         except (ConnectionError, ValueError):
             pass
 
+    def enviar_entrada(self, client_id: str, texto: str) -> None:
+        """Envia uma linha digitada pelo usuário ao programa em execução."""
+        with self._lock:
+            sessao = self._obter(client_id)
+        with sessao.lock:
+            processo = sessao.processo
+            if processo is None or processo.poll() is not None:
+                raise ExecucaoErro("O programa não está em execução.")
+            if not processo.enviar_linha(texto):
+                raise ExecucaoErro(
+                    "O programa não aceita mais entradas (entrada encerrada)."
+                )
+
     def estado(self, client_id: str) -> dict[str, Any]:
         with self._lock:
             sessao = self._sessoes.get(client_id)

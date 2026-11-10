@@ -96,6 +96,10 @@ def test_sala_para_dict_expoe_lotacao_e_limite():
         "codigo": "A1B2C",
         "nome": "Privada",
         "privada": True,
+        "com_senha": False,
+        "automatica": False,
+        "dono": "",
+        "dono_id": "",
         "lotacao": 2,
         "maximo": 2,
     }

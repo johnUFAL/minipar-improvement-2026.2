@@ -33,6 +33,14 @@ def test_new_two_computer_pairs_are_auto_executable() -> None:
         "t02_adivinha_servidor.mp": "jogo",
         "t03_estoque_cliente.mp": "estoque",
         "t03_estoque_servidor.mp": "estoque",
+        "t04_conversor_cliente.mp": "conversor",
+        "t04_conversor_servidor.mp": "conversor",
+        "t05_senha_cliente.mp": "cofre",
+        "t05_senha_servidor.mp": "cofre",
+        "t06_jokenpo_cliente.mp": "jokenpo",
+        "t06_jokenpo_servidor.mp": "jokenpo",
+        "t07_estatisticas_cliente.mp": "stats",
+        "t07_estatisticas_servidor.mp": "stats",
     }
     for filename, channel in pairs.items():
         spec = get_program_spec(

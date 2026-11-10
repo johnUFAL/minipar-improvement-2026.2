@@ -19,6 +19,7 @@ from .protocolo import (
     codificar,
     decodificar,
     normalizar_contexto_execucao,
+    normalizar_convite,
     normalizar_nome,
     normalizar_texto_chat,
 )
@@ -75,6 +76,11 @@ class ClienteHub:
         self.estado = "desconectado"
         self.sala: dict[str, Any] | None = None
         self.peers: list[dict[str, str]] = []
+        self.salas: list[dict[str, Any]] = []
+        self.convites: list[dict[str, Any]] = []
+        self.convite_enviado: dict[str, Any] | None = None
+        self.convite_resultado: dict[str, Any] | None = None
+        self.execucao_multi: dict[str, Any] | None = None
         self.conectado_com: dict[str, str] | None = None
         self.solicitacao: dict[str, Any] | None = None
         self.aguardando: dict[str, Any] | None = None
@@ -130,6 +136,9 @@ class ClienteHub:
             self.conectado_com = None
             self.solicitacao = None
             self.aguardando = None
+            self.convites = []
+            self.convite_enviado = None
+            self.execucao_multi = None
             self.execucao = _execucao_inicial()
         self._registro.set()
         if sock is not None:
@@ -197,21 +206,92 @@ class ClienteHub:
             if tipo == "registrado":
                 self.peer_id = str(mensagem.get("peer_id") or "")
                 self.nome = str(mensagem.get("nome") or self.nome)
-                self.sala = mensagem.get("sala") if isinstance(
-                    mensagem.get("sala"), dict
-                ) else self.sala
+                self._atualizar_sala(mensagem.get("sala"))
                 self.peers = self._peers(mensagem)
                 self.estado = "registrado"
                 self._registro.set()
             elif tipo == "peers":
                 self.peers = self._peers(mensagem)
-                if isinstance(mensagem.get("sala"), dict):
-                    self.sala = mensagem["sala"]
+                self._atualizar_sala(mensagem.get("sala"))
+            elif tipo == "salas":
+                salas = mensagem.get("salas")
+                self.salas = [
+                    item for item in salas if isinstance(item, dict)
+                ] if isinstance(salas, list) else []
             elif tipo in ("sala_atual", "sala_criada"):
-                self.sala = mensagem.get("sala") if isinstance(
-                    mensagem.get("sala"), dict
-                ) else self.sala
+                nova = mensagem.get("sala")
+                mudou = isinstance(nova, dict) and (
+                    (self.sala or {}).get("codigo") != nova.get("codigo")
+                )
+                self._atualizar_sala(nova)
                 self.peers = self._peers(mensagem)
+                if mudou or mensagem.get("motivo") in (
+                    "sala_encerrada", "inatividade", "saida"
+                ):
+                    self.solicitacao = None
+                    self.aguardando = None
+                    self.estado = "registrado"
+                    self.conectado_com = None
+                    self.execucao = _execucao_inicial()
+            elif tipo == "exec_convite":
+                self.convites = [
+                    c for c in self.convites
+                    if c.get("convite_id") != mensagem.get("convite_id")
+                ] + [mensagem]
+            elif tipo == "exec_convite_enviado":
+                self.convite_enviado = mensagem
+                self.convite_resultado = None
+            elif tipo == "exec_convite_aceito":
+                self.convite_enviado = None
+                self.convite_resultado = {
+                    "resultado": "aceito",
+                    "nome": str((mensagem.get("peer") or {}).get("nome") or ""),
+                }
+                dados = mensagem.get("dados") or {}
+                self.execucao_multi = {
+                    "convite_id": mensagem.get("convite_id"),
+                    "origem": "iniciador",
+                    "arquivo": dados.get("arquivo"),
+                    "programa": dados.get("programa"),
+                    "papel": dados.get("papel_iniciador"),
+                    "parceiro": mensagem.get("peer"),
+                }
+            elif tipo == "exec_convite_confirmado":
+                self.convites = [
+                    c for c in self.convites
+                    if c.get("convite_id") != mensagem.get("convite_id")
+                ]
+                dados = mensagem.get("dados") or {}
+                self.execucao_multi = {
+                    "convite_id": mensagem.get("convite_id"),
+                    "origem": "convidado",
+                    "arquivo": dados.get("par_arquivo"),
+                    "programa": dados.get("programa"),
+                    "papel": dados.get("papel_convidado"),
+                    "parceiro": {
+                        "id": mensagem.get("de"),
+                        "nome": mensagem.get("nome"),
+                    },
+                }
+            elif tipo == "exec_convite_recusado":
+                self.convite_resultado = {
+                    "resultado": "recusado",
+                    "nome": str((mensagem.get("peer") or {}).get("nome") or ""),
+                }
+            elif tipo == "exec_convite_encerrado":
+                convite_id = mensagem.get("convite_id")
+                self.convites = [
+                    c for c in self.convites if c.get("convite_id") != convite_id
+                ]
+                if (self.convite_enviado or {}).get("convite_id") == convite_id:
+                    self.convite_enviado = None
+                    if mensagem.get("motivo") in (
+                        "todos_recusaram", "expirado", "todos_sairam"
+                    ):
+                        self.convite_resultado = {
+                            "resultado": str(mensagem.get("motivo")),
+                            "nome": "",
+                        }
             elif tipo == "solicitacao":
                 self.solicitacao = mensagem
             elif tipo == "aguardando":
@@ -222,14 +302,12 @@ class ClienteHub:
                     self.solicitacao = None
             elif tipo == "conectado":
                 peer = mensagem.get("peer")
-                self.historico_chat = []
                 self.execucao = _execucao_inicial()
                 self.conectado_com = peer if isinstance(peer, dict) else None
                 self.estado = "conectado"
                 self.solicitacao = None
                 self.aguardando = None
-                if isinstance(mensagem.get("sala"), dict):
-                    self.sala = mensagem["sala"]
+                self._atualizar_sala(mensagem.get("sala"))
             elif tipo == "peer_desconectou":
                 self.estado = "registrado"
                 self.conectado_com = None
@@ -310,6 +388,15 @@ class ClienteHub:
         if tipo != "pong":
             self._eventos.put(mensagem)
 
+    def _atualizar_sala(self, sala: object) -> None:
+        """Atualiza a sala atual e limpa o chat quando a sala muda."""
+        if not isinstance(sala, dict):
+            return
+        anterior = (self.sala or {}).get("codigo")
+        if anterior is not None and anterior != sala.get("codigo"):
+            self.historico_chat = []
+        self.sala = sala
+
     @staticmethod
     def _peers(mensagem: dict[str, Any]) -> list[dict[str, str]]:
         peers = mensagem.get("peers")
@@ -375,6 +462,46 @@ class ClienteHub:
             "senha": senha,
         })
 
+    def convidar_execucao(self, convite: dict[str, str]) -> None:
+        """Convida o parceiro (ou a sala) para executar um programa em par."""
+        with self._lock:
+            if self.estado == "desconectado":
+                raise ValueError("Entre em um hub para convidar.")
+        dados = normalizar_convite(convite)
+        with self._lock:
+            self.convite_resultado = None
+        self._enviar({"type": "exec_convidar", "convite": dados})
+
+    def responder_convite(self, convite_id: str, aceitar: bool) -> None:
+        self._enviar({
+            "type": "exec_convite_resposta",
+            "convite_id": convite_id,
+            "aceitar": bool(aceitar),
+        })
+        if not aceitar:
+            with self._lock:
+                self.convites = [
+                    c for c in self.convites
+                    if c.get("convite_id") != convite_id
+                ]
+
+    def cancelar_convite(self) -> None:
+        with self._lock:
+            enviado = self.convite_enviado
+            self.convite_enviado = None
+        if enviado:
+            self._enviar({
+                "type": "exec_convite_cancelar",
+                "convite_id": enviado.get("convite_id"),
+            })
+
+    def limpar_execucao_multi(self) -> None:
+        with self._lock:
+            self.execucao_multi = None
+
+    def listar_salas(self) -> None:
+        self._enviar({"type": "listar_salas"})
+
     def sair_sala(self) -> None:
         self._enviar({"type": "sair_sala"})
 
@@ -391,10 +518,8 @@ class ClienteHub:
     def chat(self, texto: str) -> None:
         texto_normalizado = normalizar_texto_chat(texto)
         with self._lock:
-            if self.estado != "conectado":
-                raise ValueError(
-                    "Conecte-se a outro participante para conversar."
-                )
+            if self.estado == "desconectado" or self.sala is None:
+                raise ValueError("Entre em um hub para conversar.")
         self._enviar({"type": "chat", "texto": texto_normalizado})
         with self._lock:
             self._registrar_chat({
@@ -523,6 +648,11 @@ class ClienteHub:
                 ),
                 "sala": self.sala,
                 "peers": list(self.peers),
+                "salas": list(self.salas),
+                "convites": copy.deepcopy(self.convites),
+                "convite_enviado": copy.deepcopy(self.convite_enviado),
+                "convite_resultado": copy.deepcopy(self.convite_resultado),
+                "execucao_multi": copy.deepcopy(self.execucao_multi),
                 "conectado_com": self.conectado_com,
                 "solicitacao": self.solicitacao,
                 "aguardando": self.aguardando,

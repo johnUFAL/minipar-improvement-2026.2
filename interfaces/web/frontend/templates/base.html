@@ -57,6 +57,7 @@
         <header class="topbar">
             <div class="breadcrumb"><span class="topbar-mark">IC</span><b>MiniPar</b><span>/</span><span id="topbar-page">{% block page_label %}Painel{% endblock %}</span><span>/</span><span id="current-file">{% block current_file %}nenhum programa{% endblock %}</span></div>
             <div class="topbar-actions">
+                <a id="conn-chip" class="conn-chip conn-chip-off" href="/conexao" title="Sem hub" aria-label="Conexão: sem hub"><span class="conn-chip-dot" aria-hidden="true"></span><span id="conn-chip-text" class="conn-chip-text">Sem hub</span></a>
                 <span class="runtime-chip"><span class="live-dot"></span> 7 FASES</span>
                 <span id="status" class="status-text"><span class="live-dot"></span> Pronto</span>
                 {% block topbar_actions %}{% endblock %}
@@ -87,7 +88,7 @@
             </div>
         </header>
         <div id="global-chat-messages" class="global-chat-messages" aria-live="polite">
-            <p class="global-chat-empty">O chat aparece quando a conexão for aceita.</p>
+            <p class="global-chat-empty">Nenhuma mensagem nesta sala ainda.</p>
         </div>
         <form id="global-chat-form" class="global-chat-form">
             <input id="global-chat-input" type="text" placeholder="Mensagem..." autocomplete="off" disabled>
@@ -96,6 +97,15 @@
     </section>
 </div>
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
+<div id="conn-invite" class="conn-invite" role="alertdialog" aria-labelledby="conn-invite-title" hidden>
+    <strong id="conn-invite-title">Convite de execução <small id="conn-invite-count"></small></strong>
+    <p id="conn-invite-text"></p>
+    <div class="conn-invite-actions">
+        <button id="conn-invite-accept" class="button button-primary" type="button">Aceitar e abrir o editor</button>
+        <button id="conn-invite-reject" class="button button-outline" type="button">Recusar</button>
+    </div>
+</div>
+<script src="{{ url_for('static', filename='conexao_status.js') }}"></script>
 <script src="{{ url_for('static', filename='conexao_global.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>

@@ -96,12 +96,21 @@ def test_pareamento_e_chat_entre_duas_sessoes(hub: Any, criar_cliente: Any) -> N
         for mensagem in alice.snapshot()["chat"]
     )
 
+    # A conexão aceita move os dois para uma sala privada automática.
+    sala_auto = alice.snapshot()["sala"]
+    assert sala_auto["automatica"] and sala_auto["codigo"] != SALA_PUBLICA
+    assert bob.snapshot()["sala"]["codigo"] == sala_auto["codigo"]
+
     bob.desconectar()
     _aguardar(lambda: alice.snapshot()["estado"] == "registrado")
     assert alice.snapshot()["conectado_com"] is None
+    # A dona continua na sala, esperando uma nova conexão.
+    assert alice.snapshot()["sala"]["codigo"] == sala_auto["codigo"]
+    assert bob.snapshot()["sala"]["codigo"] == SALA_PUBLICA
 
     carol = criar_cliente("Carol")
     carol_id = carol.snapshot()["peer_id"]
+    carol.entrar_sala(sala_auto["codigo"])
     _aguardar(
         lambda: any(
             peer["id"] == carol_id for peer in alice.snapshot()["peers"]
@@ -116,7 +125,6 @@ def test_pareamento_e_chat_entre_duas_sessoes(hub: Any, criar_cliente: Any) -> N
             and carol.snapshot()["estado"] == "conectado"
         )
     )
-    assert alice.snapshot()["chat"] == []
 
 
 def _parear(alice: ClienteHub, bob: ClienteHub) -> None:
@@ -210,11 +218,25 @@ def test_execucao_rejeita_papeis_iguais(hub: Any, criar_cliente: Any) -> None:
     assert "mesmo papel" in erro["mensagem"]
 
 
-def test_chat_exige_conexao_ativa(hub: Any, criar_cliente: Any) -> None:
+def test_chat_livre_na_sala_publica(hub: Any, criar_cliente: Any) -> None:
     alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    carol = criar_cliente("Carol")
 
+    alice.chat("olá, pessoal")
+
+    for destino in (bob, carol):
+        _aguardar(
+            lambda destino=destino: any(
+                m["texto"] == "olá, pessoal"
+                for m in destino.snapshot()["chat"]
+            )
+        )
+
+
+def test_chat_exige_estar_no_hub() -> None:
     with pytest.raises(ValueError):
-        alice.chat("olá")
+        ClienteHub().chat("olá")
 
 
 def test_ping_responde_pong(hub: Any) -> None:
@@ -304,3 +326,240 @@ def test_solicitacao_exige_participantes_na_mesma_sala(
         lambda: "outra sala" in str(alice.snapshot()["ultimo_erro"]).lower()
     )
     assert alice.snapshot()["estado"] == "registrado"
+
+
+def _sala_de(cliente: ClienteHub) -> dict[str, Any]:
+    return cliente.snapshot()["sala"] or {}
+
+
+def test_lista_de_salas_mostra_cadeado_e_oculta_automaticas(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    carol = criar_cliente("Carol")
+    dave = criar_cliente("Dave")
+
+    alice.criar_sala("Aberta", True, "")
+    bob.criar_sala("Trancada", True, "segredo")
+    _aguardar(lambda: len(carol.snapshot()["salas"]) == 2)
+    por_nome = {sala["nome"]: sala for sala in carol.snapshot()["salas"]}
+    assert por_nome["Aberta"]["com_senha"] is False
+    assert por_nome["Trancada"]["com_senha"] is True
+    assert por_nome["Aberta"]["maximo"] == 2
+
+    # Sala automática (criada pelo aceite) não aparece na lista.
+    carol_id = carol.snapshot()["peer_id"]
+    dave.solicitar(carol_id)
+    pedido = _aguardar(lambda: carol.snapshot()["solicitacao"])
+    carol.responder(pedido["request_id"], True)
+    _aguardar(lambda: carol.snapshot()["estado"] == "conectado")
+    assert {s["nome"] for s in carol.snapshot()["salas"]} == {
+        "Aberta",
+        "Trancada",
+    }
+
+
+def test_dono_sai_e_a_sala_some(hub: Any, criar_cliente: Any) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    alice.criar_sala("Dupla", True, "")
+    codigo = _aguardar(lambda: _sala_de(alice).get("codigo") not in (None, SALA_PUBLICA) and _sala_de(alice)["codigo"])
+    bob.entrar_sala(codigo)
+    _aguardar(lambda: _sala_de(bob).get("codigo") == codigo)
+
+    alice.sair_sala()
+    _aguardar(lambda: _sala_de(bob).get("codigo") == SALA_PUBLICA)
+    _aguardar(lambda: _sala_de(alice).get("codigo") == SALA_PUBLICA)
+    _aguardar(lambda: bob.snapshot()["salas"] == [])
+
+
+def test_outro_lado_sai_e_a_sala_continua_aguardando(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    carol = criar_cliente("Carol")
+    alice.criar_sala("Dupla", True, "")
+    codigo = _aguardar(lambda: _sala_de(alice).get("codigo") not in (None, SALA_PUBLICA) and _sala_de(alice)["codigo"])
+    bob.entrar_sala(codigo)
+    _aguardar(lambda: _sala_de(alice).get("lotacao") == 2)
+
+    bob.sair_sala()
+    _aguardar(lambda: _sala_de(alice).get("lotacao") == 1)
+    assert _sala_de(alice)["codigo"] == codigo
+
+    carol.entrar_sala(codigo)
+    _aguardar(lambda: _sala_de(carol).get("codigo") == codigo)
+    assert _sala_de(alice)["lotacao"] == 2
+
+
+def test_sala_fecha_apos_inatividade_com_aviso() -> None:
+    servidor = ServidorHub(
+        host="127.0.0.1", porta=0, inatividade=1.0, aviso=0.6
+    )
+    porta = servidor.iniciar()
+    alice = ClienteHub()
+    try:
+        alice.conectar("127.0.0.1", porta, "Alice")
+        alice.criar_sala("Quieta", True, "")
+        _aguardar(lambda: _sala_de(alice).get("codigo") != SALA_PUBLICA)
+        _aguardar(lambda: _sala_de(alice).get("fecha_em") is not None)
+        _aguardar(lambda: _sala_de(alice).get("codigo") == SALA_PUBLICA)
+        assert alice.snapshot()["salas"] == []
+    finally:
+        alice.fechar()
+        servidor.parar()
+
+
+def test_atividade_no_chat_reinicia_o_contador() -> None:
+    servidor = ServidorHub(
+        host="127.0.0.1", porta=0, inatividade=1.0, aviso=0.5
+    )
+    porta = servidor.iniciar()
+    alice = ClienteHub()
+    try:
+        alice.conectar("127.0.0.1", porta, "Alice")
+        alice.criar_sala("Ativa", True, "")
+        codigo = _aguardar(
+            lambda: _sala_de(alice).get("codigo") not in (None, SALA_PUBLICA)
+            and _sala_de(alice)["codigo"]
+        )
+        limite = time.monotonic() + 2.0
+        while time.monotonic() < limite:
+            alice.chat("ainda aqui")
+            time.sleep(0.2)
+            assert _sala_de(alice).get("codigo") == codigo
+    finally:
+        alice.fechar()
+        servidor.parar()
+
+
+CONVITE = {
+    "programa": "calculadora",
+    "arquivo": "t01_multiterminal/t01_calculadora_cliente.mp",
+    "par_arquivo": "t01_multiterminal/t01_calculadora_servidor.mp",
+    "papel_iniciador": "computador_1",
+    "papel_convidado": "computador_2",
+}
+
+
+def test_convite_para_a_sala_publica_o_primeiro_a_aceitar_fecha_o_par(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    carol = criar_cliente("Carol")
+
+    alice.convidar_execucao(CONVITE)
+    convite_bob = _aguardar(lambda: bob.snapshot()["convites"])[0]
+    _aguardar(lambda: carol.snapshot()["convites"])
+    _aguardar(lambda: alice.snapshot()["convite_enviado"])
+
+    bob.responder_convite(convite_bob["convite_id"], True)
+    _aguardar(lambda: alice.snapshot()["execucao_multi"])
+    _aguardar(lambda: bob.snapshot()["execucao_multi"])
+
+    assert alice.snapshot()["estado"] == "conectado"
+    assert bob.snapshot()["estado"] == "conectado"
+    sala = alice.snapshot()["sala"]
+    assert sala["automatica"] and sala["dono_id"] == alice.snapshot()["peer_id"]
+    multi_alice = alice.snapshot()["execucao_multi"]
+    multi_bob = bob.snapshot()["execucao_multi"]
+    assert multi_alice["papel"] == "computador_1"
+    assert multi_alice["arquivo"].endswith("cliente.mp")
+    assert multi_bob["papel"] == "computador_2"
+    assert multi_bob["arquivo"].endswith("servidor.mp")
+    # Carol perde o convite que já foi aceito por outra pessoa.
+    _aguardar(lambda: carol.snapshot()["convites"] == [])
+    assert carol.snapshot()["estado"] == "registrado"
+
+
+def test_convite_recusado_mantem_o_convite_para_os_demais(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    carol = criar_cliente("Carol")
+
+    alice.convidar_execucao(CONVITE)
+    convite = _aguardar(lambda: bob.snapshot()["convites"])[0]
+    _aguardar(lambda: carol.snapshot()["convites"])
+
+    bob.responder_convite(convite["convite_id"], False)
+    _aguardar(
+        lambda: (alice.snapshot()["convite_resultado"] or {}).get("resultado")
+        == "recusado"
+    )
+    assert bob.snapshot()["convites"] == []
+    assert len(carol.snapshot()["convites"]) == 1
+    assert alice.snapshot()["convite_enviado"]
+
+    carol.responder_convite(carol.snapshot()["convites"][0]["convite_id"], False)
+    _aguardar(
+        lambda: (alice.snapshot()["convite_resultado"] or {}).get("resultado")
+        == "todos_recusaram"
+    )
+    assert alice.snapshot()["convite_enviado"] is None
+
+
+def test_convite_cancelado_some_para_os_convidados(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+
+    alice.convidar_execucao(CONVITE)
+    _aguardar(lambda: bob.snapshot()["convites"])
+    alice.cancelar_convite()
+    _aguardar(lambda: bob.snapshot()["convites"] == [])
+    assert alice.snapshot()["convite_enviado"] is None
+
+
+def test_convite_vai_so_ao_parceiro_quando_ja_conectados(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+    carol = criar_cliente("Carol")
+    _parear(alice, bob)
+
+    alice.convidar_execucao(CONVITE)
+    convite = _aguardar(lambda: bob.snapshot()["convites"])[0]
+    time.sleep(0.2)
+    assert carol.snapshot()["convites"] == []
+
+    bob.responder_convite(convite["convite_id"], True)
+    _aguardar(lambda: bob.snapshot()["execucao_multi"])
+    _aguardar(lambda: alice.snapshot()["execucao_multi"])
+    assert alice.snapshot()["estado"] == "conectado"
+
+
+def test_convite_exige_alguem_disponivel_na_sala(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+
+    alice.convidar_execucao(CONVITE)
+    _aguardar(lambda: "ninguém" in str(alice.snapshot()["ultimo_erro"]).lower())
+    assert alice.snapshot()["convite_enviado"] is None
+
+
+def test_convite_some_quando_o_iniciador_sai(
+    hub: Any,
+    criar_cliente: Any,
+) -> None:
+    alice = criar_cliente("Alice")
+    bob = criar_cliente("Bob")
+
+    alice.convidar_execucao(CONVITE)
+    _aguardar(lambda: bob.snapshot()["convites"])
+    alice.fechar()
+    _aguardar(lambda: bob.snapshot()["convites"] == [])

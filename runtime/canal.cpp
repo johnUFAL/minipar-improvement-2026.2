@@ -1,6 +1,7 @@
 #include "minipar_rt.hpp"
 
 #include <cerrno>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -442,7 +443,19 @@ void validate_port(int port) {
 
 }  // namespace
 
-MiniParChannel::MiniParChannel() : socket_(invalid_socket) {}
+MiniParChannel::MiniParChannel() : socket_(invalid_socket) {
+    // Programas interativos (ex.: calculadora cliente/servidor) esperam o
+    // usuario digitar; o executor define MINIPAR_CHANNEL_TIMEOUT_MS para que o
+    // outro lado nao estoure o timeout padrao de 5 s enquanto isso.
+    const char* configured = std::getenv("MINIPAR_CHANNEL_TIMEOUT_MS");
+    if (configured != nullptr && configured[0] != '\0') {
+        char* end = nullptr;
+        const long long value = std::strtoll(configured, &end, 10);
+        if (end != configured && *end == '\0' && value > 0) {
+            timeout_ = std::chrono::milliseconds(value);
+        }
+    }
+}
 
 MiniParChannel::MiniParChannel(std::string host, int port)
     : MiniParChannel() {

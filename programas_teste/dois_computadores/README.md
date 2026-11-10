@@ -13,16 +13,11 @@ Arquivos:
 - `t02_adivinha_servidor.mp` (`computador_2`);
 - `t02_adivinha_cliente.mp` (`computador_1`).
 
-O servidor guarda o numero secreto `37`. O cliente envia palpites e recebe
-`maior`, `menor` ou `acertou`.
+O servidor escolhe o numero secreto (quem esta no servidor digita um valor de 1 a
+100) e mostra cada palpite e a dica enviada. O cliente envia palpites e recebe
+`maior`, `menor` ou `acertou`. O jogo termina no acerto ou com `sair`.
 
-Entradas de teste no cliente:
-
-```text
-50
-25
-37
-```
+Entradas de teste: servidor `37`; cliente `50`, `25`, `37`.
 
 Saida esperada no cliente:
 
@@ -31,8 +26,6 @@ Tente um numero menor.
 Tente um numero maior.
 Voce acertou em 3 tentativas!
 ```
-
-Tambem e possivel digitar `sair` no lugar de um palpite para encerrar.
 
 ## T3 - Consulta de estoque
 
@@ -72,6 +65,28 @@ Preco unitario: 18.00
 Total: 36.00
 Erro: codigo nao encontrado.
 ```
+
+## T4 - Conversor de unidades
+
+`t04_conversor_*.mp`. O cliente escolhe a conversao (`c2f`, `f2c`, `km2mi`,
+`mi2km`, `kg2lb`, `lb2kg`) e o valor; o servidor calcula. Ex.: `c2f` com `100`
+resulta em `212.00`. `sair` encerra.
+
+## T5 - Cofre com senha
+
+`t05_senha_*.mp`. Quem esta no servidor cadastra a senha; o cliente tem 3
+tentativas e recebe uma dica (primeira letra) a cada erro. Apos o terceiro erro
+o cofre e bloqueado.
+
+## T6 - Pedra, papel e tesoura
+
+`t06_jokenpo_*.mp`. O cliente digita sua jogada; o servidor digita a dele,
+decide o vencedor e devolve o placar. `sair` encerra.
+
+## T7 - Estatisticas remotas
+
+`t07_estatisticas_*.mp`. O cliente envia numeros um a um; o servidor acumula e
+devolve soma, media, maior e menor. `fim` encerra.
 
 ## Execucao manual
 

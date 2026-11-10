@@ -78,7 +78,8 @@ Pares adicionais para dois computadores estão em
 `programas_teste/dois_computadores/`:
 
 - T2: `t02_adivinha_servidor.mp` e `t02_adivinha_cliente.mp`;
-- T3: `t03_estoque_servidor.mp` e `t03_estoque_cliente.mp`.
+- T3: `t03_estoque_servidor.mp` e `t03_estoque_cliente.mp`;
+- T4: conversor de unidades, T5: cofre com senha, T6: pedra/papel/tesoura e T7: estatísticas remotas (`t04_*` a `t07_*`, sufixos `_servidor` e `_cliente`).
 
 O [README dos exemplos](../programas_teste/dois_computadores/README.md) traz
 papéis, entradas de teste e saídas esperadas.

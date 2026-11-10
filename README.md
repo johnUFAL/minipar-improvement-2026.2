@@ -194,7 +194,8 @@ Pares adicionais para dois computadores ficam em
 `programas_teste/dois_computadores/`:
 
 - `t02_adivinha_servidor.mp` e `t02_adivinha_cliente.mp`;
-- `t03_estoque_servidor.mp` e `t03_estoque_cliente.mp`.
+- `t03_estoque_servidor.mp` e `t03_estoque_cliente.mp`;
+- `t04_conversor_*`, `t05_senha_*`, `t06_jokenpo_*` e `t07_estatisticas_*` (cada um com `_servidor` e `_cliente`).
 
 As instruções, entradas de teste e saídas esperadas estão no
 [README dos exemplos](programas_teste/dois_computadores/README.md).

@@ -6,6 +6,7 @@ o processo com stdout/stderr drenados em segundo plano.
 """
 from __future__ import annotations
 
+import codecs
 import os
 import shutil
 import socket
@@ -25,6 +26,7 @@ from components.tac.c_gerador_tac import TACGenerator
 from erros.diagnosticos import DiagnosticBag
 
 OUTPUT_LIMIT_BYTES = 64 * 1024
+TIMEOUT_CANAL_MS = 10 * 60 * 1000
 
 
 class ExecucaoErro(Exception):
@@ -171,6 +173,10 @@ def iniciar_processo(
     papel: str,
 ) -> subprocess.Popen[str]:
     """Inicia o executável com ``--hosts`` e ``--como``."""
+    ambiente = dict(os.environ)
+    # O usuário digita as entradas com calma: o outro lado não pode estourar o
+    # timeout de 5 s do canal enquanto espera.
+    ambiente.setdefault("MINIPAR_CHANNEL_TIMEOUT_MS", str(TIMEOUT_CANAL_MS))
     return subprocess.Popen(
         [
             str(executavel),
@@ -179,6 +185,7 @@ def iniciar_processo(
             "--como",
             papel,
         ],
+        env=ambiente,
         cwd=str(workdir),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -225,29 +232,66 @@ class ExecucaoProcesso:
     def _drenar(self, nome: str, stream: Any) -> None:
         if stream is None:
             return
+        # Lê o que estiver disponível (sem esperar encher o bloco), para que
+        # prompts sem quebra de linha apareçam na hora, como em um terminal.
+        bruto = getattr(stream, "buffer", None)
+        decodificador = codecs.getincrementaldecoder("utf-8")(errors="replace")
         while True:
-            chunk = stream.read(4096)
-            if not chunk:
-                return
-            with self._lock:
-                atual = self._stdout if nome == "stdout" else self._stderr
-                restante = max(0, self._output_limit - len(atual))
-                if restante:
-                    if nome == "stdout":
-                        self._stdout += chunk[:restante]
-                    else:
-                        self._stderr += chunk[:restante]
-                if len(chunk) > restante:
-                    self._truncado = True
+            if bruto is not None and hasattr(bruto, "read1"):
+                dados = bruto.read1(4096)
+                if not dados:
+                    resto = decodificador.decode(b"", final=True)
+                    if resto:
+                        self._anexar(nome, resto)
+                    return
+                chunk = decodificador.decode(dados)
+                if not chunk:
+                    continue
+            else:
+                chunk = stream.read(1)
+                if not chunk:
+                    return
+            self._anexar(nome, chunk)
+
+    def _anexar(self, nome: str, chunk: str) -> None:
+        with self._lock:
+            atual = self._stdout if nome == "stdout" else self._stderr
+            restante = max(0, self._output_limit - len(atual))
+            if restante:
+                if nome == "stdout":
+                    self._stdout += chunk[:restante]
+                else:
+                    self._stderr += chunk[:restante]
+            if len(chunk) > restante:
+                self._truncado = True
 
     def escrever_entradas(self, texto: str) -> None:
+        """Envia entradas prévias. Sem texto, a entrada fica aberta (interativa)."""
         if self.processo.stdin is None:
+            return
+        if not texto:
             return
         try:
             self.processo.stdin.write(texto)
             self.processo.stdin.close()
         except (BrokenPipeError, OSError):
             pass
+
+    def enviar_linha(self, texto: str) -> bool:
+        """Escreve uma linha no stdin do programa em execução."""
+        if self.processo.stdin is None or self.processo.poll() is not None:
+            return False
+        linha = texto.rstrip("\r\n") + "\n"
+        try:
+            self.processo.stdin.write(linha)
+            self.processo.stdin.flush()
+        except (BrokenPipeError, ValueError, OSError):
+            return False
+        with self._lock:
+            # Eco da entrada digitada, na ordem em que o programa a recebeu.
+            restante = max(0, self._output_limit - len(self._stdout))
+            self._stdout += linha[:restante]
+        return True
 
     def poll(self) -> int | None:
         return self.processo.poll()

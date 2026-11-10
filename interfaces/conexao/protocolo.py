@@ -8,6 +8,7 @@ chat que existe apenas enquanto dois participantes estão conectados.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -143,6 +144,25 @@ def normalizar_contexto_execucao(valor: object) -> dict[str, Any]:
     }
 
 
+def normalizar_convite(valor: object) -> dict[str, str]:
+    """Valida o convite de execução multicomputador enviado ao hub."""
+    if not isinstance(valor, dict):
+        raise ProtocoloErro("Convite de execução inválido.")
+    return {
+        "programa": _texto_limitado(valor.get("programa"), "Programa", MAX_PROGRAMA),
+        "arquivo": _texto_limitado(valor.get("arquivo"), "Arquivo", MAX_PROGRAMA),
+        "par_arquivo": _texto_limitado(
+            valor.get("par_arquivo"), "Programa do parceiro", MAX_PROGRAMA
+        ),
+        "papel_iniciador": _texto_limitado(
+            valor.get("papel_iniciador"), "Papel do iniciador", MAX_PAPEL
+        ),
+        "papel_convidado": _texto_limitado(
+            valor.get("papel_convidado"), "Papel do convidado", MAX_PAPEL
+        ),
+    }
+
+
 @dataclass
 class Peer:
     """Participante registrado no hub."""
@@ -165,6 +185,11 @@ class Sala:
     privada: bool = False
     senha: str = ""
     membros: set[str] = field(default_factory=set)
+    dono: str = ""
+    dono_nome: str = ""
+    automatica: bool = False
+    ultima_atividade: float = field(default_factory=time.monotonic)
+    avisada: bool = False
 
     @property
     def maximo(self) -> int | None:
@@ -179,6 +204,10 @@ class Sala:
             "codigo": self.codigo,
             "nome": self.nome,
             "privada": self.privada,
+            "com_senha": bool(self.senha),
+            "automatica": self.automatica,
+            "dono": self.dono_nome,
+            "dono_id": self.dono,
             "lotacao": len(self.membros),
             "maximo": self.maximo,
         }

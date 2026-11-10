@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any, BinaryIO
 
 from .protocolo import (
+    MAX_NOME,
     MAX_TEXTO_CHAT,
     SALA_PUBLICA,
     ProtocoloErro,
@@ -26,6 +27,7 @@ from .protocolo import (
     codificar,
     decodificar,
     normalizar_contexto_execucao,
+    normalizar_convite,
     normalizar_nome,
     normalizar_texto_chat,
 )
@@ -40,6 +42,19 @@ def _agora() -> str:
 
 def _digest_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode("utf-8")).hexdigest()
+
+
+CONVITE_TTL = 90.0
+
+
+@dataclass
+class _Convite:
+    convite_id: str
+    de: str
+    sala: str
+    dados: dict[str, str]
+    alvos: set[str]
+    expira: float
 
 
 @dataclass
@@ -62,15 +77,29 @@ class _Conexao:
 class ServidorHub:
     """Hub TCP para o pareamento 1:1 entre computadores ou sessões."""
 
-    def __init__(self, host: str = "0.0.0.0", porta: int = 5010) -> None:
+    def __init__(
+        self,
+        host: str = "0.0.0.0",
+        porta: int = 5010,
+        *,
+        inatividade: float = 120.0,
+        aviso: float = 30.0,
+        convite_ttl: float = CONVITE_TTL,
+    ) -> None:
+        self.convite_ttl = float(convite_ttl)
         self.host = host
         self.porta = int(porta)
+        self.inatividade = float(inatividade)
+        self.aviso = min(float(aviso), self.inatividade)
+        self._assinatura_salas = ""
+        self._vigia: threading.Thread | None = None
         self._lock = threading.RLock()
         self._conexoes: dict[str, _Conexao] = {}
         self._salas: dict[str, Sala] = {
             SALA_PUBLICA: Sala(SALA_PUBLICA, "Sala pública")
         }
         self._solicitacoes: dict[str, tuple[str, str]] = {}
+        self._convites: dict[str, _Convite] = {}
         self._listener: socket.socket | None = None
         self._thread: threading.Thread | None = None
         self._udp: socket.socket | None = None
@@ -97,6 +126,12 @@ class ServidorHub:
         )
         self._thread.start()
         self._iniciar_descoberta()
+        self._vigia = threading.Thread(
+            target=self._vigiar,
+            name="minipar-hub-inatividade",
+            daemon=True,
+        )
+        self._vigia.start()
         return self.porta
 
     def parar(self) -> None:
@@ -129,6 +164,121 @@ class ServidorHub:
         self._thread = None
         if thread is not None:
             thread.join(timeout=1.0)
+        vigia, self._vigia = self._vigia, None
+        if vigia is not None:
+            vigia.join(timeout=1.0)
+
+    # ------------------------------------------------------------ inatividade
+    def _vigiar(self) -> None:
+        intervalo = max(0.02, min(0.5, self.inatividade / 10))
+        while self._ativo.is_set():
+            time.sleep(intervalo)
+            with self._lock:
+                self._verificar_inatividade()
+
+    def _verificar_inatividade(self) -> None:
+        agora = time.monotonic()
+        for convite in list(self._convites.values()):
+            if agora >= convite.expira:
+                self._encerrar_convite(convite, "expirado")
+            else:
+                sala_convite = self._salas.get(convite.sala)
+                if sala_convite is not None:
+                    self._tocar(sala_convite)
+        for sala in list(self._salas.values()):
+            if sala.codigo == SALA_PUBLICA:
+                continue
+            em_execucao = any(
+                self._conexoes[pid].execucao
+                for pid in sala.membros
+                if pid in self._conexoes
+            )
+            if em_execucao:
+                self._tocar(sala)
+                continue
+            ocioso = agora - sala.ultima_atividade
+            if ocioso >= self.inatividade:
+                self._dissolver_sala(sala, "inatividade")
+            elif ocioso >= self.inatividade - self.aviso and not sala.avisada:
+                sala.avisada = True
+                self._broadcast_sala(sala.codigo)
+        self._broadcast_salas()
+
+    def _tocar(self, sala: Sala) -> None:
+        sala.ultima_atividade = time.monotonic()
+        if sala.avisada:
+            sala.avisada = False
+            self._broadcast_sala(sala.codigo)
+
+    def _sala_dict(self, sala: Sala) -> dict[str, Any]:
+        dados = sala.para_dict()
+        fecha_em = None
+        if sala.codigo != SALA_PUBLICA and sala.avisada:
+            ocioso = time.monotonic() - sala.ultima_atividade
+            fecha_em = max(0, int(round(self.inatividade - ocioso)))
+        dados["fecha_em"] = fecha_em
+        return dados
+
+    def _lista_salas(self) -> list[dict[str, Any]]:
+        salas = [
+            self._sala_dict(sala)
+            for sala in self._salas.values()
+            if sala.codigo != SALA_PUBLICA and not sala.automatica
+        ]
+        for item in salas:
+            item.pop("fecha_em", None)
+        return sorted(salas, key=lambda item: item["nome"].lower())
+
+    def _broadcast_salas(self, *, forcar: bool = False) -> None:
+        salas = self._lista_salas()
+        assinatura = json.dumps(salas, sort_keys=True)
+        if assinatura == self._assinatura_salas and not forcar:
+            return
+        self._assinatura_salas = assinatura
+        for conexao in list(self._conexoes.values()):
+            self._enviar(conexao, {"type": "salas", "salas": salas})
+
+    def _levar_para_publica(self, conexao: _Conexao, motivo: str) -> None:
+        publica = self._salas[SALA_PUBLICA]
+        conexao.sala = SALA_PUBLICA
+        conexao.estado = "disponivel"
+        conexao.parceiro = None
+        conexao.execucao = None
+        publica.membros.add(conexao.peer_id)
+        self._cancelar_solicitacoes(conexao.peer_id)
+        self._enviar(
+            conexao,
+            {
+                "type": "sala_atual",
+                "motivo": motivo,
+                "sala": self._sala_dict(publica),
+                "peers": self._lista_peers(SALA_PUBLICA, conexao.peer_id),
+            },
+        )
+
+    def _dissolver_sala(self, sala: Sala, motivo: str) -> None:
+        """Fecha a sala e devolve todos os membros para a sala pública."""
+        self._salas.pop(sala.codigo, None)
+        for pid in list(sala.membros):
+            sala.membros.discard(pid)
+            membro = self._conexoes.get(pid)
+            if membro is None:
+                continue
+            if membro.parceiro is not None:
+                self._encerrar_conexao(membro, notificar=True)
+            self._levar_para_publica(membro, motivo)
+        self._broadcast_sala(SALA_PUBLICA)
+        self._broadcast_salas()
+
+    def _deixar_sala(self, conexao: _Conexao) -> None:
+        """Trata a saída da sala atual: o dono encerra, os demais só saem."""
+        origem = self._salas.get(conexao.sala)
+        if origem is None or origem.codigo == SALA_PUBLICA:
+            return
+        self._encerrar_conexao(conexao, notificar=True)
+        if origem.dono == conexao.peer_id:
+            origem.membros.discard(conexao.peer_id)
+            self._dissolver_sala(origem, "sala_encerrada")
 
     # --------------------------------------------------------------- conexões
     def _aceitar(self) -> None:
@@ -255,16 +405,22 @@ class ServidorHub:
                     "type": "registrado",
                     "peer_id": conexao.peer_id,
                     "nome": conexao.nome,
-                    "sala": sala.para_dict(),
+                    "sala": self._sala_dict(sala),
                     "peers": self._lista_peers(sala.codigo, conexao.peer_id),
                 },
             )
             self._broadcast_sala(sala.codigo)
+            self._enviar(
+                conexao,
+                {"type": "salas", "salas": self._lista_salas()},
+            )
         return conexao
 
     def _remover(self, conexao: _Conexao) -> None:
         with self._lock:
             self._encerrar_conexao(conexao, notificar=True)
+            self._cancelar_convites(conexao.peer_id)
+            self._deixar_sala(conexao)
             self._conexoes.pop(conexao.peer_id, None)
             sala = self._salas.get(conexao.sala)
             if sala is not None:
@@ -276,6 +432,7 @@ class ServidorHub:
                     self._salas.pop(sala.codigo, None)
                 else:
                     self._broadcast_sala(sala.codigo)
+            self._broadcast_salas()
         self._fechar_conexao(conexao)
 
     @staticmethod
@@ -328,7 +485,7 @@ class ServidorHub:
                 conexao,
                 {
                     "type": "peers",
-                    "sala": sala.para_dict(),
+                    "sala": self._sala_dict(sala),
                     "peers": self._lista_peers(sala.codigo, pid),
                 },
             )
@@ -343,9 +500,14 @@ class ServidorHub:
                 conexao,
                 {
                     "type": "peers",
-                    "sala": self._salas[conexao.sala].para_dict(),
+                    "sala": self._sala_dict(self._salas[conexao.sala]),
                     "peers": self._lista_peers(conexao.sala, conexao.peer_id),
                 },
+            )
+        elif tipo == "listar_salas":
+            self._enviar(
+                conexao,
+                {"type": "salas", "salas": self._lista_salas()},
             )
         elif tipo == "criar_sala":
             self._criar_sala(conexao, mensagem)
@@ -359,6 +521,12 @@ class ServidorHub:
             self._responder(conexao, mensagem)
         elif tipo == "chat":
             self._chat(conexao, mensagem)
+        elif tipo == "exec_convidar":
+            self._exec_convidar(conexao, mensagem)
+        elif tipo == "exec_convite_resposta":
+            self._exec_convite_resposta(conexao, mensagem)
+        elif tipo == "exec_convite_cancelar":
+            self._exec_convite_cancelar(conexao, mensagem)
         elif tipo == "exec_contexto":
             self._exec_contexto(conexao, mensagem)
         elif tipo in (
@@ -371,14 +539,16 @@ class ServidorHub:
             self._relay_execucao(conexao, mensagem)
         elif tipo == "desconectar":
             self._encerrar_conexao(conexao, notificar=True)
-            conexao.estado = "disponivel"
-            conexao.parceiro = None
+            if conexao.sala != SALA_PUBLICA:
+                self._mover_para_sala(conexao, SALA_PUBLICA, "saida")
             self._enviar(conexao, {"type": "desconectado"})
             self._broadcast_sala(conexao.sala)
         elif tipo == "registrar":
             self._erro(conexao, "Este participante já está registrado.")
         else:
             self._erro(conexao, "Tipo de mensagem desconhecido.")
+        if tipo not in ("ping", "chat", "listar", "listar_salas"):
+            self._broadcast_salas()
 
     def _erro(self, conexao: _Conexao, mensagem: str) -> None:
         self._enviar(conexao, {"type": "erro", "mensagem": mensagem})
@@ -402,6 +572,8 @@ class ServidorHub:
             nome=nome,
             privada=True,
             senha=_digest_senha(senha) if senha else "",
+            dono=conexao.peer_id,
+            dono_nome=conexao.nome,
         )
         self._salas[codigo] = sala
         self._mover_para_sala(conexao, codigo, "criada")
@@ -437,7 +609,7 @@ class ServidorHub:
                 {
                     "type": "sala_atual",
                     "motivo": "entrada",
-                    "sala": sala.para_dict(),
+                    "sala": self._sala_dict(sala),
                     "peers": self._lista_peers(sala.codigo, conexao.peer_id),
                 },
             )
@@ -463,15 +635,20 @@ class ServidorHub:
                 {
                     "type": "sala_atual",
                     "motivo": motivo,
-                    "sala": destino.para_dict(),
+                    "sala": self._sala_dict(destino),
                     "peers": self._lista_peers(destino.codigo, conexao.peer_id),
                 },
             )
             return
+        self._deixar_sala(conexao)
         origem = self._salas.get(conexao.sala)
         if origem is not None:
             origem.membros.discard(conexao.peer_id)
+        destino = self._salas.get(codigo_destino)
+        if destino is None:
+            destino = self._salas[SALA_PUBLICA]
         destino.membros.add(conexao.peer_id)
+        self._tocar(destino)
         conexao.sala = destino.codigo
         conexao.estado = "disponivel"
         conexao.parceiro = None
@@ -482,7 +659,7 @@ class ServidorHub:
             {
                 "type": "sala_atual",
                 "motivo": motivo,
-                "sala": destino.para_dict(),
+                "sala": self._sala_dict(destino),
                 "peers": self._lista_peers(destino.codigo, conexao.peer_id),
             },
         )
@@ -514,6 +691,7 @@ class ServidorHub:
         if conexao.estado == "conectado" or alvo.estado == "conectado":
             self._erro(conexao, "Participante ocupado em outra conexão.")
             return
+        self._tocar(self._salas[conexao.sala])
         request_id = uuid.uuid4().hex[:8]
         self._solicitacoes[request_id] = (conexao.peer_id, alvo.peer_id)
         self._enviar(
@@ -523,7 +701,7 @@ class ServidorHub:
                 "request_id": request_id,
                 "de": conexao.peer_id,
                 "nome": conexao.nome,
-                "sala": self._salas[conexao.sala].para_dict(),
+                "sala": self._sala_dict(self._salas[conexao.sala]),
             },
         )
         self._enviar(
@@ -577,6 +755,30 @@ class ServidorHub:
         ):
             self._erro(conexao, "Não foi possível concluir a conexão.")
             return
+        self._conectar_par(remetente, conexao)
+
+    def _conectar_par(self, remetente: _Conexao, conexao: _Conexao) -> None:
+        """Conecta dois participantes, criando a sala privada se preciso."""
+        sala = self._salas[conexao.sala]
+        veio_da_publica = sala.codigo == SALA_PUBLICA
+        if veio_da_publica:
+            codigo = self._novo_codigo()
+            nome_sala = f"{remetente.nome} e {conexao.nome}"[:MAX_NOME]
+            sala = Sala(
+                codigo=codigo,
+                nome=nome_sala,
+                privada=True,
+                automatica=True,
+                dono=remetente.peer_id,
+                dono_nome=remetente.nome,
+            )
+            self._salas[codigo] = sala
+            publica = self._salas[SALA_PUBLICA]
+            for participante in (remetente, conexao):
+                publica.membros.discard(participante.peer_id)
+                sala.membros.add(participante.peer_id)
+                participante.sala = codigo
+        self._tocar(sala)
         remetente.estado = "conectado"
         conexao.estado = "conectado"
         remetente.parceiro = conexao.peer_id
@@ -588,7 +790,7 @@ class ServidorHub:
             {
                 "type": "conectado",
                 "peer": conexao.peer_dict(),
-                "sala": self._salas[conexao.sala].para_dict(),
+                "sala": self._sala_dict(sala),
             },
         )
         self._enviar(
@@ -596,34 +798,184 @@ class ServidorHub:
             {
                 "type": "conectado",
                 "peer": remetente.peer_dict(),
-                "sala": self._salas[conexao.sala].para_dict(),
+                "sala": self._sala_dict(sala),
             },
         )
-        self._broadcast_sala(conexao.sala)
+        self._broadcast_sala(sala.codigo)
+        if veio_da_publica:
+            self._broadcast_sala(SALA_PUBLICA)
+
+    def _exec_convidar(self, conexao: _Conexao, mensagem: dict[str, Any]) -> None:
+        try:
+            dados = normalizar_convite(mensagem.get("convite"))
+        except ProtocoloErro as erro:
+            self._erro(conexao, str(erro))
+            return
+        sala = self._salas.get(conexao.sala)
+        if sala is None:
+            self._erro(conexao, "Entre em uma sala para convidar.")
+            return
+        if conexao.estado == "conectado" and conexao.parceiro in self._conexoes:
+            alvos = {str(conexao.parceiro)}
+        else:
+            alvos = {
+                pid
+                for pid in sala.membros
+                if pid != conexao.peer_id
+                and pid in self._conexoes
+                and self._conexoes[pid].estado != "conectado"
+            }
+        if not alvos:
+            self._erro(
+                conexao,
+                "Ninguém está disponível na sala para participar da execução.",
+            )
+            return
+        for antigo in [c for c in self._convites.values() if c.de == conexao.peer_id]:
+            self._encerrar_convite(antigo, "substituido")
+        convite = _Convite(
+            convite_id=uuid.uuid4().hex[:8],
+            de=conexao.peer_id,
+            sala=sala.codigo,
+            dados=dados,
+            alvos=alvos,
+            expira=time.monotonic() + self.convite_ttl,
+        )
+        self._convites[convite.convite_id] = convite
+        self._tocar(sala)
+        for pid in alvos:
+            self._enviar(
+                self._conexoes[pid],
+                {
+                    "type": "exec_convite",
+                    "convite_id": convite.convite_id,
+                    "de": conexao.peer_id,
+                    "nome": conexao.nome,
+                    "dados": dados,
+                    "sala": self._sala_dict(sala),
+                },
+            )
+        self._enviar(
+            conexao,
+            {
+                "type": "exec_convite_enviado",
+                "convite_id": convite.convite_id,
+                "destinatarios": len(alvos),
+            },
+        )
+
+    def _exec_convite_resposta(
+        self,
+        conexao: _Conexao,
+        mensagem: dict[str, Any],
+    ) -> None:
+        convite = self._convites.get(str(mensagem.get("convite_id") or ""))
+        if convite is None or conexao.peer_id not in convite.alvos:
+            self._erro(conexao, "Este convite não está mais disponível.")
+            return
+        iniciador = self._conexoes.get(convite.de)
+        if iniciador is None:
+            self._convites.pop(convite.convite_id, None)
+            self._erro(conexao, "Quem convidou não está mais disponível.")
+            return
+        if not bool(mensagem.get("aceitar")):
+            convite.alvos.discard(conexao.peer_id)
+            self._enviar(
+                iniciador,
+                {
+                    "type": "exec_convite_recusado",
+                    "convite_id": convite.convite_id,
+                    "peer": conexao.peer_dict(),
+                },
+            )
+            if not convite.alvos:
+                self._encerrar_convite(convite, "todos_recusaram")
+            return
+        ja_conectados = (
+            iniciador.estado == "conectado"
+            and iniciador.parceiro == conexao.peer_id
+        )
+        if not ja_conectados and (
+            iniciador.estado == "conectado"
+            or conexao.estado == "conectado"
+            or iniciador.sala != conexao.sala
+        ):
+            self._erro(conexao, "Não foi possível fechar a conexão para a execução.")
+            return
+        self._convites.pop(convite.convite_id, None)
+        outros = convite.alvos - {conexao.peer_id}
+        if not ja_conectados:
+            self._conectar_par(iniciador, conexao)
+        self._enviar(
+            iniciador,
+            {
+                "type": "exec_convite_aceito",
+                "convite_id": convite.convite_id,
+                "peer": conexao.peer_dict(),
+                "dados": convite.dados,
+            },
+        )
+        self._enviar(
+            conexao,
+            {
+                "type": "exec_convite_confirmado",
+                "convite_id": convite.convite_id,
+                "de": iniciador.peer_id,
+                "nome": iniciador.nome,
+                "dados": convite.dados,
+            },
+        )
+        for pid in outros:
+            destino = self._conexoes.get(pid)
+            if destino is not None:
+                self._enviar(
+                    destino,
+                    {
+                        "type": "exec_convite_encerrado",
+                        "convite_id": convite.convite_id,
+                        "motivo": "aceito",
+                        "por": conexao.nome,
+                    },
+                )
+
+    def _exec_convite_cancelar(
+        self,
+        conexao: _Conexao,
+        mensagem: dict[str, Any],
+    ) -> None:
+        convite = self._convites.get(str(mensagem.get("convite_id") or ""))
+        if convite is None or convite.de != conexao.peer_id:
+            return
+        self._encerrar_convite(convite, "cancelado")
 
     def _chat(self, conexao: _Conexao, mensagem: dict[str, Any]) -> None:
-        if conexao.estado != "conectado" or conexao.parceiro is None:
-            self._erro(conexao, "Conecte-se a outro participante para conversar.")
-            return
         try:
             texto = normalizar_texto_chat(mensagem.get("texto"))
         except ProtocoloErro as erro:
             self._erro(conexao, str(erro))
             return
-        parceiro = self._conexoes.get(conexao.parceiro)
-        if parceiro is None:
-            self._erro(conexao, "O outro participante não está mais disponível.")
+        sala = self._salas.get(conexao.sala)
+        if sala is None:
+            self._erro(conexao, "Entre em uma sala para conversar.")
             return
-        self._enviar(
-            parceiro,
-            {
-                "type": "chat",
-                "de": conexao.peer_id,
-                "nome": conexao.nome,
-                "texto": texto[:MAX_TEXTO_CHAT],
-                "hora": _agora(),
-            },
-        )
+        self._tocar(sala)
+        for pid in list(sala.membros):
+            if pid == conexao.peer_id:
+                continue
+            destino = self._conexoes.get(pid)
+            if destino is None:
+                continue
+            self._enviar(
+                destino,
+                {
+                    "type": "chat",
+                    "de": conexao.peer_id,
+                    "nome": conexao.nome,
+                    "texto": texto[:MAX_TEXTO_CHAT],
+                    "hora": _agora(),
+                    "sala": sala.codigo,
+                },
+            )
 
     @staticmethod
     def _assinatura_canais(contexto: dict[str, Any]) -> set[tuple[str, str, str]]:
@@ -713,6 +1065,9 @@ class ServidorHub:
             self._erro(conexao, "O outro participante não está mais disponível.")
             return
         tipo = str(mensagem.get("type"))
+        sala_exec = self._salas.get(conexao.sala)
+        if sala_exec is not None:
+            self._tocar(sala_exec)
         retorno: dict[str, Any] = {
             "type": tipo,
             "de": conexao.peer_id,
@@ -769,7 +1124,30 @@ class ServidorHub:
                         },
                     )
 
+    def _encerrar_convite(self, convite: _Convite, motivo: str) -> None:
+        """Remove o convite e avisa o iniciador e os convidados restantes."""
+        self._convites.pop(convite.convite_id, None)
+        mensagem = {
+            "type": "exec_convite_encerrado",
+            "convite_id": convite.convite_id,
+            "motivo": motivo,
+        }
+        for pid in {convite.de, *convite.alvos}:
+            destino = self._conexoes.get(pid)
+            if destino is not None:
+                self._enviar(destino, dict(mensagem))
+
+    def _cancelar_convites(self, peer_id: str, motivo: str = "saiu") -> None:
+        for convite in list(self._convites.values()):
+            if convite.de == peer_id:
+                self._encerrar_convite(convite, motivo)
+            elif peer_id in convite.alvos:
+                convite.alvos.discard(peer_id)
+                if not convite.alvos:
+                    self._encerrar_convite(convite, "todos_sairam")
+
     def _cancelar_solicitacoes(self, peer_id: str) -> None:
+        self._cancelar_convites(peer_id)
         for request_id, (remetente, destinatario) in list(
             self._solicitacoes.items()
         ):
