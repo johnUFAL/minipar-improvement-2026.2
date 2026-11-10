@@ -853,7 +853,6 @@ class FrontendBrowserTests(unittest.TestCase):
             hub_port = sock.getsockname()[1]
 
         cliente_arquivo = "t01_multiterminal/t01_calculadora_cliente.mp"
-        servidor_arquivo = "t01_multiterminal/t01_calculadora_servidor.mp"
         other = self.browser.new_page(viewport={"width": 1440, "height": 950})
         other.set_default_timeout(60000)
         try:

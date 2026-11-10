@@ -56,6 +56,7 @@ class WebCompileTests(unittest.TestCase):
             "/configuracoes": "Configurações",
             "/editor": "Editor MiniPar",
             "/pipeline": "Pipeline MiniPar",
+            "/ajuda": "Ajuda",
         }
         for path, label in routes.items():
             with self.subTest(path=path):

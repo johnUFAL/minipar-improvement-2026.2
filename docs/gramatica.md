@@ -115,7 +115,7 @@ join_stmt      = "join" IDENT { "," IDENT } fim_stmt ;
 
 (* ── Comandos ── *)
 stmt           = bloco_seq | bloco_par | fork_stmt | join_stmt
-               | if_stmt | while_stmt | for_stmt
+               | if_stmt | while_stmt | do_while_stmt | for_stmt
                | return_stmt | break_stmt | continue_stmt
                | simples_stmt ;
 
@@ -123,6 +123,7 @@ if_stmt        = "if" expr suite
                  { "elif" expr suite }
                  [ "else" suite ] ;
 while_stmt     = "while" expr suite ;
+do_while_stmt  = "do" suite "while" expr NEWLINE ;
 for_stmt       = "for" IDENT "in" expr suite ;
 return_stmt    = "return" [ expr ] fim_stmt ;
 break_stmt     = "break" fim_stmt ;

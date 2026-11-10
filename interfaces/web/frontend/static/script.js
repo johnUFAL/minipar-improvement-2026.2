@@ -702,6 +702,44 @@ document.addEventListener("DOMContentLoaded", () => {
             run();
         }
     });
+    document.getElementById("download-exe-button").addEventListener("click", async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        setStatus("Compilando o executável...");
+        try {
+            const file = document.getElementById("current-file").textContent;
+            const response = await fetch("/api/baixar-exe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: editor.getValue(), filename: file, optimization_level: optimizationLevel }),
+            });
+            if (!response.ok) {
+                let message = "Não foi possível gerar o executável";
+                try {
+                    const data = await response.json();
+                    message = data.error || message;
+                    if (Array.isArray(data.diagnosticos)) markDiagnostics(data.diagnosticos);
+                } catch (error) { /* mantém a mensagem padrão */ }
+                setStatus(message, true);
+                return;
+            }
+            const blob = await response.blob();
+            const disposition = response.headers.get("Content-Disposition") || "";
+            const match = disposition.match(/filename="([^"]+)"/);
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = match ? match[1] : "programa.exe";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+            setStatus(`Executável gerado: ${link.download}`);
+        } catch (error) {
+            setStatus("Não foi possível conectar ao compilador", true);
+        } finally {
+            button.disabled = false;
+        }
+    });
     document.getElementById("clear-button").addEventListener("click", () => {
         editor.setValue("");
         programInput.value = "";

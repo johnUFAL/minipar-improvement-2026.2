@@ -496,18 +496,18 @@ inline std::vector<double> __parse_ints(const std::string& text) {
     return result;
 }
 
-inline std::vector<int> __minipar_range(int end) {
-    std::vector<int> values;
+inline std::vector<double> __minipar_range(int end) {
+    std::vector<double> values;
     for (int i = 0; i < end; ++i) {
-        values.push_back(i);
+        values.push_back(static_cast<double>(i));
     }
     return values;
 }
 
-inline std::vector<int> __minipar_range(int start, int end) {
-    std::vector<int> values;
+inline std::vector<double> __minipar_range(int start, int end) {
+    std::vector<double> values;
     for (int i = start; i < end; ++i) {
-        values.push_back(i);
+        values.push_back(static_cast<double>(i));
     }
     return values;
 }

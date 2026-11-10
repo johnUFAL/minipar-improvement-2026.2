@@ -44,6 +44,7 @@ from .ast import (
     UnaryExpr,
     VarDecl,
     WhileStmt,
+    DoWhileStmt,
     ForkStmt,
     JoinStmt,
 )
@@ -506,6 +507,23 @@ class Parser:
             return WhileStmt(
                 condition=condition,
                 body=body,
+                line=keyword.line,
+                column=keyword.column,
+            )
+        if self._match(TokenType.DO):
+            keyword = self._previous
+            body = SeqBlock(
+                statements=self._suite(),
+                line=keyword.line,
+                column=keyword.column,
+            )
+            self._skip_newlines()
+            self._consume(TokenType.WHILE, "Esperado 'while' após o bloco do")
+            condition = self._expression()
+            self._statement_end("Esperada quebra de linha após a condição do do-while")
+            return DoWhileStmt(
+                body=body,
+                condition=condition,
                 line=keyword.line,
                 column=keyword.column,
             )
