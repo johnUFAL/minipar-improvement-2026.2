@@ -89,6 +89,17 @@ class ClienteHub:
         self.ultimo_erro = ""
 
     # ---------------------------------------------------------------- conexão
+    def ip_local_hub(self) -> str | None:
+        """IP local usado na conexão com o hub (a rede em que o hub é alcançado)."""
+        with self._lock:
+            sock = self._sock
+        if sock is None:
+            return None
+        try:
+            return sock.getsockname()[0]
+        except OSError:
+            return None
+
     def conectar(
         self,
         host: str,

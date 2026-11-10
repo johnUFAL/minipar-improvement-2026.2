@@ -127,6 +127,14 @@ std::string valid_host_names(const std::map<std::string, MiniParHost>& hosts) {
     return first ? "(nenhum configurado)" : result.str();
 }
 
+// Esperar o outro lado conectar nao deve herdar o timeout longo usado para
+// aguardar digitacao: se o par nao chega em 60 s, o erro aparece logo.
+std::chrono::milliseconds connection_timeout(std::chrono::milliseconds configured) {
+    return configured < std::chrono::seconds(60)
+        ? configured
+        : std::chrono::milliseconds(std::chrono::seconds(60));
+}
+
 void open_logical_channel(
     MiniParChannel& channel,
     const std::string& first_name,
@@ -556,7 +564,7 @@ void MiniParChannel::ouvir(int port) {
     }
 
     try {
-        if (!wait_for_socket(listener, false, timeout_)) {
+        if (!wait_for_socket(listener, false, connection_timeout(timeout_))) {
             throw std::runtime_error("Timeout aguardando conexao no canal.");
         }
         socket_ = accept(listener, nullptr, nullptr);
@@ -612,7 +620,7 @@ void MiniParChannel::conectar(const std::string& host, int port) {
                 candidate,
                 current->ai_addr,
                 static_cast<SocketLength>(current->ai_addrlen),
-                timeout_
+                connection_timeout(timeout_)
             )) {
             socket_ = candidate;
             break;

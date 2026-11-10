@@ -169,7 +169,7 @@
 
             let host = "127.0.0.1";
             try {
-                const rede = await (await fetch("/api/conexao/rede")).json();
+                const rede = await (await fetch(`/api/conexao/rede?client_id=${encodeURIComponent(lib.clientId())}`)).json();
                 if (rede && rede.ip_local) host = rede.ip_local;
             } catch (error) {
                 // Mantém o loopback quando a rede não responde.

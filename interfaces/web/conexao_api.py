@@ -231,9 +231,20 @@ def rede() -> Any:
     enderecos = ips_locais()
     with _hub_lock:
         hub = _hub
+    ip_par = enderecos[0]
+    client_id = (request.args.get("client_id") or "").strip()
+    with _clientes_lock:
+        cliente = _clientes.get(client_id) if client_id else None
+    # O IP anunciado ao parceiro precisa ser o da rede em que o hub é alcançado
+    # (ex.: o 26.x do Radmin), não o da rota padrão.
+    visto = cliente.ip_local_hub() if cliente is not None else None
+    if visto and not visto.startswith("127.") and visto != "0.0.0.0":
+        ip_par = visto
+    elif hub is not None:
+        ip_par = hub.ip_alcancavel() or ip_par
     resposta: dict[str, Any] = {
         "success": True,
-        "ip_local": enderecos[0],
+        "ip_local": ip_par,
         "ips_locais": enderecos,
         "porta_livre": free_port(),
         "hub_ativo": hub is not None,

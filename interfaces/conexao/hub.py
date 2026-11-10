@@ -1155,6 +1155,23 @@ class ServidorHub:
                 continue
             self._solicitacoes.pop(request_id, None)
 
+    def ip_alcancavel(self) -> str | None:
+        """IP deste computador visto por algum participante remoto do hub.
+
+        É o endereço da rede compartilhada (ex.: Radmin/VPN) pelo qual o outro
+        lado consegue chegar aqui, ao contrário do IP da rota padrão.
+        """
+        with self._lock:
+            conexoes = list(self._conexoes.values())
+        for conexao in conexoes:
+            try:
+                local = conexao.socket.getsockname()[0]
+            except OSError:
+                continue
+            if local and not local.startswith("127.") and local != "0.0.0.0":
+                return local
+        return None
+
     def _novo_codigo(self) -> str:
         while True:
             codigo = uuid.uuid4().hex[:5].upper()
@@ -1194,72 +1211,98 @@ def _ip_local() -> str:
     return ips_locais()[0]
 
 
-def descobrir_hubs(timeout: float = 0.6) -> list[dict[str, Any]]:
-    """Procura hubs MiniPar na rede local via UDP broadcast."""
+def _broadcasts_do_endereco(endereco: str) -> list[str]:
+    """Endereços de broadcast prováveis para um IP local.
+
+    Sem a máscara da interface, tenta /24, /16 e /8. Redes virtuais como o
+    Radmin VPN (26.0.0.0/8) só respondem ao broadcast do /8 (26.255.255.255).
+    """
+    partes = endereco.split(".")
+    if len(partes) != 4:
+        return []
+    return [
+        ".".join([*partes[:3], "255"]),
+        ".".join([*partes[:2], "255", "255"]),
+        ".".join([partes[0], "255", "255", "255"]),
+    ]
+
+
+def descobrir_hubs(timeout: float = 0.8) -> list[dict[str, Any]]:
+    """Procura hubs MiniPar na rede via UDP broadcast, em todas as interfaces.
+
+    Envia um pedido por interface (socket ligado ao IP local, para que o
+    pacote saia pelo adaptador certo, inclusive VPNs como Radmin/ZeroTier).
+    """
     locais = ips_locais()
-    destinos: set[tuple[str, int]] = {
-        ("255.255.255.255", PORTA_DESCOBERTA),
-        ("127.0.0.1", PORTA_DESCOBERTA),
-    }
+    socks: list[tuple[socket.socket, list[str]]] = []
     for endereco in locais:
         if endereco == "127.0.0.1":
             continue
-        partes = endereco.split(".")
-        if len(partes) == 4:
-            destinos.add((".".join([*partes[:3], "255"]), PORTA_DESCOBERTA))
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.bind((endereco, 0))
+            sock.settimeout(0.05)
+        except OSError:
+            continue
+        socks.append((sock, [*_broadcasts_do_endereco(endereco), "255.255.255.255"]))
+    try:
+        loop = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        loop.bind(("127.0.0.1", 0))
+        loop.settimeout(0.05)
+        socks.append((loop, ["127.0.0.1"]))
+    except OSError:
+        pass
 
     resultados: list[dict[str, Any]] = []
     vistos: set[tuple[str, int]] = set()
-    sock: socket.socket | None = None
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.bind(("", 0))
-        sock.settimeout(0.15)
-        for destino in destinos:
-            try:
-                sock.sendto(PEDIDO_DESCOBERTA, destino)
-            except OSError:
-                pass
+        for sock, destinos in socks:
+            for destino in destinos:
+                try:
+                    sock.sendto(PEDIDO_DESCOBERTA, (destino, PORTA_DESCOBERTA))
+                except OSError:
+                    pass
         limite = time.monotonic() + max(0.1, timeout)
         while time.monotonic() < limite:
-            try:
-                dados, origem = sock.recvfrom(2048)
-            except socket.timeout:
-                continue
-            except OSError:
-                break
-            try:
-                resposta = json.loads(dados.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if not isinstance(resposta, dict) or resposta.get("type") != "minipar_hub":
-                continue
-            valor_porta = resposta.get("porta")
-            if not isinstance(valor_porta, (int, str)):
-                continue
-            try:
-                porta = int(valor_porta)
-            except (TypeError, ValueError):
-                continue
-            if not 1 <= porta <= 65535:
-                continue
-            host = origem[0] if origem[0] != "0.0.0.0" else "127.0.0.1"
-            chave = (host, porta)
-            if chave in vistos:
-                continue
-            vistos.add(chave)
-            nome = resposta.get("nome")
-            resultados.append({
-                "nome": nome if isinstance(nome, str) and nome else host,
-                "host": host,
-                "porta": porta,
-                "ativo": True,
-                "local": host in locais,
-                "descoberto": True,
-            })
+            for sock, _ in socks:
+                try:
+                    dados, origem = sock.recvfrom(2048)
+                except socket.timeout:
+                    continue
+                except OSError:
+                    continue
+                try:
+                    resposta = json.loads(dados.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(resposta, dict) or resposta.get("type") != "minipar_hub":
+                    continue
+                valor_porta = resposta.get("porta")
+                if not isinstance(valor_porta, (int, str)):
+                    continue
+                try:
+                    porta = int(valor_porta)
+                except (TypeError, ValueError):
+                    continue
+                if not 1 <= porta <= 65535:
+                    continue
+                host = origem[0] if origem[0] != "0.0.0.0" else "127.0.0.1"
+                chave = (host, porta)
+                if chave in vistos:
+                    continue
+                vistos.add(chave)
+                nome = resposta.get("nome")
+                resultados.append({
+                    "nome": nome if isinstance(nome, str) and nome else host,
+                    "host": host,
+                    "porta": porta,
+                    "ativo": True,
+                    "local": host in locais,
+                    "descoberto": True,
+                })
     finally:
-        if sock is not None:
+        for sock, _ in socks:
             sock.close()
     return resultados
 
