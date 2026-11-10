@@ -593,6 +593,30 @@ class WebCompileTests(unittest.TestCase):
         self.assertTrue(result["success"], result.get("diagnosticos"))
         self.assertIn("MiniParChannel", result["cpp"])
 
+    def test_tests_endpoint_lists_split_pairs_recursively(self):
+        response = self.client.get("/api/tests")
+
+        self.assertEqual(response.status_code, 200)
+        tests = response.get_json()["tests"]
+        self.assertIn("t01_multiterminal/t01_calculadora_cliente.mp", tests)
+        self.assertIn("dois_computadores/t02_adivinha_cliente.mp", tests)
+        self.assertIn("dois_computadores/t03_estoque_servidor.mp", tests)
+
+    def test_new_two_computer_examples_compile(self):
+        for path in sorted(
+            (PROGRAMS_DIR / "dois_computadores").glob("*.mp")
+        ):
+            with self.subTest(path=path.name):
+                source = path.read_text(encoding="utf-8")
+                response = self.client.post(
+                    "/api/compilar", json={"code": source}
+                )
+
+                self.assertEqual(response.status_code, 200)
+                result = response.get_json()
+                self.assertTrue(result["success"], result.get("diagnosticos"))
+                self.assertIn("MiniParChannel", result["cpp"])
+
     @patch("interfaces.web.api._run_limited")
     @patch("interfaces.web.api.subprocess.run")
     def test_web_forwards_inputs_and_returns_program_output(self, run, execute):

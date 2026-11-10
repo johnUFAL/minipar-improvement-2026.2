@@ -393,6 +393,7 @@ def estado() -> Any:
             "chat": [],
             "eventos": [],
         })
+    cliente.manter_vivo()
     return _snapshot(cliente, client_id.strip())
 
 

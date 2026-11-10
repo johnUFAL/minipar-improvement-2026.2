@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import shutil
+import socket
 import tempfile
 import threading
 import unittest
@@ -11,6 +12,7 @@ from unittest.mock import patch
 from werkzeug.serving import make_server
 
 from interfaces.web import api
+from interfaces.web import conexao_api
 
 PLAYWRIGHT_AVAILABLE = importlib.util.find_spec("playwright") is not None
 CXX = os.environ.get("CXX", "g++").strip('"')
@@ -728,6 +730,83 @@ class FrontendBrowserTests(unittest.TestCase):
                     self.assertLessEqual(
                         overflow, 1, f"overflow horizontal em {path} @ {width}px"
                     )
+
+    def test_connection_survives_navigation_and_global_chat_keeps_history(self):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            hub_port = sock.getsockname()[1]
+
+        other = self.browser.new_page(viewport={"width": 1440, "height": 950})
+        other.set_default_timeout(20000)
+        try:
+            self.page.goto(
+                f"{self.base_url}/conexao", wait_until="domcontentloaded"
+            )
+            self.page.fill("#connection-name", "Alice")
+            self.page.fill("#connection-port", str(hub_port))
+            self.page.click("#connection-start-hub")
+            self.page.wait_for_function(
+                "!document.getElementById('connection-stop-hub').hidden"
+            )
+            self.page.click("#connection-connect")
+            self.page.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('NO HUB')"
+            )
+
+            other.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            other.fill("#connection-name", "Bob")
+            other.fill("#connection-host", "127.0.0.1")
+            other.fill("#connection-port", str(hub_port))
+            other.click("#connection-connect")
+            other.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('NO HUB')"
+            )
+
+            self.page.wait_for_function(
+                "document.querySelectorAll('#connection-peers [data-peer-id]').length > 0"
+            )
+            self.page.click("#connection-peers [data-peer-id]")
+            other.wait_for_function(
+                "!document.getElementById('connection-request').hidden"
+            )
+            other.click("#connection-accept")
+            self.page.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('CONECTADO')"
+            )
+            other.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('CONECTADO')"
+            )
+
+            self.page.fill("#connection-chat-input", "primeira mensagem")
+            self.page.click("#connection-chat-send")
+            other.wait_for_function(
+                "document.getElementById('connection-chat').textContent.includes('primeira mensagem')"
+            )
+
+            other.goto(f"{self.base_url}/editor", wait_until="domcontentloaded")
+            other.wait_for_function(
+                "!document.getElementById('global-chat').hidden"
+            )
+            other.wait_for_function(
+                "document.getElementById('global-chat-messages').textContent.includes('primeira mensagem')"
+            )
+
+            self.page.fill("#connection-chat-input", "segunda mensagem")
+            self.page.click("#connection-chat-send")
+            other.wait_for_function(
+                "document.getElementById('global-chat-messages').textContent.includes('segunda mensagem')"
+            )
+
+            other.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            other.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('CONECTADO')"
+            )
+            history = other.locator("#connection-chat").text_content()
+            self.assertIn("primeira mensagem", history)
+            self.assertIn("segunda mensagem", history)
+        finally:
+            conexao_api.encerrar_tudo()
+            other.close()
 
     def test_pages_load_without_external_requests(self):
         external_requests = []

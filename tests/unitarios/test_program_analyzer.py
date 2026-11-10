@@ -27,6 +27,30 @@ def test_split_pair_declares_roles_and_automatic_execution() -> None:
         assert multi["channels"][0]["nome"] == "dados"
 
 
+def test_new_two_computer_pairs_are_auto_executable() -> None:
+    pairs = {
+        "t02_adivinha_cliente.mp": "jogo",
+        "t02_adivinha_servidor.mp": "jogo",
+        "t03_estoque_cliente.mp": "estoque",
+        "t03_estoque_servidor.mp": "estoque",
+    }
+    for filename, channel in pairs.items():
+        spec = get_program_spec(
+            str(PROGRAMS_DIR / "dois_computadores" / filename)
+        )
+        multi = spec["multi_computer"]
+
+        assert multi is not None, filename
+        assert multi["required"] is True, filename
+        assert multi["auto_execution"] is True, filename
+        assert multi["roles"] == ["computador_1", "computador_2"], filename
+        assert multi["role_modes"] == {
+            "computador_1": "conecta",
+            "computador_2": "escuta",
+        }, filename
+        assert multi["channels"][0]["nome"] == channel, filename
+
+
 def test_combined_example_is_now_a_compatibility_stub() -> None:
     spec = get_program_spec(str(PROGRAMS_DIR / "t01_calculadora.mp"))
 

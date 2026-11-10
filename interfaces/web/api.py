@@ -1,4 +1,3 @@
-import glob
 import os
 import re
 import subprocess
@@ -342,8 +341,11 @@ def legacy_model_asset(asset_name: str):
 
 @app.route('/api/tests', methods=['GET'])
 def get_tests():
-    # Retorna os testes ordenados alfabeticamente
-    tests = [os.path.basename(f) for f in glob.glob(os.path.join(TESTS_DIR, '*.mp'))]
+    tests_dir = Path(TESTS_DIR)
+    tests = [
+        path.relative_to(tests_dir).as_posix()
+        for path in tests_dir.rglob('*.mp')
+    ]
     return jsonify({"tests": sorted(tests)})
 
 

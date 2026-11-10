@@ -336,7 +336,9 @@ class ServidorHub:
     # --------------------------------------------------------------- comandos
     def _tratar(self, conexao: _Conexao, mensagem: dict[str, Any]) -> None:
         tipo = mensagem.get("type")
-        if tipo == "listar":
+        if tipo == "ping":
+            self._enviar(conexao, {"type": "pong"})
+        elif tipo == "listar":
             self._enviar(
                 conexao,
                 {

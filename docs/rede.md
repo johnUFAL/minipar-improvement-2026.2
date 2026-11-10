@@ -61,12 +61,27 @@ trafegam em JSON por linha e não há autenticação de rede: use o hub em uma r
 confiável.
 
 Programas MiniPar que usam `c_channel` com `send`/`receive` redirecionam para a
-tela de conexão quando executados no editor da GUI. Depois do aceite, a
-execução distribuída continua sendo feita pelo runtime de canais:
+tela de conexão quando executados no editor da GUI. Depois do aceite, a GUI
+coordena a execução automática dos dois lados: o papel que escuta abre a porta,
+avisa quando está pronto e o papel que conecta inicia em seguida. A conexão e
+o chat permanecem ativos ao trocar de tela; o hub é encerrado pelo botão
+**Desligar**, pelo fechamento da aba (após o timeout de inatividade) ou quando
+o processo local termina.
+
+A execução manual pelo runtime de canais continua disponível:
 
 ```powershell
 python scripts/run_multiterminal.py --scenario all
 ```
+
+Pares adicionais para dois computadores estão em
+`programas_teste/dois_computadores/`:
+
+- T2: `t02_adivinha_servidor.mp` e `t02_adivinha_cliente.mp`;
+- T3: `t03_estoque_servidor.mp` e `t03_estoque_cliente.mp`.
+
+O [README dos exemplos](../programas_teste/dois_computadores/README.md) traz
+papéis, entradas de teste e saídas esperadas.
 
 ## Teste 1 — protocolo da calculadora
 

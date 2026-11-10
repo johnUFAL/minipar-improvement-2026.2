@@ -1,3 +1,4 @@
+import socket
 import time
 from collections.abc import Callable
 from typing import Any
@@ -6,7 +7,11 @@ import pytest
 
 from interfaces.conexao.cliente import ClienteHub
 from interfaces.conexao.hub import ServidorHub, ips_locais
-from interfaces.conexao.protocolo import SALA_PUBLICA
+from interfaces.conexao.protocolo import (
+    SALA_PUBLICA,
+    codificar,
+    decodificar,
+)
 
 
 def _aguardar(
@@ -210,6 +215,22 @@ def test_chat_exige_conexao_ativa(hub: Any, criar_cliente: Any) -> None:
 
     with pytest.raises(ValueError):
         alice.chat("olá")
+
+
+def test_ping_responde_pong(hub: Any) -> None:
+    _, porta = hub
+    with socket.create_connection(("127.0.0.1", porta), timeout=2) as sock:
+        sock.settimeout(2)
+        arquivo = sock.makefile("rb")
+        sock.sendall(codificar({"type": "registrar", "nome": "Ping"}))
+        assert decodificar(arquivo.readline())["type"] == "registrado"
+        sock.sendall(codificar({"type": "ping"}))
+        for _ in range(5):
+            mensagem = decodificar(arquivo.readline())
+            if mensagem["type"] == "pong":
+                break
+        else:
+            raise AssertionError("O hub não respondeu ao ping.")
 
 
 def test_ips_locais_inclui_loopback_sem_duplicatas() -> None:

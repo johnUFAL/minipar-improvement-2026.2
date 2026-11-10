@@ -802,14 +802,6 @@
         renderExecution();
     });
 
-    window.addEventListener("beforeunload", () => {
-        const blob = new Blob(
-            [JSON.stringify({ client_id: clientId })],
-            { type: "application/json" },
-        );
-        navigator.sendBeacon("/api/conexao/desligar", blob);
-    });
-
     async function loadProgramContext() {
         if (!program) return;
         try {

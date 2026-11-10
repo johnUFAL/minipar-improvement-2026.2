@@ -399,7 +399,10 @@ def _announce_input_requirement(spec: dict[str, Any]) -> None:
     _print_separator()
     print(f"\n  Programa: {spec.get('titulo', '')}")
     print(f"  O código MiniPar possui {count} chamada(s) input().")
-    print("  As entradas serão solicitadas pelo programa durante a execução.\n")
+    print("  As entradas serão solicitadas pelo programa durante a execução.")
+    print("  [!] ATENÇÃO: Quando o programa pedir dados, digite-os diretamente neste terminal.")
+    print("  [!] Se o cursor parar e não houver prompt, o programa pode estar aguardando entrada.\n")
+
     if spec.get("inputs"):
         print("  Prompts detectados no código:")
         for i, inp in enumerate(spec["inputs"], 1):

@@ -10,6 +10,7 @@ import copy
 import queue
 import socket
 import threading
+import time
 from datetime import datetime
 from typing import Any, BinaryIO
 
@@ -23,6 +24,7 @@ from .protocolo import (
 )
 
 MAX_HISTORICO_CHAT = 200
+INTERVALO_PING = 20.0
 
 
 def _agora() -> str:
@@ -65,6 +67,7 @@ class ClienteHub:
         self._arquivo: BinaryIO | None = None
         self._thread: threading.Thread | None = None
         self._fechado = False
+        self._ultimo_ping = 0.0
         self._host = ""
         self._porta = 0
         self.peer_id: str | None = None
@@ -147,6 +150,20 @@ class ClienteHub:
         self._thread = None
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=1.0)
+
+    def manter_vivo(self) -> None:
+        """Envia um ping periódico para o hub não encerrar por inatividade."""
+        with self._lock:
+            if self._sock is None or self.estado == "desconectado":
+                return
+            agora = time.monotonic()
+            if agora - self._ultimo_ping < INTERVALO_PING:
+                return
+            self._ultimo_ping = agora
+        try:
+            self._enviar({"type": "ping"})
+        except ConnectionError:
+            pass
 
     # ---------------------------------------------------------------- leitura
     def _ler(self) -> None:
@@ -288,7 +305,10 @@ class ClienteHub:
                 })
             elif tipo == "erro":
                 self.ultimo_erro = str(mensagem.get("mensagem") or "Erro no hub.")
-        self._eventos.put(mensagem)
+            elif tipo == "pong":
+                pass
+        if tipo != "pong":
+            self._eventos.put(mensagem)
 
     @staticmethod
     def _peers(mensagem: dict[str, Any]) -> list[dict[str, str]]:

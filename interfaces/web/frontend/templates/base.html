@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     {% block head_extra %}{% endblock %}
 </head>
-<body>
+<body data-page="{{ active_page|default('') }}">
 <svg class="icon-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="icon-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></symbol>
     <symbol id="icon-editor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/></symbol>
@@ -69,7 +69,34 @@
         </main>
     </div>
 </div>
+<div id="global-chat" class="global-chat" hidden>
+    <button id="global-chat-toggle" class="global-chat-toggle" type="button" aria-expanded="true" aria-controls="global-chat-panel">
+        <svg class="icon" aria-hidden="true"><use href="#icon-link"></use></svg>
+        <span>Chat</span>
+        <b id="global-chat-badge" hidden>0</b>
+    </button>
+    <section id="global-chat-panel" class="global-chat-panel" aria-label="Chat da conexão">
+        <header class="global-chat-head">
+            <div>
+                <strong>Chat MiniPar</strong>
+                <small id="global-chat-status">conectando...</small>
+            </div>
+            <div class="global-chat-head-actions">
+                <a class="global-chat-link" href="/conexao">Conexão</a>
+                <button id="global-chat-close" type="button" aria-label="Minimizar chat">×</button>
+            </div>
+        </header>
+        <div id="global-chat-messages" class="global-chat-messages" aria-live="polite">
+            <p class="global-chat-empty">O chat aparece quando a conexão for aceita.</p>
+        </div>
+        <form id="global-chat-form" class="global-chat-form">
+            <input id="global-chat-input" type="text" placeholder="Mensagem..." autocomplete="off" disabled>
+            <button id="global-chat-send" type="submit" disabled>Enviar</button>
+        </form>
+    </section>
+</div>
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
+<script src="{{ url_for('static', filename='conexao_global.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
