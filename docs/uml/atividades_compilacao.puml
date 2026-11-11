@@ -1,0 +1,135 @@
+@startuml atividades_compilacao
+title MiniPar 2026.2 - Fluxo de compilacao (atividades)
+
+skinparam shadowing false
+skinparam defaultFontName Monospaced
+skinparam backgroundColor #FFFFFF
+skinparam activity {
+  BackgroundColor #E8F0FE
+  BorderColor #35507A
+  FontSize 12
+}
+skinparam activityDiamond {
+  BackgroundColor #FFF3C4
+  BorderColor #8A6D00
+  FontSize 11
+}
+skinparam arrowColor #555555
+skinparam note {
+  BackgroundColor #FFFDF0
+  BorderColor #B8A15A
+  FontSize 11
+}
+skinparam partition {
+  BorderColor #888888
+  BackgroundColor #FFFFFF
+  FontSize 12
+}
+
+start
+
+:Receber pedido do usuario;
+note right
+  Tres entradas usam o mesmo pipeline:
+  - CLI: minipar compilar|tokens|ast|tac|cpp|build|run
+  - Menu: python main.py
+  - IDE web: POST /api/executar
+end note
+
+:Ler fonte .mp (UTF-8);
+if (arquivo legivel?) then (nao)
+  :exit 1;
+  stop
+endif
+
+partition "Fase 1 - Lexico + Sintatico" #E8F0FE {
+  :Lexer.next_token()\nautomato + pilha INDENT/DEDENT;
+  :Token[]  (tipo, lexema, linha, coluna);
+  :Parser.parse()  descendente recursivo LL(1);
+  :AST: Program;
+}
+
+if (erros lexicos ou sintaticos?) then (sim)
+  :DiagnosticBag\n(origem -> codigo);
+  :exit 2 ou 3;
+  stop
+endif
+
+partition "Fase 2 - Semantico + Tabela de Simbolos" #E6F4EA {
+  :1a passada: coletar declaracoes\n(classes, funcoes, escopos);
+  :TabelaSimbolos\npilha de escopos;
+  :2a passada: tipos, heranca,\noverride, canais e fork;
+}
+
+if (erros semanticos?) then (sim)
+  :exit 4;
+  stop
+endif
+
+partition "Fase 3 - Codigo intermediario (TAC)" #FFF4E5 {
+  :TACGenerator.generate_text();
+  :arquivo .tac\n(3 enderecos, em texto);
+}
+note right
+  Na IDE, TACExecutor + otimizador
+  rodam em memoria apenas para
+  visualizacao; o binario C++ nao
+  muda por causa do toggle.
+end note
+
+if (falha na geracao do TAC?) then (sim)
+  :exit 5;
+  stop
+endif
+
+partition "Fase 4 - Transpilacao para C++" #F3E8FD {
+  :CppCodeGenerator.generate_source(tac);
+  :arquivo .cpp\n(C++17 + runtime/);
+}
+
+if (falha na geracao do C++?) then (sim)
+  :exit 5;
+  stop
+endif
+
+partition "Fase 5 - Build com GCC" #FFF8DC {
+  :DriverGCC.compile()\ng++ -std=c++17 -O2;
+  :executavel\n(+ canal.cpp, paralelo.cpp, worker.cpp);
+}
+
+if (falha no build?) then (sim)
+  :exit 6;
+  stop
+endif
+
+partition "Fase 6 - Execucao" #F4ECF7 {
+  if (executar em dois computadores?) then (sim)
+    :Hub de Conexao\nsala + convite + par cliente/servidor;
+  else (nao)
+    :execucao local\nDriverGCC.executar();
+  endif
+}
+
+if (falha na execucao?) then (sim)
+  :exit 7;
+  stop
+endif
+
+:sucesso (exit 0);
+stop
+
+legend right
+  Atalhos de inspecao (param apos a fase):
+  --tokens  -> imprime tokens   (exit 0)
+  --ast     -> imprime AST JSON (exit 0)
+  --tac     -> grava e imprime .tac
+  --emit-cpp-> grava .cpp
+  --
+  Codigos de saida:
+  0 sucesso        4 semantico
+  1 uso/arquivo    5 geracao TAC/C++
+  2 lexico         6 build (g++)
+  3 sintatico      7 execucao
+endlegend
+
+@enduml
