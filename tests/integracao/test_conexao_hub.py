@@ -516,6 +516,7 @@ def test_convite_cancelado_some_para_os_convidados(
 
     alice.convidar_execucao(CONVITE)
     _aguardar(lambda: bob.snapshot()["convites"])
+    _aguardar(lambda: alice.snapshot()["convite_enviado"])
     alice.cancelar_convite()
     _aguardar(lambda: bob.snapshot()["convites"] == [])
     assert alice.snapshot()["convite_enviado"] is None

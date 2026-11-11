@@ -599,6 +599,7 @@ class WebCompileTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         tests = response.get_json()["tests"]
+        self.assertNotIn("t01_calculadora.mp", tests)
         self.assertIn("t01_multiterminal/t01_calculadora_cliente.mp", tests)
         self.assertIn("dois_computadores/t02_adivinha_cliente.mp", tests)
         self.assertIn("dois_computadores/t03_estoque_servidor.mp", tests)
@@ -926,20 +927,21 @@ class WebCompileTests(unittest.TestCase):
         self.assertEqual(captured_sources[-1], "int main() { return 0; }")
 
     def test_session_endpoints_manage_multi_terminal_lifecycle(self):
-        filename = "t01_calculadora.mp"
+        filename = "t01_multiterminal/t01_calculadora_cliente.mp"
+        session_filename = Path(filename).name
 
         try:
             response = self.client.post("/api/session/create", json={"filename": filename})
             self.assertEqual(response.status_code, 200)
             created = response.get_json()
             self.assertTrue(created["success"])
-            self.assertEqual(created["session"]["test_file"], filename)
+            self.assertEqual(created["session"]["test_file"], session_filename)
 
             response = self.client.get("/api/session")
             self.assertEqual(response.status_code, 200)
             current = response.get_json()
             self.assertTrue(current["active"])
-            self.assertEqual(current["session"]["test_file"], filename)
+            self.assertEqual(current["session"]["test_file"], session_filename)
 
             response = self.client.post("/api/session/join", json={})
             self.assertEqual(response.status_code, 200)

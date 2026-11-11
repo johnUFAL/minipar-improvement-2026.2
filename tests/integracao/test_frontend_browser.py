@@ -393,6 +393,13 @@ class FrontendBrowserTests(unittest.TestCase):
                 self.page.locator("#metric-speedup").text_content(), "—"
             )
             self.assertFalse(self.page.locator("#benchmark-results").is_hidden())
+            self.assertEqual(
+                self.page.locator("#benchmark-summary .benchmark-summary-item")
+                .nth(2)
+                .locator("strong")
+                .text_content(),
+                "Nenhum",
+            )
             self.assertGreaterEqual(
                 self.page.locator("#benchmark-cores-bars .core-bar-row").count(), 1
             )

@@ -350,6 +350,10 @@ def get_tests():
     tests = [
         path.relative_to(tests_dir).as_posix()
         for path in tests_dir.rglob('*.mp')
+        if any(
+            line.strip() and not line.lstrip().startswith("#")
+            for line in path.read_text(encoding="utf-8").splitlines()
+        )
     ]
     return jsonify({"tests": sorted(tests)})
 

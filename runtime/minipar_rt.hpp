@@ -3,6 +3,7 @@
 #include <chrono>
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -493,6 +494,34 @@ inline std::vector<double> __parse_ints(const std::string& text) {
         result.push_back(value);
     }
     return result;
+}
+
+inline std::vector<std::string> __minipar_dividir(const std::string& text) {
+    std::vector<std::string> result;
+    std::istringstream stream(text);
+    std::string value;
+    while (stream >> value) {
+        result.push_back(value);
+    }
+    return result;
+}
+
+inline bool __minipar_eh_inteiro(const std::string& text) {
+    if (text.empty()) {
+        return false;
+    }
+    errno = 0;
+    char* end = nullptr;
+    std::strtoll(text.c_str(), &end, 10);
+    if (end == text.c_str() || errno == ERANGE) {
+        return false;
+    }
+    const char* text_end = text.c_str() + text.size();
+    while (end < text_end &&
+           std::isspace(static_cast<unsigned char>(*end)) != 0) {
+        ++end;
+    }
+    return end == text_end;
 }
 
 inline std::vector<double> __minipar_range(int end) {

@@ -106,7 +106,7 @@ def test_par_executa(prefixo, entrada_srv, entrada_cli, esp_cli, esp_srv):
         )
         try:
             srv.stdin.write(entrada_srv)
-            srv.stdin.close()
+            srv.stdin.flush()
             wait_for_listening(porta_srv)
             cli = subprocess.run(
                 [str(cliente), "--hosts", str(hosts), "--como", "computador_1"],

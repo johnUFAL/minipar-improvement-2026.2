@@ -277,13 +277,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function summaryMarkup(result) {
         const parameters = result.parameters || {};
+        const fractalLabels = {
+            0: "Nenhum",
+            1: "Mandelbrot",
+            2: "Mandelbrot e Sierpinski",
+        };
+        const fractals = fractalLabels[parameters.fractais] || "—";
         const warnings = Array.isArray(result.warnings) && result.warnings.length
             ? `<ul>${result.warnings.map(message => `<li>${escape(message)}</li>`).join("")}</ul>`
             : "";
         return `
             <div class="benchmark-summary-item"><span>Atividades</span><strong>${parameters.total_atividades ?? "—"}</strong></div>
             <div class="benchmark-summary-item"><span>Núcleos utilizados</span><strong>${parameters.nucleos_utilizados ?? "—"}</strong></div>
-            <div class="benchmark-summary-item"><span>Fractais</span><strong>${parameters.fractais ?? "—"}</strong></div>
+            <div class="benchmark-summary-item"><span>Fractais</span><strong>${fractals}</strong></div>
             <div class="benchmark-summary-item"><span>Repetições</span><strong>${parameters.repeticoes ?? "—"}</strong></div>
             <div class="benchmark-summary-item"><span>Tempo sequencial · mediana</span><strong>${format(result.sequential_seconds)} s</strong></div>
             <div class="benchmark-summary-item"><span>Tempo paralelo · mediana</span><strong>${format(result.parallel_seconds)} s</strong></div>
