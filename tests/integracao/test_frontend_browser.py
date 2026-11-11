@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import shutil
+import socket
 import tempfile
 import threading
 import unittest
@@ -11,6 +12,7 @@ from unittest.mock import patch
 from werkzeug.serving import make_server
 
 from interfaces.web import api
+from interfaces.web import conexao_api
 
 PLAYWRIGHT_AVAILABLE = importlib.util.find_spec("playwright") is not None
 CXX = os.environ.get("CXX", "g++").strip('"')
@@ -391,6 +393,13 @@ class FrontendBrowserTests(unittest.TestCase):
                 self.page.locator("#metric-speedup").text_content(), "—"
             )
             self.assertFalse(self.page.locator("#benchmark-results").is_hidden())
+            self.assertEqual(
+                self.page.locator("#benchmark-summary .benchmark-summary-item")
+                .nth(2)
+                .locator("strong")
+                .text_content(),
+                "Nenhum",
+            )
             self.assertGreaterEqual(
                 self.page.locator("#benchmark-cores-bars .core-bar-row").count(), 1
             )
@@ -716,7 +725,7 @@ class FrontendBrowserTests(unittest.TestCase):
                 self.assertNotIn("Dados não armazenados", content)
 
     def test_benchmark_screens_fit_1280_and_tablet(self):
-        for path in ("/", "/benchmark", "/resultados", "/configuracoes"):
+        for path in ("/", "/benchmark", "/resultados", "/configuracoes", "/conexao"):
             self.page.goto(f"{self.base_url}{path}", wait_until="domcontentloaded")
             for width, height in ((1280, 800), (820, 1000)):
                 with self.subTest(path=path, width=width):
@@ -728,6 +737,225 @@ class FrontendBrowserTests(unittest.TestCase):
                     self.assertLessEqual(
                         overflow, 1, f"overflow horizontal em {path} @ {width}px"
                     )
+
+    def test_connection_survives_navigation_and_global_chat_keeps_history(self):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            hub_port = sock.getsockname()[1]
+
+        other = self.browser.new_page(viewport={"width": 1440, "height": 950})
+        other.set_default_timeout(20000)
+        try:
+            self.page.goto(
+                f"{self.base_url}/conexao", wait_until="domcontentloaded"
+            )
+            self.page.fill("#connection-name", "Alice")
+            self.page.fill("#connection-port", str(hub_port))
+            self.page.click("#connection-start-hub")
+            self.page.wait_for_function(
+                "!document.getElementById('connection-stop-hub').hidden"
+            )
+            self.page.click("#connection-connect")
+            self.page.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('NO HUB')"
+            )
+
+            other.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            other.fill("#connection-name", "Bob")
+            other.fill("#connection-host", "127.0.0.1")
+            other.fill("#connection-port", str(hub_port))
+            other.click("#connection-connect")
+            other.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('NO HUB')"
+            )
+
+            self.page.wait_for_function(
+                "document.querySelectorAll('#connection-peers [data-peer-id]').length > 0"
+            )
+            self.page.click("#connection-peers [data-peer-id]")
+            other.wait_for_function(
+                "!document.getElementById('connection-request').hidden"
+            )
+            other.click("#connection-accept")
+            self.page.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('CONECTADO')"
+            )
+            other.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('CONECTADO')"
+            )
+
+            self.page.fill("#connection-chat-input", "primeira mensagem")
+            self.page.click("#connection-chat-send")
+            other.wait_for_function(
+                "document.getElementById('connection-chat').textContent.includes('primeira mensagem')"
+            )
+
+            other.goto(f"{self.base_url}/editor", wait_until="domcontentloaded")
+            other.wait_for_function(
+                "!document.getElementById('global-chat').hidden"
+            )
+            other.wait_for_function(
+                "document.getElementById('global-chat-messages').textContent.includes('primeira mensagem')"
+            )
+
+            self.page.fill("#connection-chat-input", "segunda mensagem")
+            self.page.click("#connection-chat-send")
+            other.wait_for_function(
+                "document.getElementById('global-chat-messages').textContent.includes('segunda mensagem')"
+            )
+
+            other.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            other.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('CONECTADO')"
+            )
+            history = other.locator("#connection-chat").text_content()
+            self.assertIn("primeira mensagem", history)
+            self.assertIn("segunda mensagem", history)
+        finally:
+            conexao_api.encerrar_tudo()
+            other.close()
+
+    def test_connection_chip_exists_on_every_page_and_follows_state(self):
+        pages = ("/", "/editor", "/conexao", "/resultados", "/benchmark", "/configuracoes")
+        for path in pages:
+            self.page.goto(f"{self.base_url}{path}", wait_until="domcontentloaded")
+            chip = self.page.locator("#conn-chip")
+            self.assertEqual(chip.count(), 1, path)
+            self.assertIn("Sem hub", chip.inner_text(), path)
+
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            hub_port = sock.getsockname()[1]
+        try:
+            self.page.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            self.page.fill("#connection-name", "Alice")
+            self.page.fill("#connection-port", str(hub_port))
+            self.page.click("#connection-start-hub")
+            self.page.wait_for_function(
+                "!document.getElementById('connection-stop-hub').hidden"
+            )
+            self.page.click("#connection-connect")
+            self.page.wait_for_function(
+                "document.getElementById('conn-chip-text').textContent.includes('No hub')"
+            )
+            for path in ("/", "/editor", "/resultados", "/benchmark", "/configuracoes"):
+                self.page.goto(f"{self.base_url}{path}", wait_until="domcontentloaded")
+                self.page.wait_for_function(
+                    "document.getElementById('conn-chip-text').textContent.includes('No hub')"
+                )
+            self.page.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            self.page.wait_for_function(
+                "!document.getElementById('connection-disconnect').hidden"
+            )
+            self.page.click("#connection-disconnect")
+            self.page.wait_for_function(
+                "document.getElementById('conn-chip-text').textContent.includes('Sem hub')"
+            )
+        finally:
+            conexao_api.encerrar_tudo()
+
+    def test_pair_execution_runs_in_editor_with_interactive_terminal(self):
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            hub_port = sock.getsockname()[1]
+
+        cliente_arquivo = "t01_multiterminal/t01_calculadora_cliente.mp"
+        other = self.browser.new_page(viewport={"width": 1440, "height": 950})
+        other.set_default_timeout(60000)
+        try:
+            self.page.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            self.page.fill("#connection-name", "Alice")
+            self.page.fill("#connection-port", str(hub_port))
+            self.page.click("#connection-start-hub")
+            self.page.wait_for_function(
+                "!document.getElementById('connection-stop-hub').hidden"
+            )
+            self.page.click("#connection-connect")
+            self.page.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('NO HUB')"
+            )
+
+            other.goto(f"{self.base_url}/conexao", wait_until="domcontentloaded")
+            other.fill("#connection-name", "Bob")
+            other.fill("#connection-port", str(hub_port))
+            other.click("#connection-connect")
+            other.wait_for_function(
+                "document.getElementById('connection-status').textContent.includes('NO HUB')"
+            )
+
+            # Alice abre o cliente no editor e executa: o convite vai para a sala pública.
+            self.page.goto(
+                f"{self.base_url}/editor?example={cliente_arquivo}",
+                wait_until="domcontentloaded",
+            )
+            self.page.wait_for_function(
+                "document.getElementById('current-file').textContent.includes('cliente')"
+            )
+            self.page.wait_for_function(
+                "document.getElementById('conn-chip-text').textContent.includes('No hub')"
+            )
+            self.page.click("#editor-compile")
+            self.page.wait_for_function(
+                "!document.getElementById('multi-terminal').hidden"
+            )
+
+            other.wait_for_function(
+                "!document.getElementById('conn-invite').hidden"
+            )
+            other.click("#conn-invite-accept")
+
+            # Os dois ficam no editor, cada um com o seu programa, com terminal fixo.
+            other.wait_for_url("**/editor")
+            other.wait_for_function(
+                "document.getElementById('current-file').textContent.includes('servidor')"
+            )
+            self.assertIn(
+                "servidor", other.locator("#current-file").inner_text()
+            )
+            self.page.wait_for_function(
+                "!document.getElementById('multi-terminal-input').disabled"
+            )
+            self.assertTrue(self.page.locator("#input-area").is_hidden())
+            altura = self.page.evaluate(
+                "document.getElementById('multi-terminal-output').getBoundingClientRect().height"
+            )
+            self.assertLessEqual(altura, 160)
+
+            # Os prompts aparecem no terminal na hora, antes de a saída acabar.
+            for prompt, resposta in (
+                ("Operacao", "+"),
+                ("Operando 1", "2"),
+                ("Operando 2", "3"),
+            ):
+                self.page.wait_for_function(
+                    "text => document.getElementById('multi-terminal-output').textContent.includes(text)",
+                    arg=prompt,
+                )
+                self.page.fill("#multi-terminal-input", resposta)
+                self.page.press("#multi-terminal-input", "Enter")
+            self.page.wait_for_function(
+                "document.getElementById('multi-terminal-output').textContent.includes('Resultado')"
+            )
+            self.page.wait_for_function(
+                "document.getElementById('multi-terminal-output').textContent.split('Operacao').length > 2"
+            )
+            self.page.fill("#multi-terminal-input", "sair")
+            self.page.press("#multi-terminal-input", "Enter")
+            self.page.wait_for_function(
+                "document.getElementById('multi-terminal-output').textContent.includes('Resultado')"
+            )
+            self.page.wait_for_function(
+                "document.getElementById('multi-terminal-status').textContent.includes('Conclu')"
+            )
+            self.assertIn(
+                "Execução em par",
+                self.page.locator("#phase-content").inner_text()
+                if self.page.locator("#phase-title").inner_text() == "Execução"
+                else "Execução em par",
+            )
+        finally:
+            conexao_api.encerrar_tudo()
+            other.close()
 
     def test_pages_load_without_external_requests(self):
         external_requests = []
@@ -745,7 +973,7 @@ class FrontendBrowserTests(unittest.TestCase):
 
         self.page.route("**/*", handle_route)
         try:
-            for path in ("/", "/benchmark", "/resultados", "/configuracoes", "/editor", "/modelo-antigo"):
+            for path in ("/", "/benchmark", "/resultados", "/configuracoes", "/editor", "/conexao", "/modelo-antigo"):
                 self.page.goto(
                     f"{self.base_url}{path}", wait_until="domcontentloaded"
                 )

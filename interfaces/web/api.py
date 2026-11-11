@@ -1,4 +1,3 @@
-import glob
 import os
 import re
 import subprocess
@@ -22,6 +21,7 @@ from components.tac.c_gerador_tac import TACGenerator
 from erros.diagnosticos import DiagnosticBag
 
 from ..program_analyzer import get_program_spec
+from .conexao_api import conexao_bp
 from .benchmark import (
     MAX_REQUESTED_CORES,
     available_cpu_count,
@@ -60,6 +60,7 @@ app = Flask(
     template_folder=os.path.join(FRONTEND_DIR, "templates"),
     static_folder=os.path.join(FRONTEND_DIR, "static"),
 )
+app.register_blueprint(conexao_bp)
 
 # Configuração de Diretórios
 TESTS_DIR = os.path.join(PROJECT_ROOT, "programas_teste")
@@ -301,6 +302,11 @@ def editor():
     return render_template('editor.html', active_page='editor')
 
 
+@app.route('/ajuda')
+def ajuda():
+    return render_template('ajuda.html', active_page='ajuda')
+
+
 @app.route('/pipeline')
 def pipeline():
     return render_template('pipeline.html', active_page='pipeline')
@@ -340,8 +346,15 @@ def legacy_model_asset(asset_name: str):
 
 @app.route('/api/tests', methods=['GET'])
 def get_tests():
-    # Retorna os testes ordenados alfabeticamente
-    tests = [os.path.basename(f) for f in glob.glob(os.path.join(TESTS_DIR, '*.mp'))]
+    tests_dir = Path(TESTS_DIR)
+    tests = [
+        path.relative_to(tests_dir).as_posix()
+        for path in tests_dir.rglob('*.mp')
+        if any(
+            line.strip() and not line.lstrip().startswith("#")
+            for line in path.read_text(encoding="utf-8").splitlines()
+        )
+    ]
     return jsonify({"tests": sorted(tests)})
 
 
@@ -555,6 +568,63 @@ def optimize_phases():
     })
 
 
+@app.route('/api/baixar-exe', methods=['POST'])
+def download_executable():
+    """Compila o programa e devolve o executável gerado como download."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("code"), str):
+        return jsonify({
+            "error": "O campo 'code' deve ser texto.", "success": False
+        }), 400
+
+    level = data.get("optimization_level")
+    if level is not None and str(level) not in {"O0", "O1", "O2", "O3"}:
+        return jsonify({
+            "error": "optimization_level deve ser O0, O1, O2 ou O3.",
+            "success": False,
+        }), 400
+
+    compilation = _compile_phases(data["code"])
+    if not compilation["success"]:
+        return jsonify({
+            "error": "O programa tem erros e não pôde ser compilado.",
+            "success": False,
+            "diagnosticos": compilation["diagnosticos"],
+        }), 422
+
+    tac = str(compilation.get("tac") or "")
+    cpp = str(compilation.get("cpp") or "")
+    if tac and level is not None and str(level) != "O0":
+        optimized_tac = TACOptimizer().optimize(tac, str(level))
+        if optimized_tac and str(optimized_tac) != tac:
+            cpp = CppCodeGenerator().generate_source(str(optimized_tac))
+
+    stem = re.sub(
+        r"[^A-Za-z0-9_-]", "_", Path(str(data.get("filename") or "programa")).stem
+    ) or "programa"
+    extension = ".exe" if sys.platform == "win32" else ""
+    with tempfile.TemporaryDirectory(prefix="minipar-exe-") as work_dir:
+        work_path = Path(work_dir)
+        cpp_path = work_path / "program.cpp"
+        executable_path = work_path / f"program{extension}"
+        cpp_path.write_text(cpp, encoding="utf-8")
+        if not DriverGCC().compile(cpp_path, executable_path):
+            return jsonify({
+                "error": "Falha ao compilar o programa C++ com o GCC.",
+                "success": False,
+            }), 500
+        content = executable_path.read_bytes()
+
+    return Response(
+        content,
+        mimetype="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{stem}{extension}"',
+            "Content-Length": str(len(content)),
+        },
+    )
+
+
 @app.route('/api/executar', methods=['POST'])
 def execute_code():
     data = request.get_json(silent=True)
@@ -582,11 +652,20 @@ def execute_code():
             "diagnosticos": compilation["diagnosticos"],
         })
 
+    tac = str(compilation.get("tac") or "")
+    cpp = str(compilation.get("cpp") or "")
+    optimization_level = data.get("optimization_level")
+    if tac and optimization_level is not None and str(optimization_level) in {"O0", "O1", "O2", "O3"}:
+        level = str(optimization_level)
+        optimized_tac = TACOptimizer().optimize(tac, level) if level != "O0" else tac
+        if optimized_tac and str(optimized_tac) != tac:
+            cpp = CppCodeGenerator().generate_source(str(optimized_tac))
+
     with tempfile.TemporaryDirectory(prefix="minipar-web-") as work_dir:
         work_path = Path(work_dir)
         cpp_path = work_path / "program.cpp"
         executable_path = work_path / "program"
-        cpp_path.write_text(str(compilation["cpp"]), encoding="utf-8")
+        cpp_path.write_text(cpp, encoding="utf-8")
         compiled = DriverGCC().compile(cpp_path, executable_path)
         if not compiled:
             return jsonify({

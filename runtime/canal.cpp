@@ -1,6 +1,7 @@
 #include "minipar_rt.hpp"
 
 #include <cerrno>
+#include <cstdlib>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -124,6 +125,14 @@ std::string valid_host_names(const std::map<std::string, MiniParHost>& hosts) {
         first = false;
     }
     return first ? "(nenhum configurado)" : result.str();
+}
+
+// Esperar o outro lado conectar nao deve herdar o timeout longo usado para
+// aguardar digitacao: se o par nao chega em 60 s, o erro aparece logo.
+std::chrono::milliseconds connection_timeout(std::chrono::milliseconds configured) {
+    return configured < std::chrono::seconds(60)
+        ? configured
+        : std::chrono::milliseconds(std::chrono::seconds(60));
 }
 
 void open_logical_channel(
@@ -442,7 +451,19 @@ void validate_port(int port) {
 
 }  // namespace
 
-MiniParChannel::MiniParChannel() : socket_(invalid_socket) {}
+MiniParChannel::MiniParChannel() : socket_(invalid_socket) {
+    // Programas interativos (ex.: calculadora cliente/servidor) esperam o
+    // usuario digitar; o executor define MINIPAR_CHANNEL_TIMEOUT_MS para que o
+    // outro lado nao estoure o timeout padrao de 5 s enquanto isso.
+    const char* configured = std::getenv("MINIPAR_CHANNEL_TIMEOUT_MS");
+    if (configured != nullptr && configured[0] != '\0') {
+        char* end = nullptr;
+        const long long value = std::strtoll(configured, &end, 10);
+        if (end != configured && *end == '\0' && value > 0) {
+            timeout_ = std::chrono::milliseconds(value);
+        }
+    }
+}
 
 MiniParChannel::MiniParChannel(std::string host, int port)
     : MiniParChannel() {
@@ -543,7 +564,7 @@ void MiniParChannel::ouvir(int port) {
     }
 
     try {
-        if (!wait_for_socket(listener, false, timeout_)) {
+        if (!wait_for_socket(listener, false, connection_timeout(timeout_))) {
             throw std::runtime_error("Timeout aguardando conexao no canal.");
         }
         socket_ = accept(listener, nullptr, nullptr);
@@ -599,7 +620,7 @@ void MiniParChannel::conectar(const std::string& host, int port) {
                 candidate,
                 current->ai_addr,
                 static_cast<SocketLength>(current->ai_addrlen),
-                timeout_
+                connection_timeout(timeout_)
             )) {
             socket_ = candidate;
             break;

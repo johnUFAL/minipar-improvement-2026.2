@@ -42,6 +42,19 @@ document.addEventListener("DOMContentLoaded", () => {
     let astReadonlyHighlights = [];
 
     const escape = value => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
+    const CONEXAO_HANDOFF_KEY = "minipar-conexao-handoff";
+    function requiresMultiComputerConnection(source) {
+        const withoutComments = String(source || "").replace(/#[^\n]*/g, "");
+        return /\bc_channel\b/.test(withoutComments) && /\b(?:send|receive)\s*\(/.test(withoutComments);
+    }
+    function readConexaoHandoff() {
+        try {
+            const raw = sessionStorage.getItem(CONEXAO_HANDOFF_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (error) {
+            return null;
+        }
+    }
     function saveCompilerRun(entry) {
         try {
             const previous = JSON.parse(localStorage.getItem(COMPILER_HISTORY_KEY) || "[]");
@@ -521,7 +534,7 @@ document.addEventListener("DOMContentLoaded", () => {
         else if (currentPhase === "symbols") content.innerHTML = `<div class="phase-explainer">${explain.symbols}</div>${json(result.tabela_simbolos)}`;
         else if (currentPhase === "tac") content.innerHTML = `<div class="phase-explainer">${explain.tac}</div><div class="tac-toolbar"><span>Nível selecionado: <b>${optimizationLevel}</b></span><button class="btn secondary" id="compare-tac">Comparar antes/depois</button></div>${result.tac ? mappedCode("Código intermediário", result.tac, result.tac_origin, "tac") : `<p class="hint">Nenhum TAC foi gerado porque há erros no programa.</p>`}`;
         else if (currentPhase === "cpp") content.innerHTML = `<div class="phase-explainer">${explain.cpp}</div>${result.cpp ? mappedCode("Código C++ gerado", result.cpp, result.cpp_origin, "cpp") : `<p class="hint">Nenhum C++ foi gerado porque há erros no programa.</p>`}`;
-        else content.innerHTML = execution ? `<div class="phase-explainer">${explain.execution}</div><div class="execution"><p class="hint">Tempo: ${Number(execution.tempo || 0).toFixed(3)} s · código de saída: ${execution.exit_code ?? "—"}</p><div class="execution-grid"><div class="execution-box"><h3>STDOUT</h3><pre>${escape(execution.stdout)}</pre></div><div class="execution-box"><h3>STDERR</h3><pre>${escape(execution.stderr)}</pre></div></div></div>` : `<div class="phase-placeholder"><strong>Ainda não executado</strong><p>Clique em Executar para ver stdout, stderr e tempo.</p></div>`;
+        else content.innerHTML = execution ? `<div class="phase-explainer">${explain.execution}</div><div class="execution"><p class="hint">Tempo: ${Number(execution.tempo || 0).toFixed(3)} s · código de saída: ${execution.exit_code ?? "—"}</p>${execution.resumo ? `<p class="hint">${escape(execution.resumo)}</p>` : ""}<div class="execution-grid"><div class="execution-box"><h3>STDOUT</h3><pre>${escape(execution.stdout)}</pre></div><div class="execution-box"><h3>STDERR</h3><pre>${escape(execution.stderr)}</pre></div></div></div>` : `<div class="phase-placeholder"><strong>Ainda não executado</strong><p>Clique em Executar para ver stdout, stderr e tempo.</p></div>`;
         if (currentPhase === "ast" && result && result.ast) {
             const astHost = document.getElementById("ast-phase-view");
             if (astHost) {
@@ -561,10 +574,36 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!response.ok) throw new Error("Falha na otimização");
         return response.json();
     }
+    const EXAMPLE_GROUPS = {
+        "": "Programas gerais",
+        "t01_multiterminal": "Dois computadores · Calculadora",
+        "dois_computadores": "Dois computadores · Cliente e servidor",
+        "teste11": "Mini compilador ARM",
+    };
+    function exampleLabel(name) {
+        const base = name.split("/").pop().replace(/\.mp$/, "");
+        const match = base.match(/^(.*)_(cliente|servidor)$/);
+        if (!match) return base;
+        return `${match[1]} · ${match[2] === "cliente" ? "cliente (computador_1)" : "servidor (computador_2)"}`;
+    }
+    function groupedExampleOptions(tests) {
+        const groups = new Map();
+        tests.forEach(name => {
+            const folder = name.includes("/") ? name.split("/")[0] : "";
+            if (!groups.has(folder)) groups.set(folder, []);
+            groups.get(folder).push(name);
+        });
+        const order = ["", ...[...groups.keys()].filter(key => key).sort((a, b) => (a === "dois_computadores") - (b === "dois_computadores") || a.localeCompare(b))];
+        return order.filter(key => groups.has(key)).map(key => {
+            const items = groups.get(key).slice().sort((a, b) => a.localeCompare(b));
+            const label = EXAMPLE_GROUPS[key] || key;
+            return `<optgroup label="${escape(label)}">` + items.map(name => `<option value="${escape(name)}" title="${escape(name)}">${escape(exampleLabel(name))}</option>`).join("") + `</optgroup>`;
+        }).join("");
+    }
     async function loadExamples() {
         const response = await fetch("/api/tests"); const data = await response.json();
         availableTests = data.tests;
-        examples.innerHTML = `<option value="">Escolher um exemplo pronto</option>` + data.tests.map(name => `<option value="${escape(name)}">${escape(name)}</option>`).join("");
+        examples.innerHTML = `<option value="">Escolher um exemplo pronto</option>` + groupedExampleOptions(data.tests);
         const metric = document.getElementById("metric-tests");
         if (metric) metric.textContent = data.tests.length;
         const dashboardExample = document.getElementById("dashboard-example");
@@ -599,6 +638,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const currentFile = document.getElementById("current-file").textContent;
             const source = editor.getValue();
             const inputsText = programInput.value;
+            if (requiresMultiComputerConnection(source) && window.MiniparMulti) {
+                await window.MiniparMulti.iniciar(currentFile, source);
+                return;
+            }
+            if (requiresMultiComputerConnection(source)) {
+                sessionStorage.setItem(CONEXAO_HANDOFF_KEY, JSON.stringify({ file: currentFile, source, inputs: inputsText }));
+                setStatus("Programa exige conexão entre computadores — abrindo o hub...");
+                window.location.href = `/conexao?program=${encodeURIComponent(currentFile)}`;
+                return;
+            }
             const compileResponse = await fetch("/api/compilar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: source }) });
             result = await compileResponse.json();
             execution = null;
@@ -608,7 +657,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 currentPhase = "code"; setStatus("Há erros no programa", true); renderPhase(); return;
             }
             const inputs = inputsText.split(/\r?\n/).filter(line => line.length > 0);
-            const response = await fetch("/api/executar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ code: source, inputs }) });
+            const executionPayload = { code: source, inputs };
+            if (optimizationLevel && optimizationLevel !== "O0") executionPayload.optimization_level = optimizationLevel;
+            const response = await fetch("/api/executar", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(executionPayload) });
             execution = await response.json();
             const runItem = { file: currentFile, source, inputs: inputsText, diagnosticos: result.diagnosticos || [], compileResult: result, optimization: optimizationLevel, success: Boolean(execution.success), time: Number(execution.tempo || 0), execution };
             history.unshift(runItem);
@@ -649,6 +700,44 @@ document.addEventListener("DOMContentLoaded", () => {
         if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
             event.preventDefault();
             run();
+        }
+    });
+    document.getElementById("download-exe-button").addEventListener("click", async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        setStatus("Compilando o executável...");
+        try {
+            const file = document.getElementById("current-file").textContent;
+            const response = await fetch("/api/baixar-exe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: editor.getValue(), filename: file, optimization_level: optimizationLevel }),
+            });
+            if (!response.ok) {
+                let message = "Não foi possível gerar o executável";
+                try {
+                    const data = await response.json();
+                    message = data.error || message;
+                    if (Array.isArray(data.diagnosticos)) markDiagnostics(data.diagnosticos);
+                } catch (error) { /* mantém a mensagem padrão */ }
+                setStatus(message, true);
+                return;
+            }
+            const blob = await response.blob();
+            const disposition = response.headers.get("Content-Disposition") || "";
+            const match = disposition.match(/filename="([^"]+)"/);
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = match ? match[1] : "programa.exe";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+            setStatus(`Executável gerado: ${link.download}`);
+        } catch (error) {
+            setStatus("Não foi possível conectar ao compilador", true);
+        } finally {
+            button.disabled = false;
         }
     });
     document.getElementById("clear-button").addEventListener("click", () => {
@@ -712,8 +801,44 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.getElementById("back-to-results")?.addEventListener("click", () => showPage("results"));
     loadExamples().then(() => {
+        const handoff = readConexaoHandoff();
+        if (handoff && typeof handoff.source === "string") {
+            sessionStorage.removeItem(CONEXAO_HANDOFF_KEY);
+            editor.setValue(handoff.source);
+            document.getElementById("current-file").textContent = handoff.file || "ide_temp.minipar";
+            programInput.value = handoff.inputs || "";
+            showPage("ide");
+            setStatus("Código restaurado do hub de conexão");
+            return;
+        }
         const requested = new URLSearchParams(window.location.search).get("example");
         if (requested) loadExample(requested);
     });
+    window.MiniparEditor = {
+        getFile: () => document.getElementById("current-file").textContent,
+        getCode: () => editor.getValue(),
+        setProgram(file, code) {
+            editor.setValue(code);
+            document.getElementById("current-file").textContent = file;
+            programInput.value = "";
+            examples.value = "";
+        },
+        setStatus,
+        compile,
+        concluirExecucao(resultado) {
+            execution = resultado;
+            const file = document.getElementById("current-file").textContent;
+            const runItem = { file, source: editor.getValue(), inputs: "", diagnosticos: (result && result.diagnosticos) || [], compileResult: result, optimization: optimizationLevel, success: Boolean(resultado.success), time: Number(resultado.tempo || 0), execution: resultado };
+            if (result) {
+                history.unshift(runItem);
+                saveCompilerRun(runItem);
+                renderHistory();
+                renderDashboard();
+            }
+            currentPhase = "execution";
+            setStatus(resultado.success ? "Execução em par concluída" : "Execução em par terminou com erro", !resultado.success);
+            renderPhase();
+        },
+    };
     renderPhase(); renderDashboard(); showPage("ide");
 });

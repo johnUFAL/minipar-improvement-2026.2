@@ -5,9 +5,84 @@
 > `python scripts/run_multiterminal.py --scenario all` para validar as quatro
 > operações, divisão por zero e operação inválida. O procedimento manual está em
 > `programas_teste/t01_multiterminal/README.md`.
-> O menu interativo apenas monitora sessões; ele não inicia os dois processos
-> nem passa `--como`/`--hosts`. Por isso, testes multi-terminal são executados
-> pelo runner scriptado.
+> O menu interativo oferece o hub de conexão (opção **3**), que pareia os dois
+> participantes. Na GUI, o chat e a execução automática (quando o programa usa
+> um canal declarativo) ficam disponíveis depois do aceite. Também é possível
+> executar manualmente pelo runner scriptado ou por `--hosts`/`--como`.
+
+## Hub de conexao
+
+O hub é um ponto único de encontro em TCP. Ele registra participantes, isola
+salas privadas, pareia dois lados por pedido/aceite e relay as mensagens de
+chat. A conexão é sempre 1:1: um participante não pode estar conectado a dois
+outros ao mesmo tempo, e cada sala privada aceita no máximo dois membros.
+
+No terminal, abra o menu principal e escolha **3 - Conexao (Hub)**. Na GUI,
+abra o item **Conexao** na barra lateral, inicie o hub local ou informe o
+endereço de um hub existente, crie/entre em uma sala, selecione o participante
+e aguarde o aceite. O chat da GUI só é habilitado depois do aceite dos dois
+lados.
+
+### Endereço de escuta e servidores disponíveis
+
+Na GUI, o campo **Ouvir em** define em qual interface o hub local aceita
+conexões:
+
+- `0.0.0.0` escuta em todas as interfaces (recomendado quando a máquina tem
+  Wi-Fi, Ethernet ou VPN e você não sabe qual será usada);
+- um IP específico limita o hub àquela interface.
+
+Depois de iniciar, a lista **Servidores disponíveis** mostra o hub local e os
+endereços já usados/salvos neste navegador, com indicação de disponibilidade.
+Clique em um servidor para preencher **Endereço do hub** e **Porta**, ou use
+**Atualizar** para testar novamente os servidores salvos. O botão **Procurar na
+rede** envia uma descoberta UDP e adiciona hubs MiniPar encontrados na mesma
+rede. O campo **Endereço do hub** é o endereço remoto usado para conectar; ele
+não altera o endereço de escuta do hub local.
+
+Para a descoberta automática funcionar, libere também a porta UDP `5011` no
+firewall da máquina que hospeda o hub. Se a rede bloquear broadcast, informe o
+endereço manualmente e use **Atualizar** para testar.
+
+Se outro computador não conseguir conectar, confira se o hub está escutando em
+`0.0.0.0` (ou no IP correto), se a porta TCP está liberada no firewall e se o
+endereço informado pertence à mesma rede. Evite usar endereços de VPN ou
+adaptadores virtuais quando os dois computadores estiverem na LAN.
+
+Inicie o hub em uma das máquinas:
+
+```powershell
+python -m interfaces.conexao.hub --porta 5010
+```
+
+Na outra máquina, use o endereço mostrado pelo comando (`IP:5010`). A porta TCP
+precisa estar liberada no firewall da máquina que hospeda o hub. As mensagens
+trafegam em JSON por linha e não há autenticação de rede: use o hub em uma rede
+confiável.
+
+Programas MiniPar que usam `c_channel` com `send`/`receive` redirecionam para a
+tela de conexão quando executados no editor da GUI. Depois do aceite, a GUI
+coordena a execução automática dos dois lados: o papel que escuta abre a porta,
+avisa quando está pronto e o papel que conecta inicia em seguida. A conexão e
+o chat permanecem ativos ao trocar de tela; o hub é encerrado pelo botão
+**Desligar**, pelo fechamento da aba (após o timeout de inatividade) ou quando
+o processo local termina.
+
+A execução manual pelo runtime de canais continua disponível:
+
+```powershell
+python scripts/run_multiterminal.py --scenario all
+```
+
+Pares adicionais para dois computadores estão em
+`programas_teste/dois_computadores/`:
+
+- T2: `t02_adivinha_servidor.mp` e `t02_adivinha_cliente.mp`;
+- T3: `t03_estoque_servidor.mp` e `t03_estoque_cliente.mp`;
+- T4: conversor de unidades, T5: cofre com senha, T6: pedra/papel/tesoura e T7: estatísticas remotas (`t04_*` a `t07_*`, sufixos `_servidor` e `_cliente`).
+
+O [README dos exemplos](../programas_teste/dois_computadores/README.md) traz
+papéis, entradas de teste e saídas esperadas.
 
 ## Teste 1 — protocolo da calculadora
 

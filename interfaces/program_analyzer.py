@@ -22,6 +22,33 @@ def _extract_title(source: str, filename: str) -> str:
     return os.path.splitext(filename)[0]
 
 
+def _strip_comments(source: str) -> str:
+    """Remove comentários de linha sem afetar o conteúdo de strings."""
+    linhas: list[str] = []
+    for linha in source.splitlines():
+        resultado: list[str] = []
+        em_string = False
+        escape = False
+        for caractere in linha:
+            if em_string:
+                resultado.append(caractere)
+                if escape:
+                    escape = False
+                elif caractere == "\\":
+                    escape = True
+                elif caractere == '"':
+                    em_string = False
+            elif caractere == '"':
+                em_string = True
+                resultado.append(caractere)
+            elif caractere == "#":
+                break
+            else:
+                resultado.append(caractere)
+        linhas.append("".join(resultado))
+    return "\n".join(linhas)
+
+
 def _find_inputs(source: str) -> list[dict[str, str]]:
     """Detecta chamadas input() no código MiniPar."""
     inputs: list[dict[str, str]] = []
@@ -48,36 +75,112 @@ def _find_inputs(source: str) -> list[dict[str, str]]:
     return inputs
 
 
-def _count_channels(source: str) -> int:
-    return len(re.findall(r'\bc_channel\s*\(', source))
+_CHANNEL_DECLARATION = re.compile(
+    r"(?m)^\s*c_channel\s+([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\s+([A-Za-z_]\w*)\b"
+)
+_CHANNEL_FUNCTION = re.compile(r"\bc_channel\s*\(")
+_CHANNEL_FUNCTION_DETAIL = re.compile(
+    r'c_channel\s*\(\s*"((?:\\.|[^"\\])*)"\s*,\s*(\d+)\s*\)'
+)
+
+
+def _extract_channels(source: str) -> list[dict[str, Any]]:
+    """Extrai canais declarativos e chamadas c_channel(host, porta)."""
+    channels: list[dict[str, Any]] = []
+    for match in _CHANNEL_DECLARATION.finditer(source):
+        channels.append({
+            "tipo": "declaracao",
+            "nome": match.group(1),
+            "conecta": match.group(2),
+            "escuta": match.group(3),
+        })
+
+    for match in _CHANNEL_FUNCTION.finditer(source):
+        detail = _CHANNEL_FUNCTION_DETAIL.match(source, match.start())
+        channel: dict[str, Any] = {
+            "tipo": "funcao",
+            "nome": None,
+            "conecta": None,
+            "escuta": None,
+            "host": None,
+            "porta": None,
+        }
+        if detail:
+            channel["host"] = detail.group(1)
+            channel["porta"] = int(detail.group(2))
+        channels.append(channel)
+
+    return channels
+
+
+def _summarize_roles(channels: list[dict[str, Any]]) -> tuple[list[str], dict[str, str]]:
+    roles: list[str] = []
+    role_modes: dict[str, str] = {}
+    for channel in channels:
+        if channel.get("tipo") != "declaracao":
+            continue
+        for papel, modo in (
+            (channel.get("conecta"), "conecta"),
+            (channel.get("escuta"), "escuta"),
+        ):
+            if not isinstance(papel, str):
+                continue
+            if papel not in roles:
+                roles.append(papel)
+            if papel not in role_modes:
+                role_modes[papel] = modo
+            elif role_modes[papel] != modo:
+                role_modes[papel] = "indefinido"
+    return roles, role_modes
 
 
 def analyze_program(source_path: str) -> dict[str, Any]:
     """Analisa um arquivo MiniPar e retorna requisitos de execução."""
     filename = os.path.basename(source_path)
-    source = _read_source(source_path)
-    titulo = _extract_title(source, filename)
+    raw_source = _read_source(source_path)
+    source = _strip_comments(raw_source)
+    titulo = _extract_title(raw_source, filename)
     inputs = _find_inputs(source)
 
     has_send = bool(re.search(r'\bsend\s*\(', source))
     has_receive = bool(re.search(r'\breceive\s*\(', source))
     has_par = bool(re.search(r'\bpar\s*\{', source))
-    channel_count = _count_channels(source)
+    channels = _extract_channels(source)
+    channel_count = len(channels)
+    roles, role_modes = _summarize_roles(channels)
+    declarations = [c for c in channels if c.get("tipo") == "declaracao"]
+    function_channels = [c for c in channels if c.get("tipo") == "funcao"]
+    auto_execution = len(declarations) == 1 and not function_channels
 
     multi_computer: dict[str, Any] | None = None
     # c_channel + send/receive indica comunicação entre terminais distintos
     if channel_count > 0 and (has_send or has_receive):
-        count = max(channel_count, 2)  # mínimo cliente + servidor
-        roles = [f"computador_{i + 1}" for i in range(count)]
+        count = max(len(roles), 2)
+        if auto_execution:
+            instrucoes = (
+                "Este programa declara o canal "
+                f"'{declarations[0]['nome']}'. Escolha um dos papéis, defina a porta "
+                "no lado que escuta e inicie a execução automática."
+            )
+        elif function_channels and not declarations:
+            instrucoes = (
+                "Este programa usa c_channel(host, porta) com endereço fixo. "
+                "A execução automática entre máquinas exige um par com canal "
+                "declarativo (ex.: t01_multiterminal)."
+            )
+        else:
+            instrucoes = (
+                "Este programa declara múltiplos canais. A execução automática "
+                "aceita um canal declarativo por programa nesta versão."
+            )
         multi_computer = {
             "required": True,
             "count": count,
             "roles": roles,
-            "instrucoes": (
-                f"Este programa usa {channel_count} canal(is) de comunicação (c_channel). "
-                f"Abra {count - 1} terminal(is) adicional(is), execute python main.py "
-                f"e escolha 'Continuar teste em andamento'."
-            ),
+            "role_modes": role_modes,
+            "channels": channels,
+            "auto_execution": auto_execution,
+            "instrucoes": instrucoes,
         }
 
     return {

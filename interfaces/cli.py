@@ -5,6 +5,7 @@ import sys
 
 from components.controle.c_controle import compile_file
 
+from .conexao.terminal import executar_menu_conexao, resumo_programa
 from .program_analyzer import get_program_spec
 from .test_orchestrator import (
     _load_session,
@@ -23,7 +24,11 @@ from .test_orchestrator import (
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def executar_binario(output_name: str, interactive: bool = False) -> str:
+def executar_binario(
+    output_name: str, 
+    interactive: bool = False, 
+    predefined_inputs: list[str] | None = None
+) -> str:
     """Executa o binário. Modo interativo quando o programa usa input()."""
     exe_ext = ".exe" if sys.platform == "win32" else ""
     exe_path = os.path.join(PROJECT_ROOT, "output", f"{output_name}{exe_ext}")
@@ -38,17 +43,20 @@ def executar_binario(output_name: str, interactive: bool = False) -> str:
     append_session_log(f"Executando {output_name}.")
 
     try:
-        if interactive:
+        if interactive and not predefined_inputs:
             result = subprocess.run([abs_exe_path], text=True, check=False)
             if result.returncode != 0:
                 print(f"[ERRO] Programa encerrou com codigo {result.returncode}.")
             return ""
 
+        input_text = "\n".join(predefined_inputs) if predefined_inputs else None
+        
         result = subprocess.run(
             [abs_exe_path],
             text=True,
             capture_output=True,
             check=False,
+            input=input_text
         )
         output = result.stdout
         if result.stderr:
@@ -74,15 +82,19 @@ def _exibir_info_teste(test_path: str) -> None:
         print(f"  Multi-terminal: {mc['count']} participante(s)")
 
 
-def rodar_teste(test_path: str) -> None:
+def rodar_teste(test_path: str, permitir_hub: bool = True) -> None:
     spec = get_program_spec(test_path)
     if spec.get("multi_computer"):
-        print("\n  [INFO] Teste multi-terminal detectado.")
-        print("  O menu interativo apenas monitora a sessao; ele nao inicia os")
-        print("  dois processos nem passa --como/--hosts.")
-        print("  Para executar a troca real de mensagens use:")
-        print("    python scripts/run_multiterminal.py --operacao + --v1 7 --v2 5")
-        print("  Documentacao: programas_teste/t01_multiterminal/README.md")
+        resumo_programa(spec)
+        print("\n  [INFO] Este programa exige conexao entre dois participantes.")
+        if not permitir_hub:
+            print("  Pulando no modo automatico. Use a opcao 3 - Conexao (Hub).")
+            return
+        resposta = input("  Abrir o hub de conexao agora? (s/n): ").strip().lower()
+        if resposta in ("s", "sim", "y", "yes"):
+            executar_menu_conexao(spec, test_path)
+        else:
+            print("  Voce pode abrir depois pelo menu principal: opcao 3 - Conexao (Hub).")
         return
 
     base_name = os.path.splitext(os.path.basename(test_path))[0]
@@ -98,13 +110,29 @@ def rodar_teste(test_path: str) -> None:
         print(f"\n  Terminal participante: {get_terminal_id()}\n")
         return
 
+    predefined_inputs = None
+    if interactive:
+        print("\n  [?] Como deseja fornecer as entradas?")
+        print("    [1] Interativo (digitar durante a execução)")
+        print("    [2] Fornecer agora (lista prévia)")
+        escolha_input = input("  Escolha [1/2]: ").strip()
+        if escolha_input == "2":
+            predefined_inputs = []
+            print("  Digite as entradas uma por uma (pressione ENTER sem digitar para finalizar):")
+            while True:
+                line = input("  > ").strip()
+                if not line:
+                    break
+                predefined_inputs.append(line)
+            interactive = False  # Não será mais interativo pois já temos o input
+
     set_session_phase("compiling", "Compilando...", percent=55)
     append_session_log("Compilação iniciada.")
     success = compile_file(test_path, base_name)
     if success:
         set_session_phase("compiling", "Compilação concluída.", percent=80)
         append_session_log("Compilação concluída.")
-        output = executar_binario(base_name, interactive=interactive)
+        output = executar_binario(base_name, interactive=interactive, predefined_inputs=predefined_inputs)
         finalize_test_execution(test_path, output)
     else:
         append_session_log("Erro na compilação.")
@@ -126,7 +154,7 @@ def rodar_todos():
         return
     print(f"\n=== Rodando todos os testes ({len(testes)} encontrados) ===")
     for teste in testes:
-        rodar_teste(teste)
+        rodar_teste(teste, permitir_hub=False)
 
 
 def escolher_teste():
@@ -174,10 +202,11 @@ def exibir_menu():
 
     while True:
         print("\n" + "=" * 45)
-        print(" Menu de Testes - Compilador MiniPar 2026.1")
+        print(" Menu de Testes - Compilador MiniPar 2026.2")
         print("=" * 45)
         print("1 - Rodar todos os testes automaticamente")
         print("2 - Escolher 1 teste para rodar")
+        print("3 - Conexao (Hub)")
         print("0 - Sair")
         print("=" * 45)
 
@@ -187,6 +216,8 @@ def exibir_menu():
             rodar_todos()
         elif opcao == "2":
             escolher_teste()
+        elif opcao == "3":
+            executar_menu_conexao()
         elif opcao == "0":
             print("Saindo...")
             break

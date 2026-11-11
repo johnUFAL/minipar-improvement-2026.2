@@ -3,6 +3,7 @@
 #include <chrono>
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -496,46 +497,45 @@ inline std::vector<double> __parse_ints(const std::string& text) {
 }
 
 inline std::vector<std::string> __minipar_dividir(const std::string& text) {
-    std::vector<std::string> parts;
+    std::vector<std::string> result;
     std::istringstream stream(text);
-    std::string token;
-    while (stream >> token) {
-        parts.push_back(token);
+    std::string value;
+    while (stream >> value) {
+        result.push_back(value);
     }
-    return parts;
+    return result;
 }
 
 inline bool __minipar_eh_inteiro(const std::string& text) {
     if (text.empty()) {
         return false;
     }
-    std::size_t start = 0;
-    if (text[0] == '+' || text[0] == '-') {
-        start = 1;
-    }
-    if (start == text.size()) {
+    errno = 0;
+    char* end = nullptr;
+    std::strtoll(text.c_str(), &end, 10);
+    if (end == text.c_str() || errno == ERANGE) {
         return false;
     }
-    for (std::size_t index = start; index < text.size(); ++index) {
-        if (std::isdigit(static_cast<unsigned char>(text[index])) == 0) {
-            return false;
-        }
+    const char* text_end = text.c_str() + text.size();
+    while (end < text_end &&
+           std::isspace(static_cast<unsigned char>(*end)) != 0) {
+        ++end;
     }
-    return true;
+    return end == text_end;
 }
 
-inline std::vector<int> __minipar_range(int end) {
-    std::vector<int> values;
+inline std::vector<double> __minipar_range(int end) {
+    std::vector<double> values;
     for (int i = 0; i < end; ++i) {
-        values.push_back(i);
+        values.push_back(static_cast<double>(i));
     }
     return values;
 }
 
-inline std::vector<int> __minipar_range(int start, int end) {
-    std::vector<int> values;
+inline std::vector<double> __minipar_range(int start, int end) {
+    std::vector<double> values;
     for (int i = start; i < end; ++i) {
-        values.push_back(i);
+        values.push_back(static_cast<double>(i));
     }
     return values;
 }

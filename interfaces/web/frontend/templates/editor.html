@@ -16,6 +16,7 @@
             <select id="example-select" class="select-control"><option>Carregando...</option></select>
             <label for="optimization">TAC</label>
             <select id="optimization" class="select-control compact"><option value="O0">O0</option><option value="O1">O1</option><option value="O2">O2</option><option value="O3">O3</option></select>
+            <button id="download-exe-button" class="button button-outline" type="button" title="Compila o programa e baixa o executável"><svg class="icon" aria-hidden="true"><use href="#icon-download"></use></svg>Baixar .exe</button>
             <button id="clear-button" class="button button-outline"><svg class="icon" aria-hidden="true"><use href="#icon-trash"></use></svg>Limpar</button>
             <a class="button button-outline" href="/resultados">Resultados</a>
         </div>
@@ -24,7 +25,12 @@
         <article class="editor-panel card">
             <div class="panel-title"><span><span class="panel-mark"><svg class="icon" aria-hidden="true"><use href="#icon-code"></use></svg></span> Código-fonte</span><small>MINIPAR · EDITÁVEL</small></div>
             <textarea id="source-editor" aria-label="Editor de código MiniPar"></textarea>
-            <div class="input-area"><label for="program-input">ENTRADAS DO PROGRAMA <span>stdin · uma por linha</span></label><textarea id="program-input" class="program-input" placeholder="42"></textarea></div>
+            <div class="input-area" id="input-area"><label for="program-input">ENTRADAS DO PROGRAMA <span>stdin · uma por linha</span></label><textarea id="program-input" class="program-input" placeholder="42"></textarea></div>
+            <div class="multi-terminal" id="multi-terminal" hidden>
+                <div class="multi-terminal-head"><span id="multi-terminal-status" class="multi-terminal-status">TERMINAL · EXECUÇÃO EM PAR</span><span class="multi-terminal-actions"><button type="button" id="multi-terminal-cancel" class="button button-outline" hidden>Cancelar convite</button><button type="button" id="multi-terminal-stop" class="button button-danger" hidden>Parar</button><button type="button" id="multi-terminal-close" class="button button-outline" hidden>Fechar</button></span></div>
+                <div id="multi-terminal-output" class="multi-terminal-output" role="log" aria-live="polite" aria-label="Terminal da execução em par" tabindex="0"></div>
+                <form id="multi-terminal-form" class="multi-terminal-form"><span class="multi-terminal-prompt" aria-hidden="true">&gt;</span><input id="multi-terminal-input" class="multi-terminal-input" placeholder="Digite a resposta do programa e pressione Enter" autocomplete="off" aria-label="Entrada do programa" disabled></form>
+            </div>
             <div class="editor-actions"><button class="button button-primary compile-button" id="editor-compile" type="button"><svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg><span class="button-label">Compilar e executar</span><span class="button-label-short">Executar</span></button><span>Ctrl + Enter</span></div>
         </article>
         <article class="phase-panel card">
@@ -49,4 +55,5 @@
 <script src="{{ url_for('static', filename='vendor/codemirror/5.65.13/mode/clike/clike.min.js') }}"></script>
 <script src="{{ url_for('static', filename='ast_view.js') }}"></script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+<script src="{{ url_for('static', filename='multi_exec.js') }}"></script>
 {% endblock %}

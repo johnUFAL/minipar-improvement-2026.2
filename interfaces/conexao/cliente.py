@@ -1,0 +1,684 @@
+"""Cliente do hub de conexão MiniPar.
+
+Mantém uma thread leitora que atualiza o estado local e publica eventos em uma
+fila. As interfaces (terminal e web) usam os métodos públicos e consultam
+``snapshot``/``drenar_eventos`` para desenhar a tela.
+"""
+from __future__ import annotations
+
+import copy
+import queue
+import socket
+import threading
+import time
+from datetime import datetime
+from typing import Any, BinaryIO
+
+from .protocolo import (
+    ProtocoloErro,
+    codificar,
+    decodificar,
+    normalizar_contexto_execucao,
+    normalizar_convite,
+    normalizar_nome,
+    normalizar_texto_chat,
+)
+
+MAX_HISTORICO_CHAT = 200
+INTERVALO_PING = 20.0
+
+
+def _agora() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
+def _execucao_inicial() -> dict[str, Any]:
+    return {
+        "estado": "ocioso",
+        "programa": None,
+        "papel": None,
+        "modo": "",
+        "host": "",
+        "porta": None,
+        "peer": None,
+        "peer_endereco": None,
+        "peer_host": "",
+        "peer_porta": None,
+        "peer_preparado": False,
+        "peer_pronto": False,
+        "peer_fim": None,
+        "preparado": False,
+        "pronto": False,
+        "erro": "",
+        "motivo_parar": "",
+        "parar_solicitado": False,
+        "exit_code": None,
+    }
+
+
+class ClienteHub:
+    """Conexão de um participante com o hub."""
+
+    def __init__(self) -> None:
+        self._lock = threading.RLock()
+        self._enviar_lock = threading.Lock()
+        self._eventos: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._registro = threading.Event()
+        self._sock: socket.socket | None = None
+        self._arquivo: BinaryIO | None = None
+        self._thread: threading.Thread | None = None
+        self._fechado = False
+        self._ultimo_ping = 0.0
+        self._host = ""
+        self._porta = 0
+        self.peer_id: str | None = None
+        self.nome = ""
+        self.estado = "desconectado"
+        self.sala: dict[str, Any] | None = None
+        self.peers: list[dict[str, str]] = []
+        self.salas: list[dict[str, Any]] = []
+        self.convites: list[dict[str, Any]] = []
+        self.convite_enviado: dict[str, Any] | None = None
+        self.convite_resultado: dict[str, Any] | None = None
+        self.execucao_multi: dict[str, Any] | None = None
+        self.conectado_com: dict[str, str] | None = None
+        self.solicitacao: dict[str, Any] | None = None
+        self.aguardando: dict[str, Any] | None = None
+        self.historico_chat: list[dict[str, Any]] = []
+        self.execucao: dict[str, Any] = _execucao_inicial()
+        self.ultimo_erro = ""
+
+    # ---------------------------------------------------------------- conexão
+    def ip_local_hub(self) -> str | None:
+        """IP local usado na conexão com o hub (a rede em que o hub é alcançado)."""
+        with self._lock:
+            sock = self._sock
+        if sock is None:
+            return None
+        try:
+            return sock.getsockname()[0]
+        except OSError:
+            return None
+
+    def conectar(
+        self,
+        host: str,
+        porta: int,
+        nome: str,
+        timeout: float = 5.0,
+    ) -> None:
+        """Conecta ao hub, registra o nome e espera a confirmação."""
+        if self._sock is not None:
+            raise ConnectionError("Já existe uma conexão ativa com o hub.")
+        nome_normalizado = normalizar_nome(nome)
+        sock = socket.create_connection((host, int(porta)), timeout=timeout)
+        sock.settimeout(None)
+        with self._lock:
+            self._sock = sock
+            self._arquivo = sock.makefile("rb")
+            self._host = host
+            self._porta = int(porta)
+            self.nome = nome_normalizado
+            self.execucao = _execucao_inicial()
+            self._fechado = False
+        self._thread = threading.Thread(
+            target=self._ler,
+            name="minipar-cliente-hub",
+            daemon=True,
+        )
+        self._thread.start()
+        self._enviar({"type": "registrar", "nome": nome_normalizado})
+        if not self._registro.wait(timeout):
+            self.fechar()
+            raise TimeoutError("O hub não confirmou o registro.")
+        if self.peer_id is None:
+            erro = self.ultimo_erro or "O hub recusou o registro."
+            self.fechar()
+            raise ConnectionError(erro)
+
+    def fechar(self) -> None:
+        """Encerra a conexão local sem depender do hub."""
+        with self._lock:
+            self._fechado = True
+            arquivo, sock = self._arquivo, self._sock
+            self._arquivo = None
+            self._sock = None
+            self.estado = "desconectado"
+            self.conectado_com = None
+            self.solicitacao = None
+            self.aguardando = None
+            self.convites = []
+            self.convite_enviado = None
+            self.execucao_multi = None
+            self.execucao = _execucao_inicial()
+        self._registro.set()
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+        if arquivo is not None:
+            try:
+                arquivo.close()
+            except OSError:
+                pass
+        thread = self._thread
+        self._thread = None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+
+    def manter_vivo(self) -> None:
+        """Envia um ping periódico para o hub não encerrar por inatividade."""
+        with self._lock:
+            if self._sock is None or self.estado == "desconectado":
+                return
+            agora = time.monotonic()
+            if agora - self._ultimo_ping < INTERVALO_PING:
+                return
+            self._ultimo_ping = agora
+        try:
+            self._enviar({"type": "ping"})
+        except ConnectionError:
+            pass
+
+    # ---------------------------------------------------------------- leitura
+    def _ler(self) -> None:
+        arquivo = self._arquivo
+        if arquivo is None:
+            return
+        try:
+            while not self._fechado:
+                linha = arquivo.readline()
+                if not linha:
+                    break
+                try:
+                    mensagem = decodificar(linha)
+                except ProtocoloErro as erro:
+                    with self._lock:
+                        self.ultimo_erro = str(erro)
+                    break
+                self._processar(mensagem)
+        except OSError:
+            pass
+        finally:
+            with self._lock:
+                if not self._fechado and self.estado != "desconectado":
+                    self.estado = "desconectado"
+                    self.conectado_com = None
+            self._registro.set()
+
+    def _processar(self, mensagem: dict[str, Any]) -> None:
+        tipo = mensagem.get("type")
+        with self._lock:
+            if tipo == "registrado":
+                self.peer_id = str(mensagem.get("peer_id") or "")
+                self.nome = str(mensagem.get("nome") or self.nome)
+                self._atualizar_sala(mensagem.get("sala"))
+                self.peers = self._peers(mensagem)
+                self.estado = "registrado"
+                self._registro.set()
+            elif tipo == "peers":
+                self.peers = self._peers(mensagem)
+                self._atualizar_sala(mensagem.get("sala"))
+            elif tipo == "salas":
+                salas = mensagem.get("salas")
+                self.salas = [
+                    item for item in salas if isinstance(item, dict)
+                ] if isinstance(salas, list) else []
+            elif tipo in ("sala_atual", "sala_criada"):
+                nova = mensagem.get("sala")
+                mudou = isinstance(nova, dict) and (
+                    (self.sala or {}).get("codigo") != nova.get("codigo")
+                )
+                self._atualizar_sala(nova)
+                self.peers = self._peers(mensagem)
+                if mudou or mensagem.get("motivo") in (
+                    "sala_encerrada", "inatividade", "saida"
+                ):
+                    self.solicitacao = None
+                    self.aguardando = None
+                    self.estado = "registrado"
+                    self.conectado_com = None
+                    self.execucao = _execucao_inicial()
+            elif tipo == "exec_convite":
+                self.convites = [
+                    c for c in self.convites
+                    if c.get("convite_id") != mensagem.get("convite_id")
+                ] + [mensagem]
+            elif tipo == "exec_convite_enviado":
+                self.convite_enviado = mensagem
+                self.convite_resultado = None
+            elif tipo == "exec_convite_aceito":
+                self.execucao = _execucao_inicial()
+                self.convite_enviado = None
+                self.convite_resultado = {
+                    "resultado": "aceito",
+                    "nome": str((mensagem.get("peer") or {}).get("nome") or ""),
+                }
+                dados = mensagem.get("dados") or {}
+                self.execucao_multi = {
+                    "convite_id": mensagem.get("convite_id"),
+                    "origem": "iniciador",
+                    "arquivo": dados.get("arquivo"),
+                    "programa": dados.get("programa"),
+                    "papel": dados.get("papel_iniciador"),
+                    "parceiro": mensagem.get("peer"),
+                }
+            elif tipo == "exec_convite_confirmado":
+                self.execucao = _execucao_inicial()
+                self.convites = [
+                    c for c in self.convites
+                    if c.get("convite_id") != mensagem.get("convite_id")
+                ]
+                dados = mensagem.get("dados") or {}
+                self.execucao_multi = {
+                    "convite_id": mensagem.get("convite_id"),
+                    "origem": "convidado",
+                    "arquivo": dados.get("par_arquivo"),
+                    "programa": dados.get("programa"),
+                    "papel": dados.get("papel_convidado"),
+                    "parceiro": {
+                        "id": mensagem.get("de"),
+                        "nome": mensagem.get("nome"),
+                    },
+                }
+            elif tipo == "exec_convite_recusado":
+                self.convite_resultado = {
+                    "resultado": "recusado",
+                    "nome": str((mensagem.get("peer") or {}).get("nome") or ""),
+                }
+            elif tipo == "exec_convite_encerrado":
+                convite_id = mensagem.get("convite_id")
+                self.convites = [
+                    c for c in self.convites if c.get("convite_id") != convite_id
+                ]
+                if (self.convite_enviado or {}).get("convite_id") == convite_id:
+                    self.convite_enviado = None
+                    if mensagem.get("motivo") in (
+                        "todos_recusaram", "expirado", "todos_sairam"
+                    ):
+                        self.convite_resultado = {
+                            "resultado": str(mensagem.get("motivo")),
+                            "nome": "",
+                        }
+            elif tipo == "solicitacao":
+                self.solicitacao = mensagem
+            elif tipo == "aguardando":
+                self.aguardando = mensagem
+            elif tipo == "resposta":
+                if not mensagem.get("aceitar"):
+                    self.aguardando = None
+                    self.solicitacao = None
+            elif tipo == "conectado":
+                peer = mensagem.get("peer")
+                self.execucao = _execucao_inicial()
+                self.conectado_com = peer if isinstance(peer, dict) else None
+                self.estado = "conectado"
+                self.solicitacao = None
+                self.aguardando = None
+                self._atualizar_sala(mensagem.get("sala"))
+            elif tipo == "peer_desconectou":
+                self.estado = "registrado"
+                self.conectado_com = None
+                self._marcar_peer_ausente(
+                    "O outro participante desconectou."
+                )
+            elif tipo == "desconectado":
+                self.estado = "registrado"
+                self.conectado_com = None
+                self.execucao = _execucao_inicial()
+            elif tipo == "exec_contexto":
+                contexto = mensagem.get("contexto")
+                if isinstance(contexto, dict):
+                    self.execucao["peer"] = contexto
+                    self.execucao["peer_endereco"] = str(
+                        mensagem.get("endereco") or ""
+                    )
+                    self.execucao["peer_host"] = str(
+                        contexto.get("host") or ""
+                    )
+                    porta = contexto.get("porta")
+                    self.execucao["peer_porta"] = (
+                        int(porta)
+                        if isinstance(porta, int)
+                        and not isinstance(porta, bool)
+                        else None
+                    )
+                    self.execucao["peer_preparado"] = False
+                    self.execucao["peer_pronto"] = False
+                    self.execucao["peer_fim"] = None
+            elif tipo == "exec_preparado":
+                self.execucao["peer_preparado"] = True
+            elif tipo == "exec_pronto":
+                self.execucao["peer_pronto"] = True
+                self.execucao["pronto"] = True
+                host = mensagem.get("host")
+                if isinstance(host, str) and host:
+                    self.execucao["peer_host"] = host
+                porta = mensagem.get("porta")
+                if isinstance(porta, int) and not isinstance(porta, bool):
+                    self.execucao["peer_porta"] = porta
+            elif tipo == "exec_fim":
+                codigo = mensagem.get("exit_code")
+                self.execucao["peer_fim"] = (
+                    int(codigo)
+                    if isinstance(codigo, int) and not isinstance(codigo, bool)
+                    else None
+                )
+            elif tipo == "exec_erro":
+                self.execucao["erro"] = str(
+                    mensagem.get("mensagem") or "Falha na execução."
+                )
+                self.execucao["estado"] = "erro"
+                self.execucao["parar_solicitado"] = True
+            elif tipo == "exec_parar":
+                self.execucao["parar_solicitado"] = True
+                self.execucao["motivo_parar"] = str(
+                    mensagem.get("motivo") or "Encerrado pelo outro participante."
+                )
+                if self.execucao["estado"] in (
+                    "preparando",
+                    "aguardando",
+                    "executando",
+                ):
+                    self.execucao["estado"] = "parando"
+            elif tipo == "chat":
+                self._registrar_chat({
+                    "de": str(mensagem.get("de") or ""),
+                    "nome": str(mensagem.get("nome") or ""),
+                    "texto": str(mensagem.get("texto") or ""),
+                    "hora": str(mensagem.get("hora") or _agora()),
+                    "proprio": False,
+                })
+            elif tipo == "erro":
+                self.ultimo_erro = str(mensagem.get("mensagem") or "Erro no hub.")
+            elif tipo == "pong":
+                pass
+        if tipo != "pong":
+            self._eventos.put(mensagem)
+
+    def _atualizar_sala(self, sala: object) -> None:
+        """Atualiza a sala atual e limpa o chat quando a sala muda."""
+        if not isinstance(sala, dict):
+            return
+        anterior = (self.sala or {}).get("codigo")
+        if anterior is not None and anterior != sala.get("codigo"):
+            self.historico_chat = []
+        self.sala = sala
+
+    @staticmethod
+    def _peers(mensagem: dict[str, Any]) -> list[dict[str, str]]:
+        peers = mensagem.get("peers")
+        if not isinstance(peers, list):
+            return []
+        return [peer for peer in peers if isinstance(peer, dict)]
+
+    def _registrar_chat(self, entrada: dict[str, Any]) -> None:
+        self.historico_chat.append(entrada)
+        if len(self.historico_chat) > MAX_HISTORICO_CHAT:
+            self.historico_chat = self.historico_chat[-MAX_HISTORICO_CHAT:]
+
+    def _marcar_peer_ausente(self, motivo: str) -> None:
+        execucao = self.execucao
+        execucao["peer"] = None
+        execucao["peer_host"] = ""
+        execucao["peer_porta"] = None
+        execucao["peer_preparado"] = False
+        execucao["peer_pronto"] = False
+        if execucao["estado"] in (
+            "preparando",
+            "aguardando",
+            "executando",
+            "parando",
+        ):
+            execucao["estado"] = "erro"
+            execucao["erro"] = motivo
+            execucao["parar_solicitado"] = True
+
+    # ----------------------------------------------------------------- envio
+    def _enviar(self, mensagem: dict[str, Any]) -> None:
+        with self._lock:
+            sock = self._sock
+        if sock is None:
+            raise ConnectionError("Não conectado ao hub.")
+        dados = codificar(mensagem)
+        with self._enviar_lock:
+            try:
+                sock.sendall(dados)
+            except OSError as erro:
+                raise ConnectionError(f"Falha ao enviar ao hub: {erro}") from erro
+
+    def listar(self) -> None:
+        self._enviar({"type": "listar"})
+
+    def criar_sala(
+        self,
+        nome: str,
+        privada: bool = True,
+        senha: str = "",
+    ) -> None:
+        self._enviar({
+            "type": "criar_sala",
+            "nome": nome,
+            "privada": privada,
+            "senha": senha,
+        })
+
+    def entrar_sala(self, codigo: str, senha: str = "") -> None:
+        self._enviar({
+            "type": "entrar_sala",
+            "codigo": codigo,
+            "senha": senha,
+        })
+
+    def convidar_execucao(self, convite: dict[str, str]) -> None:
+        """Convida o parceiro (ou a sala) para executar um programa em par."""
+        with self._lock:
+            if self.estado == "desconectado":
+                raise ValueError("Entre em um hub para convidar.")
+        dados = normalizar_convite(convite)
+        with self._lock:
+            self.convite_resultado = None
+        self._enviar({"type": "exec_convidar", "convite": dados})
+
+    def responder_convite(self, convite_id: str, aceitar: bool) -> None:
+        self._enviar({
+            "type": "exec_convite_resposta",
+            "convite_id": convite_id,
+            "aceitar": bool(aceitar),
+        })
+        if not aceitar:
+            with self._lock:
+                self.convites = [
+                    c for c in self.convites
+                    if c.get("convite_id") != convite_id
+                ]
+
+    def cancelar_convite(self) -> None:
+        with self._lock:
+            enviado = self.convite_enviado
+            self.convite_enviado = None
+        if enviado:
+            self._enviar({
+                "type": "exec_convite_cancelar",
+                "convite_id": enviado.get("convite_id"),
+            })
+
+    def limpar_execucao_multi(self) -> None:
+        with self._lock:
+            self.execucao_multi = None
+
+    def listar_salas(self) -> None:
+        self._enviar({"type": "listar_salas"})
+
+    def sair_sala(self) -> None:
+        self._enviar({"type": "sair_sala"})
+
+    def solicitar(self, peer_id: str) -> None:
+        self._enviar({"type": "solicitar", "peer_id": peer_id})
+
+    def responder(self, request_id: str, aceitar: bool) -> None:
+        self._enviar({
+            "type": "responder",
+            "request_id": request_id,
+            "aceitar": bool(aceitar),
+        })
+
+    def chat(self, texto: str) -> None:
+        texto_normalizado = normalizar_texto_chat(texto)
+        with self._lock:
+            if self.estado == "desconectado" or self.sala is None:
+                raise ValueError("Entre em um hub para conversar.")
+        self._enviar({"type": "chat", "texto": texto_normalizado})
+        with self._lock:
+            self._registrar_chat({
+                "de": self.peer_id or "",
+                "nome": self.nome,
+                "texto": texto_normalizado,
+                "hora": _agora(),
+                "proprio": True,
+            })
+
+    def _exigir_conexao_ativa(self) -> None:
+        with self._lock:
+            if self.estado != "conectado":
+                raise ValueError(
+                    "Conecte-se a outro participante antes de executar."
+                )
+
+    def anunciar_execucao(
+        self,
+        programa: str,
+        papel: str,
+        canais: list[dict[str, str]],
+        *,
+        host: str = "",
+        porta: int | None = None,
+        modo: str = "",
+    ) -> None:
+        """Envia o contexto local de execução para o parceiro via hub."""
+        self._exigir_conexao_ativa()
+        contexto = normalizar_contexto_execucao({
+            "programa": programa,
+            "papel": papel,
+            "canais": canais,
+            "host": host,
+            "porta": porta,
+            "modo": modo,
+        })
+        with self._lock:
+            self.execucao.update({
+                "estado": "preparando",
+                "programa": contexto["programa"],
+                "papel": contexto["papel"],
+                "modo": contexto["modo"],
+                "host": contexto["host"],
+                "porta": contexto["porta"],
+                "preparado": False,
+                "pronto": False,
+                "erro": "",
+                "motivo_parar": "",
+                "parar_solicitado": False,
+                "exit_code": None,
+            })
+        self._enviar({"type": "exec_contexto", "contexto": contexto})
+
+    def marcar_execucao_preparada(self) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["preparado"] = True
+            self.execucao["estado"] = "aguardando"
+        self._enviar({"type": "exec_preparado"})
+
+    def marcar_execucao_pronta(
+        self,
+        *,
+        host: str = "",
+        porta: int | None = None,
+    ) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["pronto"] = True
+            self.execucao["estado"] = "executando"
+            if host:
+                self.execucao["host"] = host
+            if porta is not None:
+                self.execucao["porta"] = porta
+        self._enviar({
+            "type": "exec_pronto",
+            "host": host,
+            "porta": porta,
+        })
+
+    def informar_execucao_fim(self, exit_code: int | None) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["exit_code"] = exit_code
+            self.execucao["estado"] = "concluido"
+        self._enviar({"type": "exec_fim", "exit_code": exit_code})
+
+    def informar_execucao_erro(self, mensagem: str) -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["erro"] = mensagem
+            self.execucao["estado"] = "erro"
+        self._enviar({"type": "exec_erro", "mensagem": mensagem})
+
+    def parar_execucao(self, motivo: str = "") -> None:
+        self._exigir_conexao_ativa()
+        with self._lock:
+            self.execucao["parar_solicitado"] = True
+            if self.execucao["estado"] in (
+                "preparando",
+                "aguardando",
+                "executando",
+            ):
+                self.execucao["estado"] = "parando"
+        self._enviar({"type": "exec_parar", "motivo": motivo})
+
+    def resetar_execucao(self) -> None:
+        with self._lock:
+            self.execucao = _execucao_inicial()
+
+    def desconectar(self) -> None:
+        self._enviar({"type": "desconectar"})
+
+    # ---------------------------------------------------------------- consulta
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "estado": self.estado,
+                "peer_id": self.peer_id,
+                "nome": self.nome,
+                "hub": (
+                    {"host": self._host, "porta": self._porta}
+                    if self._sock is not None
+                    else None
+                ),
+                "sala": self.sala,
+                "peers": list(self.peers),
+                "salas": list(self.salas),
+                "convites": copy.deepcopy(self.convites),
+                "convite_enviado": copy.deepcopy(self.convite_enviado),
+                "convite_resultado": copy.deepcopy(self.convite_resultado),
+                "execucao_multi": copy.deepcopy(self.execucao_multi),
+                "conectado_com": self.conectado_com,
+                "solicitacao": self.solicitacao,
+                "aguardando": self.aguardando,
+                "chat": list(self.historico_chat),
+                "execucao": copy.deepcopy(self.execucao),
+                "ultimo_erro": self.ultimo_erro,
+            }
+
+    def drenar_eventos(self) -> list[dict[str, Any]]:
+        eventos: list[dict[str, Any]] = []
+        while True:
+            try:
+                eventos.append(self._eventos.get_nowait())
+            except queue.Empty:
+                break
+        return eventos

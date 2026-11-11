@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Ajuda — MiniPar 2026.2{% endblock %}
+{% block page_label %}Ajuda{% endblock %}
+{% block current_file %}guia rápido{% endblock %}
+
+{% block content %}
+<section id="page-help" class="page active-page help-page">
+    <div class="page-intro">
+        <div><p class="kicker">GUIA RÁPIDO</p><h1>Ajuda do MiniPar</h1><p class="intro-copy">Como escrever, compilar, executar e baixar programas MiniPar, inclusive em dois computadores.</p></div>
+        <div class="intro-actions"><a class="button button-outline" href="/pipeline">Como funciona o pipeline</a><a class="button button-primary" href="/editor">Abrir editor <span>→</span></a></div>
+    </div>
+
+    <div class="help-grid">
+        <article class="card help-card">
+            <h2>1. Usando o editor</h2>
+            <ul>
+                <li><b>Exemplo:</b> escolha um programa pronto na lista; os pares cliente/servidor ficam agrupados.</li>
+                <li><b>Compilar e executar</b> (<kbd>Ctrl</kbd> + <kbd>Enter</kbd>): gera o executável e roda o programa. Use as fases Código, Tokens, AST, Símbolos, TAC, C++ e Execução para acompanhar cada etapa.</li>
+                <li><b>TAC O0–O3:</b> nível de otimização aplicado ao código de três endereços antes de gerar o C++.</li>
+                <li><b>Baixar .exe:</b> compila o programa atual e baixa o executável para rodar fora da interface.</li>
+                <li><b>Entradas do programa:</b> uma linha por <code>input()</code>.</li>
+            </ul>
+        </article>
+
+        <article class="card help-card">
+            <h2>2. Linguagem</h2>
+<pre class="help-code"># comentário
+class Contador {
+    n = 0
+    def init(inicio) { this.n = inicio }
+    def passo() { this.n = this.n + 1 }
+}
+
+SEQ
+    var c = new Contador(0)
+    var i = 0
+    while i &lt; 3:
+        c.passo()
+        i = i + 1
+    do:
+        i = i - 1
+    while i &gt; 0
+    for x in range(3):
+        print(x)
+    print("n =", c.n)</pre>
+            <p class="card-copy">Tipos: <code>bool</code>, <code>int</code>, <code>float</code>, <code>string</code>, <code>list</code>. Laços: <code>while</code>, <code>do … while</code> e <code>for … in</code>. Blocos usam indentação ou chaves.</p>
+        </article>
+
+        <article class="card help-card">
+            <h2>3. Paralelismo</h2>
+<pre class="help-code">PAR
+    fatorial()
+    fibonacci()
+
+fork a em core(1):
+    trabalho_a()
+fork b em host("computador_2"):
+    trabalho_b()
+join a, b</pre>
+            <p class="card-copy"><code>PAR</code> executa ramos em threads sem memória compartilhada; <code>fork</code> distribui subtarefas em núcleos (<code>core</code>) ou computadores (<code>host</code>) e <code>join</code> espera o término.</p>
+        </article>
+
+        <article class="card help-card">
+            <h2>4. Canais e dois computadores</h2>
+<pre class="help-code">c_channel dados computador_1 computador_2
+
+dados.send("+", 2.0, 3.0, 0.0)
+dados.receive(status, resultado, a, b)</pre>
+            <ol>
+                <li>Abra <b>Conexão</b>, crie ou escolha um hub e entre em uma sala.</li>
+                <li>Abra o programa <code>cliente</code> no editor e clique em executar: o outro lado recebe um convite.</li>
+                <li>Quando aceitar, os dois vão ao editor, cada um com o seu programa, e o terminal de execução aparece.</li>
+            </ol>
+            <p class="card-copy">O chip no topo mostra se você está em um hub e em qual sala. Em redes virtuais (Radmin, Hamachi), libere as portas do hub no firewall.</p>
+        </article>
+
+        <article class="card help-card">
+            <h2>5. Entendendo os erros</h2>
+            <p class="card-copy">Os diagnósticos informam a fase (léxica, sintática ou semântica), a linha e a coluna. Corrija o primeiro erro e compile de novo: erros seguintes costumam ser consequência dele. Os exemplos ficam em <code>programas_teste/</code>.</p>
+        </article>
+    </div>
+</section>
+{% endblock %}

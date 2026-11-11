@@ -148,6 +148,35 @@
 3. Atualizar [README.md](README.md) com instruções para gerar/atualizar CSS se houver etapa de build.
 4. Validar as telas com a rede desativada e verificar que nenhuma dependência externa é carregada.
 
+## Atualização — T49 (#49), 08/11/2026
+
+O T49 avançou na migração da nova IDE:
+
+- O terminal, o painel de progresso e a integração de sessões multi-terminal
+  na interface nova foram removidos conforme a decisão do mantenedor; a tela
+  `/editor` voltou a cobrir as fases do compilador sem o terminal novo.
+- O seletor `-O` foi integrado ao fluxo de execução: `POST /api/executar`
+  aceita `optimization_level` (O0–O3), otimiza o TAC com `TACOptimizer` e
+  regenera o C++ com `CppCodeGenerator`.
+- Testes de integração novos cobrem a otimização no endpoint de execução e o
+  ciclo de vida da sessão (`/api/session`, `/join`, `/ready`, `/clear`); teste
+  de regressão garante que a tela `/editor` não renderiza o terminal removido.
+
+### Tabela de paridade — legado → novo layout
+
+| Função legada | Destino no novo layout | Estado |
+|---|---|---|
+| Explorer com specs | Explorador de programas com specs (metadados multi-computador, ex.: t01_calculadora.mp); a IDE nova não carrega specs | Pendente |
+| Editor de código | Fase `code` (7 fases do compilador) | Disponível |
+| Tokens / AST / Símbolos / TAC / C++ / Execução | Fases 1–7 | Disponível |
+| Terminal | Painel da IDE nova que exibia o STDOUT/STDERR em execução; removido por decisão do mantenedor | Removido |
+| Entradas | Campo de inputs na fase de execução | Disponível |
+| Seletor `-O` | `optimization_level` em `/api/executar` | Integrado |
+| Botões run/compile/save | Ações das fases e histórico | Disponível |
+
+Pendências: validar fluxo completo em duas sessões/navegadores (Playwright sem
+Chromium no ambiente local) e fechar a issue remota #49.
+
 ## Sequência recomendada
 
 1. Fechar os defeitos e testes dos programas T1–T7 (#32–38) e a validação de arrays (#45).

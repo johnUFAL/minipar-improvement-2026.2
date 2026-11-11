@@ -32,7 +32,7 @@ components/
   controle/        c_controle.py
 erros/             diagnosticos.py
 runtime/           minipar_rt.hpp, canal.cpp, paralelo.cpp
-interfaces/        cli.py, web/api.py, web/frontend/
+interfaces/        cli.py, web/api.py, web/frontend/, conexao/
 programas_teste/   programas MiniPar (.mp)
 benchmarks/        t08_..., t09_..., t10_...
 docs/              gramatica.md, uml/, relatorio/, backlog.md
@@ -151,6 +151,54 @@ As rotas que carregam programas de `programas_teste` (`POST /api/get_test`,
 relativos dentro desse diretório. Caminhos absolutos, componentes `..`, nomes
 vazios, valores que não sejam texto e arquivos inexistentes são rejeitados;
 entradas inválidas retornam `400` e arquivos ausentes retornam `404`.
+
+## Conexão entre dois computadores ou duas sessões
+
+O hub de conexão pareia exatamente dois participantes, permite criar salas
+privadas com senha e mantém um chat enquanto a conexão estiver ativa. Ele está
+disponível no modo terminal (menu principal, opção **3 - Conexão (Hub)**) e na
+GUI (item **Conexão** na barra lateral).
+
+No modo terminal o hub não tem chat; na GUI, o chat aparece depois que os dois
+lados aceitam a conexão. Programas que usam `c_channel` com `send`/`receive`
+redirecionam automaticamente para a tela de conexão quando executados no
+editor.
+
+Um dos lados inicia o hub:
+
+```bash
+python -m interfaces.conexao.hub --porta 5010
+```
+
+O outro lado usa o endereço `IP:5010` mostrado pelo hub. Também é possível
+iniciar o hub pela própria GUI em **Conexão → Iniciar hub local** e liberar a
+porta TCP no firewall da máquina que hospeda o hub. Na GUI, **Ouvir em** permite
+escolher `0.0.0.0` (todas as interfaces) ou um IP específico, e a lista
+**Servidores disponíveis** guarda e testa os hubs já usados. Use **Atualizar**
+para verificar se eles continuam acessíveis ou **Procurar na rede** para
+descobrir hubs por UDP (porta `5011`). As salas privadas aceitam no máximo dois
+membros; a sala pública serve para encontrar participantes.
+
+A conexão e o chat continuam ativos ao trocar de tela. O cliente envia um ping
+periódico ao hub enquanto alguma página da GUI estiver aberta, e um chat
+flutuante aparece nas demais telas enquanto o pareamento estiver conectado.
+Para encerrar de fato, use **Desligar** na tela de conexão; se a aba for fechada,
+o hub remove a sessão por inatividade após o timeout.
+
+Depois do aceite, o hub também coordena a execução automática dos dois lados
+quando o programa declara um canal com `c_channel`. A execução manual pelo
+runtime de canais continua disponível em [docs/rede.md](docs/rede.md), com
+`scripts/run_multiterminal.py` ou com `--hosts`/`--como`.
+
+Pares adicionais para dois computadores ficam em
+`programas_teste/dois_computadores/`:
+
+- `t02_adivinha_servidor.mp` e `t02_adivinha_cliente.mp`;
+- `t03_estoque_servidor.mp` e `t03_estoque_cliente.mp`;
+- `t04_conversor_*`, `t05_senha_*`, `t06_jokenpo_*` e `t07_estatisticas_*` (cada um com `_servidor` e `_cliente`).
+
+As instruções, entradas de teste e saídas esperadas estão no
+[README dos exemplos](programas_teste/dois_computadores/README.md).
 
 Para executar os testes unitários:
 
