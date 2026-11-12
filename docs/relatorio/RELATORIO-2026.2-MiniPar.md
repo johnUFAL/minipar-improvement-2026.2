@@ -319,7 +319,7 @@ Recuperação é **por instrução** (sincroniza em `NEWLINE`/`DEDENT`/`EOF`), r
 |---|---|
 | Declarações/raiz | `Program(statements)`, `FuncDecl(name, params, body, return_type)`, `MethodDecl(FuncDecl)`, `Parameter(name, type, default_value)`, `ClassDecl(name, superclass, attributes, methods)`, `VarDecl(name, type, init_value)`, `AttributeDecl(VarDecl)`, `ChannelDecl(name, first_host, second_host)` |
 | Comandos | `SeqBlock`, `ParBlock`, `Assignment`, `PropertyAssign`, `IndexAssign`, `PrintStmt`, `SendStmt`, `ReturnStmt`, `BreakStmt`, `ContinueStmt` |
-| Fluxo | `IfStmt(condition, then, else)` (com `elif` aninhado), `WhileStmt`, `DoWhileStmt(body, condition)` (produzido pelo parser a partir de `do … while`; no TAC usa os rótulos `DO_n`, `DO_CONDITION_n`, `ENDDO_n`), `ForStmt(iterator_name, iterable, body)` |
+| Fluxo | `IfStmt(condition, then, else)` (com `elif` aninhado), `WhileStmt`, `DoWhileStmt(body, condition)` (produzido pelo parser a partir de `do … while`; no TAC usa `DO_n` e emite `DO_CONDITION_n`/`ENDDO_n` somente quando o corpo usa `continue`/`break`, evitando rótulos não referenciados), `ForStmt(iterator_name, iterable, body)` |
 | Concorrência | `ForkStmt(task_name, target_kind, target, body)`, `JoinStmt(task_names)` |
 | Expressões | `NumberExpr`, `StringExpr`, `CharExpr`, `BoolExpr`, `IdentifierExpr`, `BinaryExpr(op,left,right)`, `UnaryExpr`, `ListLiteral`, `MatrixCreateExpr`, `FuncCallExpr`, `MethodCall`, `PropertyAccess`, `NewExpr`, `ThisExpr`, `IndexExpr`, `InputExpr`, `CChannelExpr`/`ReceiveExpr` (legado) |
 
@@ -641,7 +641,7 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
   python scripts/run_multiterminal.py --scenario all
   python scripts/run_multiterminal.py --requests "/,5,0;+,12,30;sair"
   ```
-  O `t01_calculadora.mp` original (com `c_channel("127.0.0.1",5101)`) fica como referência histórica, não executável sozinho. Evidência:
+  O `t01_calculadora.mp` original (com `c_channel("127.0.0.1",5101)`) foi removido do diretório de testes por não ser executável sozinho; o par cliente/servidor em `t01_multiterminal/` é a referência atual. Evidência:
   ```text
   Servidor recebeu: + 7.0 5.0 / Servidor respondeu: OK 12.0
   Cliente enviou: + 7.0 5.0 / Resultado: 12.0
@@ -665,9 +665,9 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
 
 ### 11.2 Testes adicionais e inválidos
 
-- `teste_adicional1_paralelismo_3_computadores.mp` — `PAR` com `send`/`receive` em 3 canais; `fork ... em host("computador_2")`.
+- `teste_adicional1_paralelismo_3_nucleos.mp` — `fork ... em core(1..3)` com três resumos independentes, execução local sem canais.
 - `teste_adicional2_tapete_sierpinski.mp` — regra dos dígitos na base 3 sem `turtle`.
-- `teste_ascii_art_divertidapkrl.mp`, `teste_bnf_controles_input.mp`, `teste_builtins_string.mp` — matriz ASCII, controles+Bnf com `input`, builtins de string/arquivo.
+- `teste_ascii_art_divertidapkrl.mp`, `teste_bnf_controles_input.mp`, `teste_builtins_string.mp` — autômato celular com listas ASCII, controles+Bnf com `input`, builtins de string/arquivo.
 - **Pares para dois computadores** (`programas_teste/dois_computadores/`, 6 pares): `tests/integracao/test_dois_computadores.py` compila e executa cada par de verdade (cliente e servidor em processos separados, com entradas de teste) e confere as saídas dos dois lados; `tests/integracao/test_conexao_hub.py` cobre salas, dono, inatividade, chat e convites.
 - **10 programas inválidos** em `tests/programas/invalidos/` cobrindo léxico, sintático, semântico e concorrência, cada com mensagem esperada em `test_invalid_programs.py`. Fronteiras: léxico→parser, parser→semântico, semântico→TAC, TAC→C++ (`ValueError` em opcode desconhecido), C++→GCC.
 
