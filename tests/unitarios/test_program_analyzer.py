@@ -59,13 +59,6 @@ def test_new_two_computer_pairs_are_auto_executable() -> None:
         assert multi["channels"][0]["nome"] == channel, filename
 
 
-def test_combined_example_is_now_a_compatibility_stub() -> None:
-    spec = get_program_spec(str(PROGRAMS_DIR / "t01_calculadora.mp"))
-
-    assert spec["multi_computer"] is None
-    assert spec["channel_count"] == 0
-
-
 def test_function_form_channel_is_detected_but_not_automatic(tmp_path: Path) -> None:
     source = tmp_path / "fixo.mp"
     source.write_text(

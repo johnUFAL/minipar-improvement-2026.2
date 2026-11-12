@@ -321,8 +321,8 @@ void minipar_println(const Values&... values) {
 }
 
 template<typename T>
-std::size_t __minipar_len(const T& value) {
-    return value.size();
+std::int64_t __minipar_len(const T& value) {
+    return static_cast<std::int64_t>(value.size());
 }
 
 template<typename T>

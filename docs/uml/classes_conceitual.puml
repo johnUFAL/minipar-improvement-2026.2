@@ -1,0 +1,268 @@
+@startuml classes_conceitual
+title MiniPar 2026.2 - Modelo conceitual (compilador + runtime)
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam defaultFontName Monospaced
+skinparam nodesep 22
+skinparam ranksep 38
+left to right direction
+hide empty members
+
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #444444
+  ArrowColor #555555
+  FontSize 12
+}
+skinparam class<<orquestracao>> {
+  BackgroundColor #E8F0FE
+  BorderColor #35507A
+}
+skinparam class<<frontend>> {
+  BackgroundColor #E6F4EA
+  BorderColor #2E7D4F
+}
+skinparam class<<backend>> {
+  BackgroundColor #FFF4E5
+  BorderColor #A66A1F
+}
+skinparam class<<runtime>> {
+  BackgroundColor #F4ECF7
+  BorderColor #6B4C8A
+}
+skinparam class<<contrato>> {
+  BackgroundColor #FFF8DC
+  BorderColor #B8860B
+}
+skinparam class<<artefato>> {
+  BackgroundColor #F2F2F2
+  BorderColor #777777
+}
+
+package "1. Orquestracao" {
+  class CompiladorMiniPar <<orquestracao>> {
+    +compile_file(source, output) : bool
+  }
+  interface IControle <<contrato>> {
+    +compile(source, output) : bool
+  }
+  class CControle <<orquestracao>> {
+    +analyze(source) : Program
+    +compile(source, output) : bool
+  }
+  class "compile_file()" as CompileFile <<orquestracao>>
+}
+
+package "2. Front-end" {
+  interface ILexico <<contrato>> {
+    +initialize(source)
+    +next_token() : Token
+  }
+  class Lexer <<frontend>> {
+    +tokenize() : list[Token]
+  }
+  class Token <<frontend>> {
+    +type : TokenType
+    +lexeme : str
+    +line, column : int
+  }
+  enum TokenType <<frontend>> {
+    IDENTIFIER
+    INT_LITERAL
+    FLOAT_LITERAL
+    STRING_LITERAL
+    NEWLINE
+    INDENT
+    DEDENT
+    END_OF_FILE
+    ...
+  }
+
+  interface ISintatico <<contrato>> {
+    +parse(lexer, semantic) : Program
+  }
+  class Parser <<frontend>> {
+    +parse() : Program
+  }
+  class ASTNode <<frontend>> {
+    +line, column : int
+    +tipo_inferido : str
+    +para_dict() : dict
+  }
+  class Program <<frontend>> {
+    +statements : tuple[ASTNode, ...]
+  }
+
+  interface ISemantico <<contrato>> {
+    +analyze(program) : bool
+    +diagnostics : Sequence[Diagnostic]
+  }
+  class SemanticAnalyzer <<frontend>> {
+    +analyze(program) : bool
+    +diagnostics : Sequence[Diagnostic]
+  }
+
+  interface ITabelaSimbolos <<contrato>> {
+    +enter_scope(name, reuse)
+    +exit_scope()
+    +define(symbol) : bool
+    +lookup(name) : Symbol
+    +export() : dict
+  }
+  class TabelaSimbolos <<frontend>> {
+    +define(symbol) : bool
+    +lookup(name) : Symbol
+    +export() : dict
+  }
+  class Symbol <<frontend>> {
+    +name : str
+    +type : str
+    +category : str
+    +scope : str
+  }
+
+  class Diagnostic <<frontend>> {
+    +phase : Phase
+    +message : str
+    +line, column : int
+  }
+  class DiagnosticBag <<frontend>> {
+    +report(diagnostic)
+    +has_errors : bool
+    +format_text() : str
+  }
+}
+
+package "3. Back-end" {
+  interface IGeradorTAC <<contrato>> {
+    +generate(program, output) : str
+  }
+  class TACGenerator <<backend>> {
+    +generate_text(program) : str
+    +generate(program, output) : str
+  }
+  class "TAC (.tac)" as TAC <<artefato>> {
+    3 enderecos, em texto
+  }
+
+  interface IGeradorCpp <<contrato>> {
+    +generate(tac, output) : bool
+  }
+  class CppCodeGenerator <<backend>> {
+    +generate_source(tac) : str
+    +generate(tac, output, nivel) : bool
+  }
+  class "C++ (.cpp)" as Cpp <<artefato>>
+
+  class DriverGCC <<backend>> {
+    +compile(cpp_path, output, nivel) : bool
+    +executar(saida, args) : Result
+  }
+  class "Executavel" as Exe <<artefato>>
+}
+
+package "4. Runtime" {
+  class MiniParChannel <<runtime>> {
+    +enviar<T...>()
+    +receber<T...>()
+  }
+  class "minipar_parallel()" as Parallel <<runtime>> {
+    threads + core(N)
+  }
+  class Worker <<runtime>> {
+    +main(porta)
+  }
+  class "minipar.hosts" as Hosts <<artefato>> {
+    IP/porta por computador
+  }
+}
+
+' ---- Orquestracao ----
+CompiladorMiniPar ..> IControle : delega
+CControle ..|> IControle
+
+' ---- Front-end ----
+Lexer ..> ILexico : segue
+Lexer ..> Token : produz
+Parser ..> ISintatico : segue
+Parser ..> Token : consome
+Parser ..> Program : produz
+Program *-- "0..*" ASTNode : compoe
+SemanticAnalyzer ..> ISemantico : segue
+SemanticAnalyzer ..> Program : analisa
+SemanticAnalyzer *-- TabelaSimbolos
+SemanticAnalyzer ..> DiagnosticBag : reporta
+TabelaSimbolos ..|> ITabelaSimbolos
+TabelaSimbolos o-- "0..*" Symbol : armazena
+DiagnosticBag o-- "0..*" Diagnostic : acumula
+Token --> TokenType : type
+
+' ---- Back-end ----
+TACGenerator ..> IGeradorTAC : segue
+TACGenerator ..> Program : consome
+TACGenerator ..> TAC : grava
+CppCodeGenerator ..> IGeradorCpp : segue
+CppCodeGenerator ..> TAC : consome
+CppCodeGenerator ..> Cpp : grava
+CppCodeGenerator ..> DriverGCC : aciona
+DriverGCC ..> Exe
+
+' ---- Runtime ----
+Exe ..> MiniParChannel : canais TCP
+Exe ..> Parallel : core(N)
+Exe ..> Worker : host("...")
+Worker ..> Hosts : le
+
+note bottom of CompileFile
+  Fluxo concreto do CLI: instancia
+  Lexer, Parser, SemanticAnalyzer,
+  TACGenerator e CppCodeGenerator
+  em sequencia (main.py / cli.py).
+end note
+
+note right of IControle
+  Contratos ABC: CControle recebe
+  as fases por injecao (ILexico,
+  ISintatico, ISemantico, IGeradorTAC,
+  IGeradorCpp), o que permite fakes
+  nos testes.
+  --
+  No codigo atual, so TabelaSimbolos
+  herda de ITabelaSimbolos; as demais
+  classes cumprem o contrato por
+  tipagem estrutural (duck typing).
+end note
+
+note bottom of DiagnosticBag
+  Um unico DiagnosticBag atravessa
+  lexico, sintatico e semantico,
+  com linha e coluna.
+end note
+
+' mantem as camadas na ordem do pipeline
+"1. Orquestracao" -[hidden]down-> "2. Front-end"
+"2. Front-end" -[hidden]down-> "3. Back-end"
+"3. Back-end" -[hidden]down-> "4. Runtime"
+
+legend right
+  Cores por camada:
+  azul    orquestracao (controle)
+  verde   front-end (analises)
+  laranja back-end (TAC, C++, GCC)
+  lilas   runtime de execucao
+  amarelo contratos ABC
+  cinza   artefatos gerados
+  --
+  Pipeline: .mp -> Token[] -> Program (AST)
+  -> TabelaSimbolos + DiagnosticBag
+  -> .tac -> .cpp -> executavel
+  --
+  TAC hoje e texto; instrucoes tipadas
+  (InstrucaoTAC) sao plano futuro
+  (tac_planejado.puml).
+endlegend
+
+@enduml

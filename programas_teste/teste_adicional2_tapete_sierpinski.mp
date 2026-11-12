@@ -1,34 +1,34 @@
-func preencher(tela, linha, coluna, tamanho) {
-    if (tamanho == 1) {
-        tela[linha][coluna] = "#";
-        return tela;
-    }
-
-    var novo = tamanho / 3;
-    var i = 0;
-    while (i < 3) {
-        var j = 0;
-        while (j < 3) {
-            if (!((i == 1) && (j == 1))) {
-                tela = preencher(tela, linha + (i * novo), coluna + (j * novo), novo);
-            }
-            j = j + 1;
+# Teste adicional 2: tapete de Sierpinski (regra dos digitos na base 3)
+func celula_vazia(x: int, y: int) {
+    var a = x;
+    var b = y;
+    var vazio = false;
+    while (a > 0 || b > 0) {
+        if ((a % 3 == 1) && (b % 3 == 1)) {
+            vazio = true;
         }
-        i = i + 1;
+        a = int(a / 3);
+        b = int(b / 3);
     }
-
-    return tela;
+    return vazio;
 }
 
 seq {
     print("==== Teste adicional 2: tapete de Sierpinski ====");
     var tamanho = 9;
-    var tela = matrix(tamanho, tamanho, " ");
-    tela = preencher(tela, 0, 0, tamanho);
-
-    var i = 0;
-    while (i < tamanho) {
-        print(tela[i]);
-        i = i + 1;
+    var y = 0;
+    while (y < tamanho) {
+        var linha = "";
+        var x = 0;
+        while (x < tamanho) {
+            if (celula_vazia(x, y)) {
+                linha = linha + " ";
+            } else {
+                linha = linha + "#";
+            }
+            x = x + 1;
+        }
+        print(linha);
+        y = y + 1;
     }
 }

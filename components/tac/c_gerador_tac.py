@@ -56,7 +56,9 @@ class TACGenerator:
         self.temp_count = 0
         self.label_count = 0
         self.break_stack: list[str] = []
+        self.break_used_stack: list[bool] = []
         self.continue_stack: list[str] = []
+        self.continue_used_stack: list[bool] = []
         self.variable_types: dict[str, str] = {}
         self.functions: dict[str, FuncDecl] = {}
         self.classes: dict[str, ClassDecl] = {}
@@ -737,24 +739,34 @@ class TACGenerator:
         elif isinstance(node, WhileStmt):
             start, end = self._label("WHILE"), self._label("ENDWHILE")
             self.break_stack.append(end)
+            self.break_used_stack.append(False)
             self.continue_stack.append(start)
+            self.continue_used_stack.append(False)
             self._emit(f"{start}:")
             self._emit(f"ifFalse {self._expr(node.condition)} goto {end}")
             self._stmt(node.body)
             self._emit(f"goto {start}")
             self._emit(f"{end}:")
             self.break_stack.pop()
+            self.break_used_stack.pop()
             self.continue_stack.pop()
+            self.continue_used_stack.pop()
         elif isinstance(node, DoWhileStmt):
             start = self._label("DO")
             condition, end = self._label("DO_CONDITION"), self._label("ENDDO")
             self.break_stack.append(end)
+            self.break_used_stack.append(False)
             self.continue_stack.append(condition)
+            self.continue_used_stack.append(False)
             self._emit(f"{start}:")
             self._stmt(node.body)
-            self._emit(f"{condition}:")
+            condition_used = self.continue_used_stack.pop()
+            break_used = self.break_used_stack.pop()
+            if condition_used:
+                self._emit(f"{condition}:")
             self._emit(f"if {self._expr(node.condition)} goto {start}")
-            self._emit(f"{end}:")
+            if break_used:
+                self._emit(f"{end}:")
             self.break_stack.pop()
             self.continue_stack.pop()
         elif isinstance(node, ForStmt):
@@ -772,14 +784,19 @@ class TACGenerator:
                     self._label("ENDFOR"),
                 )
                 self.break_stack.append(end)
+                self.break_used_stack.append(False)
                 self.continue_stack.append(step)
+                self.continue_used_stack.append(False)
                 self._emit(f"{start}:")
                 self._emit(f"if {index_name} >= len({sequence_name}) goto {end}")
                 self._emit(
                     f"{node.iterator_name} = {sequence_name}[{index_name}]"
                 )
                 self._stmt(node.body)
-                self._emit(f"{step}:")
+                step_used = self.continue_used_stack.pop()
+                self.break_used_stack.pop()
+                if step_used:
+                    self._emit(f"{step}:")
                 self._emit(f"{index_name} = {index_name} + 1")
                 self._emit(f"goto {start}")
                 self._emit(f"{end}:")
@@ -793,12 +810,17 @@ class TACGenerator:
             )
             self._stmt(node.initializer)
             self.break_stack.append(end)
+            self.break_used_stack.append(False)
             self.continue_stack.append(step)
+            self.continue_used_stack.append(False)
             self._emit(f"{start}:")
             if node.condition:
                 self._emit(f"ifFalse {self._expr(node.condition)} goto {end}")
             self._stmt(node.body)
-            self._emit(f"{step}:")
+            step_used = self.continue_used_stack.pop()
+            self.break_used_stack.pop()
+            if step_used:
+                self._emit(f"{step}:")
             self._stmt(node.increment)
             self._emit(f"goto {start}")
             self._emit(f"{end}:")
@@ -807,10 +829,12 @@ class TACGenerator:
         elif isinstance(node, BreakStmt):
             if not self.break_stack:
                 raise ValueError("break fora de loop")
+            self.break_used_stack[-1] = True
             self._emit(f"goto {self.break_stack[-1]}")
         elif isinstance(node, ContinueStmt):
             if not self.continue_stack:
                 raise ValueError("continue fora de loop")
+            self.continue_used_stack[-1] = True
             self._emit(f"goto {self.continue_stack[-1]}")
         elif isinstance(node, ReturnStmt):
             self._emit(f"ret {self._expr(node.value)}" if node.value else "ret")
@@ -833,7 +857,9 @@ class TACGenerator:
         self.temp_count = 0
         self.label_count = 0
         self.break_stack = []
+        self.break_used_stack = []
         self.continue_stack = []
+        self.continue_used_stack = []
         self.variable_types = {}
         self._return_type_cache = {}
         self._return_type_stack = set()
