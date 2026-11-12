@@ -58,7 +58,36 @@ def test_do_while_vira_rotulos_no_tac() -> None:
     tac = TACGenerator().generate_text(programa)
 
     assert not diagnosticos.has_errors
-    assert "DO_" in tac and "ENDDO" in tac
+    assert "DO_" in tac
+    # Rotulos de continue/break so sao emitidos quando usados.
+    assert "DO_CONDITION" not in tac
+    assert "ENDDO" not in tac
+
+
+def test_do_while_com_continue_emite_rotulo_da_condicao() -> None:
+    programa, diagnosticos = _parse(
+        "seq {\n    var i = 0;\n    do {\n        i = i + 1;\n"
+        "        continue;\n    } while (i < 3);\n}\n"
+    )
+
+    tac = TACGenerator().generate_text(programa)
+
+    assert not diagnosticos.has_errors
+    assert "DO_CONDITION" in tac
+    assert "ENDDO" not in tac
+
+
+def test_do_while_com_break_emite_rotulo_final() -> None:
+    programa, diagnosticos = _parse(
+        "seq {\n    var i = 0;\n    do {\n        i = i + 1;\n"
+        "        break;\n    } while (i < 3);\n}\n"
+    )
+
+    tac = TACGenerator().generate_text(programa)
+
+    assert not diagnosticos.has_errors
+    assert "ENDDO" in tac
+    assert "DO_CONDITION" not in tac
 
 
 def test_do_sem_while_e_erro_sintatico() -> None:

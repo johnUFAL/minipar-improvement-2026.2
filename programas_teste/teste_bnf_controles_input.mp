@@ -5,7 +5,7 @@ func ler_nome() {
 
 seq {
     var soma = 0;
-    for (var i = 0; i < 5; i = i + 1) {
+    for i in range(5) {
         if (i == 3) {
             continue;
         }

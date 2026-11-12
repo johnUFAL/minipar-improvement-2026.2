@@ -1,3 +1,4 @@
+# Teste adicional 1: paralelismo com 3 nucleos (execucao local)
 func quicksort_resumo() {
     return "PC1 QuickSort: [33,12,98,5,61] -> [5,12,33,61,98]";
 }
@@ -18,34 +19,19 @@ func fatorial_resumo() {
 }
 
 seq {
-    print("==== Teste adicional 1: paralelismo real com 3 computadores ====");
-    print("Menu do Computador 1");
-    print("1 - Quick sort no Computador 1: 127.0.0.1:5301");
-    print("2 - Multiplicacao de matrizes no Computador 2: 127.0.0.1:5302");
-    print("3 - Fatorial no Computador 3: 127.0.0.1:5303");
+    print("==== Teste adicional 1: paralelismo com 3 nucleos ====");
+    print("Nucleo 1: QuickSort | Nucleo 2: Matrizes | Nucleo 3: Fatorial");
 
-    var canal_pc1 = c_channel("127.0.0.1", 5301);
-    var canal_pc2 = c_channel("127.0.0.1", 5302);
-    var canal_pc3 = c_channel("127.0.0.1", 5303);
-
-    par {
-        seq {
-            var resultado1 = receive(canal_pc1);
-            var resultado2 = receive(canal_pc2);
-            var resultado3 = receive(canal_pc3);
-            print("Resultados recolhidos no Computador 1:");
-            print(resultado1);
-            print(resultado2);
-            print(resultado3);
-        }
-        seq {
-            send(canal_pc1, quicksort_resumo());
-        }
-        seq {
-            send(canal_pc2, matrizes_resumo());
-        }
-        seq {
-            send(canal_pc3, fatorial_resumo());
-        }
+    fork pc1 em core(1) {
+        print(quicksort_resumo());
     }
+    fork pc2 em core(2) {
+        print(matrizes_resumo());
+    }
+    fork pc3 em core(3) {
+        print(fatorial_resumo());
+    }
+    join pc1, pc2, pc3
+
+    print("==== Fim do teste adicional 1 ====");
 }

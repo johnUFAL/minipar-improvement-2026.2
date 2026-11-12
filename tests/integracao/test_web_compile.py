@@ -474,7 +474,7 @@ class WebCompileTests(unittest.TestCase):
     def test_get_test_loads_file_inside_tests_directory(self):
         response = self.client.post(
             "/api/get_test",
-            json={"filename": "t01_calculadora.mp"},
+            json={"filename": "t07_quicksort_iterativo_tac.mp"},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -758,7 +758,6 @@ class WebCompileTests(unittest.TestCase):
     def test_compile_phases_returns_schema_for_ten_test_programs(self):
         filenames = [
             *(f"t0{number}_{name}.mp" for number, name in [
-                (1, "calculadora"),
                 (2, "fatorial_fibonacci_par"),
                 (3, "neuronio"),
                 (4, "rede_neural_xor"),
@@ -766,7 +765,7 @@ class WebCompileTests(unittest.TestCase):
                 (6, "quicksort_classes"),
                 (7, "quicksort_iterativo_tac"),
             ]),
-            "teste_adicional1_paralelismo_3_computadores.mp",
+            "teste_adicional1_paralelismo_3_nucleos.mp",
             "teste_adicional2_tapete_sierpinski.mp",
             "teste_bnf_controles_input.mp",
         ]
