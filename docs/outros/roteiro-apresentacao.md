@@ -283,12 +283,12 @@ Slide com números (todos versionados no repo):
 | Métrica | Valor | Onde está a evidência |
 |---|---|---|
 | Testes de aceitação T1–T11 | **11/11 passaram** | `docs/relatorio/resultados/testes_2026_2/*.json` + logs |
-| Suíte `pytest` | 339 passed, 3 skipped, 141 subtests (18 min 52 s) | `docs/relatorio/RELATORIO-TESTES-2026.2.md` |
+| Suíte `pytest` | execução atual medida no checkout (ver `docs/relatorio/RELATORIO-2026.2-MiniPar.md` §11) | `docs/relatorio/RELATORIO-2026.2-MiniPar.md` §11 |
 | Cobertura mínima no CI | 80% (`pytest-cov`) | workflow do GitHub Actions |
 | `ruff` + `mypy` | passam | idem |
 | Speedup T4 (rede neural XOR) | **15,62×** (`0,0147 s` C++ vs `0,2292 s` Python) | `docs/relatorio/resultados/t04_tempo.json` |
 | Speedup T8–T10 (paralelo) | **~3,1×** (meta > 2,5×) | `docs/relatorio/resultados/t08_t10_tempo.json` |
-| Testes escritos | 369 funções de teste (195 unit, 138 integração, 25 programas, 11 runtime) | `tests/` |
+| Testes escritos | 506 testes coletados (321 unitários + integração/programas/runtime) | `tests/` |
 
 **Fala:**
 
@@ -422,10 +422,10 @@ PowerPoint), para manter a mesma linguagem visual do conjunto `docs/uml/`.
 
 | Programa | O que evidencia | Compila | Executa | Saída-chave |
 |---|---|---|---|---|
-| `t07_quicksort_iterativo_tac.mp` | TAC **sem recursão** (pilha explícita) — o TAC mais legível | 6,1 s | 0,01 s | `Array ordenado: [5, 12, 33, 61, 98]` |
+| `t07_quicksort_tac.mp` | TAC **sem recursão** (pilha explícita) — o TAC mais legível | 6,1 s | 0,01 s | `Array ordenado: [5, 12, 33, 61, 98]` |
 | `t02_fatorial_fibonacci_par.mp` | `seq`/`par` + recursão + funções | 7,4 s | 0,25 s | `Fatorial de 10: 3628800` |
 | `t08_avaliacao_4_nucleos.mp` | `fork ... em core(N)` + **speedup medido ao vivo** | 7,1 s | 0,6 s | `0,46 s` sequencial → `0,12 s` paralelo (**≈3,8×**) |
-| `t06_quicksort_classes.mp` | classes + `input()` (interação com o usuário) | 5,7 s | <0,1 s | `Vetor ordenado: [-100, -40, -3, 10, 70, 80]` |
+| `t06_quicksort_interativo.mp` | classes + `input()` (interação com o usuário) | 5,7 s | <0,1 s | `Vetor ordenado: [-100, -40, -3, 10, 70, 80]` |
 | `t11_minicompilador_arm.mp` | **MiniPar gerando Assembly ARMv7** (o "efeito uau") | 11,5 s | <0,1 s | tokens/AST/TAC/Assembly + 3 arquivos `.arm` |
 | `t01` (par cliente/servidor) | canal TCP entre dois processos | — | — | `Servidor recebeu: + 7.0 5.0` / `Resultado: 12.0` |
 
@@ -433,18 +433,18 @@ Comandos (o `main.py` é o caminho que **funciona**; a CLI com `-o` relativo que
 
 ```bash
 # TAC legível, sem compilar
-minipar compilar programas_teste/t07_quicksort_iterativo_tac.mp --tac | head -25
+minipar compilar programas_teste/t07_quicksort_tac.mp --tac | head -25
 
 # build + execução nativa
-python3 main.py programas_teste/t07_quicksort_iterativo_tac.mp
-./output/t07_quicksort_iterativo_tac
+python3 main.py programas_teste/t07_quicksort_tac.mp
+./output/t07_quicksort_tac
 
 # speedup ao vivo
 python3 main.py programas_teste/t08_avaliacao_4_nucleos.mp
 ./output/t08_avaliacao_4_nucleos
 
 # entrada do usuário
-echo "10 -3 -40 80 70 -100" | ./output/t06_quicksort_classes
+echo "10 -3 -40 80 70 -100" | ./output/t06_quicksort_interativo
 
 # T1 em localhost (dois processos, canal TCP)
 python3 scripts/run_multiterminal.py --scenario all

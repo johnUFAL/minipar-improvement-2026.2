@@ -59,24 +59,24 @@ Este relatório descreve tecnicamente o projeto **minipar-improvement 2026.2**, 
 
 O objetivo é atender ao enunciado 2026.2: blocos sequenciais e paralelos (`SEQ`/`PAR`), orientação a objetos (classes, herança, `new`, `self`), funções com padrões e retorno tipado, estruturas de controle, paralelismo por núcleo (`fork ... em core(N)`) e por máquina (`fork ... em host("...")`), canais de comunicação TCP tipados, entrada/saída, comentários iniciados por `#`, interface CLI e IDE web didática, testes de software e documentação alinhada à gramática formal.
 
-A versão 2026.2 é uma **revisão profunda** da base 2026.1, não apenas uma reentrega. A mudança mais visível é a adoção de sintaxe por **indentação estilo Python** (`INDENT`/`DEDENT`, 4 espaços por nível), substituindo chaves `{ }` e `;`. Canais deixam de ser expressão `c_channel(ip, porta)` e passam a ser **declaração lógica no topo do programa** (`c_channel nome computador_1 computador_2`), com configuração física via `minipar.hosts`. O backend passa de C++20 com `-O3` fixo para **C++17 com `-O2` por padrão** e `-O0`–`-O3` configurável. Ver seção 2.1 para a tabela completa de mudanças.
+A versão 2026.2 é uma **revisão profunda** da base 2026.1, não apenas uma reentrega. A mudança mais visível é a adoção de sintaxe por **indentação estilo Python** (`INDENT`/`DEDENT`, 4 espaços por nível), substituindo chaves `{ }` e `;`. Canais deixam de ser expressão `c_channel(ip, porta)` e passam a ser **declaração lógica no topo do programa** (`c_channel nome computador_1 computador_2`), com configuração física via `minipar.hosts`. O backend passa de C++20 com `-O3` fixo para **C++17 com `-O2` por padrão** e `-O0`–`-O3` configurável no CLI; na IDE, o seletor controla o otimizador de TAC e a compilação permanece em `-O2`. Ver seção 2.1 para a tabela completa de mudanças.
 
 ### 1.1 Arquitetura geral
 
 | Componente | Arquivo | Responsabilidade |
 |---|---|---|
 | Entrada CLI | `main.py`, `interfaces/command_line.py` | `python main.py` (menu interativo) ou comando `minipar` instalado via `uv sync`; subcomandos `compilar`, `tokens`, `ast`, `tac`, `cpp`, `build`, `run`; inspeção de fases com `--tokens/--ast/--tac/--emit-cpp`; códigos de saída 1 (uso/arquivo) e 2–7 por fase (léxica, sintática, semântica, geração, build, execução). |
-| Menu terminal | `menu.py`, `interfaces/cli.py`, `interfaces/test_orchestrator.py` | Menu interativo em terminal (título "Menu de Testes - Compilador MiniPar 2026.2"; opções: rodar todos os testes, escolher um teste, Conexão/Hub); monitora sessões multi-terminal (participante/monitor de progresso). Não inicia processos multi-terminal por si — ver `docs/rede.md` e `scripts/run_multiterminal.py`. |
+| Menu terminal | `menu.py`, `interfaces/cli.py`, `interfaces/test_orchestrator.py` | Menu interativo em terminal (título "Menu de Testes - Compilador MiniPar 2026.2"; opções: rodar todos os testes, escolher um teste, Conexão/Hub); monitora sessões multi-terminal (participante/monitor de progresso). Não inicia processos multi-terminal por si — ver `docs/outros/rede.md` e `scripts/run_multiterminal.py`. |
 | IDE Web | `app.py`, `interfaces/web/api.py`, `interfaces/web/frontend/` | Servidor Flask, editor CodeMirror 5.65.13 servido **localmente** (sem CDN), abas de tokens/AST/símbolos/TAC/C++/execução, terminal, histórico de compilação, painel de benchmark, **download do executável** (`.exe`) e página de **Ajuda**. |
 | Hub de Conexão | `interfaces/conexao/` (`hub.py`, `cliente.py`, `protocolo.py`, `execucao.py`, `terminal.py`), `interfaces/web/conexao_api.py`, `interfaces/web/conexao_execucao.py` | Hub TCP com salas (lobby público + salas privadas de 2 pessoas), chat, convites de execução e coordenação da execução de programas cliente/servidor em dois computadores, pelo editor. Ver §9.1. |
 | Contratos | `components/interfaces.py` | 7 interfaces ABC: `ILexico`, `ISintatico`, `ISemantico`, `ITabelaSimbolos`, `IGeradorTAC`, `IGeradorCpp`, `IControle`. |
 | Controle | `components/controle/c_controle.py`, `components/compilador.py` | `CControle` (pipeline injetável, testável com fakes) e função `compile_file(...)` (fluxo concreto CLI que instancia componentes). `CompiladorMiniPar` apenas delega a `IControle` e lê o arquivo-fonte. |
 | Léxico | `components/lexico/c_lexico.py`, `components/lexico/token.py` | Autômato escrito à mão, consumo sob demanda via `next_token()`/`peek()`, pilha de indentação, buffer de tokens. |
-| Sintático | `components/sintatico/c_sintatico.py`, `components/sintatico/ast.py`, `components/sintatico/visitor.py` | Parser descendente recursivo LL(1) que produz AST em dataclasses frozen + Visitor/ASTPrinter. |
+| Sintático | `components/sintatico/c_sintatico.py`, `components/sintatico/ast.py`, `components/sintatico/visitor.py` | Parser descendente recursivo (LL(1) na maioria das decisões; uma produção é resolvida após a leitura da expressão, com validação semântica) que produz AST em dataclasses frozen + Visitor/ASTPrinter. |
 | Semântico | `components/semantico/c_semantico.py` | Duas passagens: coleta de declarações e validação com inferência de tipos, herança, override, concorrência e canais. |
 | Tabela de símbolos | `components/tabela_simbolos/c_tabela_simbolos.py` | Árvore de escopos com pilha de ativos, exportação serializável e busca de membros com herança. |
 | Diagnósticos | `erros/diagnosticos.py` | `Diagnostic` imutável + `DiagnosticBag` com formatação origem→código, aliases PT (`Fase`, `Severidade`, `ColetorDiagnosticos`) e saída JSON. |
-| TAC | `components/tac/c_gerador_tac.py`, `components/tac/executor_tac.py`, `components/tac/otimizador_tac.py`, `components/tac/instrucoes.py` | Gera texto TAC `.tac` de três endereços, interpreta TAC em memória e aplica otimizações simples (visão didática na IDE; o binário C++ não muda por causa do toggle). |
+| TAC | `components/tac/c_gerador_tac.py`, `components/tac/executor_tac.py`, `components/tac/otimizador_tac.py`, `components/tac/instrucoes.py` | Gera texto TAC `.tac` de três endereços, interpreta TAC em memória e aplica otimizações simples. Na IDE, o nível O0–O3 pode regenerar o C++ a partir do TAC otimizado antes da compilação; as flags do `g++` permanecem `-O2`. |
 | Codegen + GCC | `components/codegen/c_gerador_cpp.py`, `components/codegen/driver_gcc.py` | Transpila TAC → C++17 (`.cpp`) e compila/linkifica com `g++`, incluindo runtime. Mapeia diagnósticos do C++ gerado de volta para linhas MiniPar via `// MiniPar line N`. |
 | Runtime C++ | `runtime/minipar_rt.hpp`, `runtime/canal.cpp`, `runtime/paralelo.cpp`, `runtime/worker.cpp` | `MiniParChannel` (TCP tipado), `minipar_parallel` (threads + afinidade `core`), helpers de builtins, matrizes, E/S e worker de `fork` remoto. Compilado junto com cada programa. |
 
@@ -110,7 +110,7 @@ scripts/           run_testes_2026_2.py, run_multiterminal.py, benchmark_t08_t10
 A linguagem combina sintaxe inspirada em Python (indentação, `if/elif/else`, `for x in ...`, `def`, `class`) com blocos explícitos `seq` e `par`, concorrência nomeada (`fork`/`join`) e comunicação por canais lógicos.
 
 - **`seq`/`par`** (aceitos também em maiúsculas, `SEQ`/`PAR`) delimitam blocos sequenciais e paralelos. O bloco aceita suíte indentada após `:` ou bloco entre `{ }`; todos os programas de aceitação usam `seq {`/`par {`. Cada filho direto de `par` vira uma thread; para agrupar várias instruções numa thread usa-se `seq` aninhado.
-- **Canais:** `c_channel nome computador_1 computador_2` no topo. `nome.send(...)` / `nome.receive(...)` trocam mensagens tipadas. Os nomes são lógicos; endereço/porta ficam em `minipar.hosts` (ver `docs/rede.md`), sem recompilar.
+- **Canais:** `c_channel nome computador_1 computador_2` no topo. `nome.send(...)` / `nome.receive(...)` trocam mensagens tipadas. Os nomes são lógicos; endereço/porta ficam em `minipar.hosts` (ver `docs/outros/rede.md`), sem recompilar.
 - **Tipos de valor:** `bool`, `int`, `float`, `string`, `char`, `list`, mais classes do usuário. `float` e `list` entram em 2026.2 para cobrir T3–T7. `char` é `std::string` de 1 caractere no C++. `void` só em retorno.
 - **Integração com E/S:** `print(...)` e `input()`.
 - **Builtins (nomes pré-definidos, não sintaxe):** `print`, `input`, `len`, `range`, `str`, `int`, `float`, `exp`, `random`, `random_uniforme(min,max)`, `inf`, `clock`, `agora`, `format_float(x,casas)`, `is_number(s)`, `max`, `sum`, `parse_ints(s)`, `matrix(linhas,colunas,valor)`, mais string/arquivo: `char_at`, `substring`, `is_digit`, `is_alpha`, `is_space`, `write_file`. Métodos: lista `append`/`pop`, string `split`/`strip`, canal `send`/`receive`.
@@ -127,11 +127,11 @@ A linguagem combina sintaxe inspirada em Python (indentação, `if/elif/else`, `
 
 ### 2.1 O que mudou em relação a 2026.1
 
-| # | Decisão 2026.2 (ver `docs/gramatica.md` §1) | Impacto |
+| # | Decisão 2026.2 (ver `docs/outros/gramatica.md` §1) | Impacto |
 |---|---|---|
 | 1 | Blocos por indentação `INDENT`/`DEDENT` (4 espaços) | Léxico com pilha de indentação; tab é erro. |
 | 2 | `float` e `list` nativos; `c_channel` vira entidade nomeada, não tipo | Inferência e C++ tipados; canais só via `decl_canal`. |
-| 3 | Sem comprehension, tuplas, `zip`/`enumerate`, f-strings, `try/except`, ternário | Reescritas com `while`/`for`/laços; parser segue LL(1). |
+| 3 | Sem comprehension, tuplas, `zip`/`enumerate`, f-strings, `try/except`, ternário | Reescritas com `while`/`for`/laços; parser segue LL(1) na maioria das decisões. |
 | 4 | Precedência `or < and < not < comparações < + - < * / % < - unário < postfixo` | Um não-terminal por nível; AST já com precedência certa para TAC. |
 | 5 | `print`/`input` reservados; `sys.stdin.readline()` não vira alias | `input()` cobre o caso dos testes. |
 | 6 | `fork t em core(n):` / `fork t em host("h"):` sintáticos; `join` aceita lista | Alocação vira sintaxe; runtime respeita CPU/máquina. |
@@ -143,11 +143,11 @@ A linguagem combina sintaxe inspirada em Python (indentação, `if/elif/else`, `
 | 19 | Removidos: `for` C, `dict`, `number`, `c_channel(ip,porta)` | `var` mantido como açúcar; `matrix` volta como builtin. |
 | 20 | `do … while` **reintroduzido** (exigido pelo enunciado): `do` suite `while` expr | Palavra-chave `do`; o nó `DoWhileStmt` já existia na AST/semântico/TAC e agora é produzido pelo parser; `break`/`continue` valem dentro do laço. |
 
-Aliases de compatibilidade mantidos: `func`/`def`, `this`/`self`, `SEQ`/`seq`, `PAR`/`par`, `{ }`/`;`, `&&`/`||` normalizados para `and`/`or`. O arquivo `docs/uml/BNF-grammaMiniPAR2026-1.md` preserva a BNF antiga para comparação.
+Aliases de compatibilidade mantidos: `func`/`def`, `this`/`self`, `SEQ`/`seq`, `PAR`/`par`, `{ }`/`;`, `&&`/`||` normalizados para `and`/`or`. O arquivo `docs/outros/BNF-grammaMiniPAR2026-1.md` preserva a BNF antiga para comparação.
 
 ### 2.2 BNF resumida implementada (EBNF)
 
-Referência completa: `docs/gramatica.md` §3 (EBNF LL(1)). Notação: `{x}` zero ou mais, `[x]` opcional, MAIÚSCULAS = token.
+Referência completa: `docs/outros/gramatica.md` §3 (EBNF LL(1)). Notação: `{x}` zero ou mais, `[x]` opcional, MAIÚSCULAS = token.
 
 ```ebnf
 (* Programa e canais *)
@@ -214,7 +214,7 @@ Chamada de método, envio e recebimento são `expr_posfixo` como instrução: `n
 
 **Verificação LL(1):** todos os pontos de decisão têm FIRST disjuntos, com uma exceção documentada — `simples_stmt` lê primeiro a `expr` e só depois decide se era chamada ou atribuição, com validação no semântico. `INDENT`/`DEDENT` são produzidos pelo léxico comparando indentação com pilha.
 
-**Cobertura de testes (gramática → T1–T11):** T1 `decl_canal`+`send/receive`; T2 `PAR` com dois `SEQ`, `while`, `*=`; T3 `class`+`init`+padrão, `new`, `self.peso +=`; T4 `-> float`, `exp`, listas aninhadas, `for i in range(len(x))`; T5 herança/listas/`new`/multilinha; T6 método recursivo, `input/split/is_number`; T7 `def`+`continue`; `do … while` coberto por testes dedicados (parser, TAC e execução, com `break`/`continue`); T8–T10 `fork ... em core(N)` + `join`; T11 builtins de string (`char_at`, `substring`, `is_digit`, `is_alpha`, `is_space`, `write_file`) + classe com lexer/parser/gerador dentro do programa. Reescritas sem comprehension/tupla/`zip`/bitwise/`try`/`turtle` estão em `docs/gramatica.md` §5.
+**Cobertura de testes (gramática → T1–T11):** T1 `decl_canal`+`send/receive`; T2 `PAR` com dois `SEQ`, `while`, `*=`; T3 `class`+`init`+padrão, `new`, `self.peso +=`; T4 `-> float`, `exp`, listas aninhadas, `for i in range(len(x))`; T5 herança/listas/`new`/multilinha; T6 método recursivo, `input/split/is_number`; T7 `def`+`continue`; `do … while` coberto por testes dedicados (parser, TAC e execução, com `break`/`continue`); T8–T10 `fork ... em core(N)` + `join`; T11 builtins de string (`char_at`, `substring`, `is_digit`, `is_alpha`, `is_space`, `write_file`) + classe com lexer/parser/gerador dentro do programa. Reescritas sem comprehension/tupla/`zip`/bitwise/`try`/`turtle` estão em `docs/outros/gramatica.md` §5.
 
 **Regras semânticas de tipos (resumo):** coleta de funções/classes antes de validar corpos (recursão e chamadas futuras); `int`→`float` implícito, `float`→`int` só explícito; `/` sempre `float`; primeira atribuição declara no escopo atual, seguintes respeitam tipo; condições booleanas; aridade/tipos de chamadas verificados; **cada ramo de `PAR` e corpo de `fork` não pode escrever em variável externa** (escopo próprio); `send`/`receive` exigem canal declarado e assinaturas compatíveis (`receive()` = 1×`string`); cada `join` casa com `fork` anterior no mesmo bloco e vice-versa.
 
@@ -379,7 +379,7 @@ Recuperação sintática: ao erro, avança até `NEWLINE`/`DEDENT`/`EOF` sem con
 
 ## 6. Tabela de símbolos
 
-**Implementação:** `components/tabela_simbolos/c_tabela_simbolos.py` (`TabelaSimbolos.enter_scope/exit_scope/define/lookup/lookup_local/lookup_member/export`), contrato `ITabelaSimbolos` em `components/interfaces.py`. Documento complementar: `docs/pseudocodigo_tabela_simbolos.md`.
+**Implementação:** `components/tabela_simbolos/c_tabela_simbolos.py` (`TabelaSimbolos.enter_scope/exit_scope/define/lookup/lookup_local/lookup_member/export`), contrato `ITabelaSimbolos` em `components/interfaces.py`. Documento complementar: `docs/outros/pseudocodigo_tabela_simbolos.md`.
 
 A tabela é uma **árvore de escopos** (`_Scope{name, path, parent, symbols, children}`) com **pilha de escopos ativos** (`_scopes`) e índice de **todos os escopos criados** (`_all_scopes`). Escopos encerrados permanecem registrados para exportação e consulta de membros de classe, mas só escopos ativos participam da busca lexical.
 
@@ -447,7 +447,7 @@ goto WHILE_0
 ENDWHILE_1:
 ```
 
-**Equivalência com o PDF (T7):** a comparação é por **equivalência de execução**, não texto idêntico — gerador usa rótulos genéricos/temporários tipados, o PDF usa nomes semânticos e `if ... goto`. Ambos produzem `Array ordenado: [5, 12, 33, 61, 98]`. Mapa completo em `docs/relatorio/RELATORIO-TESTES-2026.2.md` §5.3; referência textual conferida em `tests/integracao/expected_results/t07_quicksort_iterativo_tac.expected.tac` (só rótulos estruturais por `tests/programas/test_t07.py`).
+**Equivalência com o PDF (T7):** a comparação é por **equivalência de execução**, não texto idêntico — gerador usa rótulos genéricos/temporários tipados, o PDF usa nomes semânticos e `if ... goto`. Ambos produzem `Array ordenado: [5, 12, 33, 61, 98]`. A referência textual está em `tests/integracao/expected_results/t07_quicksort_tac.expected.tac`; `tests/programas/test_t07.py` confere apenas os rótulos estruturais.
 
 **Otimizador:** `TACOptimizer` aplica otimizações simples (níveis `O0`–`O3`). Na IDE, **Otimizar TAC** compara original × otimizado lado a lado (`POST /api/otimizar`). O nível escolhido no seletor "TAC" do editor também é enviado em `POST /api/executar` e `POST /api/baixar-exe`: com nível diferente de `O0`, o C++ é regenerado a partir do TAC otimizado antes de compilar.
 
@@ -455,7 +455,7 @@ ENDWHILE_1:
 
 ## 8. Geração de código C++ e compilação com GCC
 
-**Implementação:** `components/codegen/c_gerador_cpp.py` (transpila TAC → C++17) + `components/codegen/driver_gcc.py` (`compilar`/`executar`). O driver grava `.cpp` e executável em `output/` (ou `-o`), com `-std=c++17` e `-O2` por padrão (`-O0`–`-O3` no CLI/IDE).
+**Implementação:** `components/codegen/c_gerador_cpp.py` (transpila TAC → C++17) + `components/codegen/driver_gcc.py` (`compilar`/`executar`). O driver grava `.cpp` e executável em `output/` (ou `-o`), com `-std=c++17` e `-O2` por padrão; no CLI, `-O0` a `-O3` escolhem a flag do `g++`.
 
 ```text
 CppCodeGenerator.generate(tac, output_name) → .cpp
@@ -480,7 +480,7 @@ Mapeamento MiniPar → C++ (atualizado para 2026.2):
 | `list`/`matrix` | `std::vector<...>` (ex: `__make_matrix`) |
 | `int`/`float`/`bool`/`string`/`char` | `int64_t` / `double` / `bool` / `std::string` (`char` = string de 1) |
 
-**Runtime (`runtime/minipar_rt.hpp`, 636 linhas + `canal.cpp`/`paralelo.cpp`/`worker.cpp`):**
+**Runtime (`runtime/minipar_rt.hpp`, 664 linhas + `canal.cpp`/`paralelo.cpp`/`worker.cpp`):**
 
 - **Canais TCP tipados:** campo = `(quantidade, tipo, tamanho, bytes)`, big-endian, inteiros 64 bits, `float`/`double` IEEE-754 64 bits, `bool` 1 byte, strings UTF-8. `enviar<T...>()`/`receber<T...>()` validam quantidade/tipos; `setTimeout` (padrão 5 s; `MINIPAR_TIMEOUT_MS` no worker; `MINIPAR_CHANNEL_TIMEOUT_MS` altera o padrão dos canais — o executor da Conexão usa 10 min porque o outro lado espera o usuário digitar; a espera pela conexão do par (`ouvir`/`conectar`) nunca passa de 60 s, para que falhas de rede apareçam logo); `static_assert` por nº de campos; falhas → `std::runtime_error`. Limites `max_field_size=16 MiB`, `max_frame_size=64 MiB`, `max_field_count=1024`, mutexes de envio/recepção. `sendData`/`receiveData` mantidos como adaptadores de mensagem string.
 - **`c_channel` lógico + `minipar.hosts`:** `computador_1 = 127.0.0.1:5001`. Linhas vazias/`#` ignoradas, porta 1–65535. Processo `--como computador_1` conecta a `computador_2`; `--como computador_2` faz `ouvir`. Papel inexistente → erro com nomes válidos. `--hosts caminho` troca o arquivo. Trocar IP:porta não exige recompilar.
@@ -488,7 +488,7 @@ Mapeamento MiniPar → C++ (atualizado para 2026.2):
 - **`range`:** `__minipar_range` devolve `std::vector<double>` (mesmo tipo de `list` no código gerado); antes devolvia `std::vector<int>` e `for x in range(n)` não compilava no C++.
 - **Helpers:** `__parse_ints` retorna `std::vector<double>` (o tipo `list` mapeia para `std::vector<double>` em `c_gerador_cpp.py:108`; não há correção para `int64_t`), `input`, `__minipar_format_float`, `__to_string`/`__minipar_concat`, `__minipar_to_int/float`, `__minipar_len/sum/max`, `__minipar_divide` (zero → `runtime_error`), string/arquivo (`__minipar_char_at/substring/is_digit/is_alpha/is_space/is_number`, `__minipar_write_file`), `__minipar_array_at/set` com checagem de limites e `__array_pop`, `__make_matrix`, `minipar_init`/argumentos `--hosts/--como/--porta`, registro de tasks `minipar_register_task`/`minipar_run_worker_if_requested`/`minipar_remote_call`.
 
-**Fork remoto:** o codegen gera junto ao executável `minipar_worker` (`.exe` no Windows) com os mesmos handlers. Args/resultados `int/float/bool/string` por valor pelo protocolo do canal; cada subtarefa tem nome estável. Iniciar `minipar_worker --porta 5001` por máquina, cliente com `fork t em host("computador_2")`, `MINIPAR_TIMEOUT_MS=5000` por padrão. Teste automatizado valida 2 subtarefas remotas em localhost; validação em 2 máquinas reais é pendência de T41 (ver `docs/rede.md`).
+**Fork remoto:** o codegen gera junto ao executável `minipar_worker` (`.exe` no Windows) com os mesmos handlers. Args/resultados `int/float/bool/string` por valor pelo protocolo do canal; cada subtarefa tem nome estável. Iniciar `minipar_worker --porta 5001` por máquina, cliente com `fork t em host("computador_2")`, `MINIPAR_TIMEOUT_MS=5000` por padrão. Teste automatizado valida 2 subtarefas remotas em localhost; validação em 2 máquinas reais é pendência de T41 (ver `docs/outros/rede.md`).
 
 **Segurança de memória (issue #45):** pilha do T7 dimensionada; leitura/escrita fora dos limites falham explicitamente com mensagem e código não-zero (via `__minipar_array_at/set`); CI exige ASan/UBSan no Linux.
 
@@ -514,7 +514,7 @@ Mapeamento MiniPar → C++ (atualizado para 2026.2):
 | `POST /api/compile` | Rota legada (IDE atual): compila e executa em uma chamada |
 | `POST /api/get_test`, `/api/test_spec`, `/api/session/create` | Carregam de `programas_teste/` só por **caminho relativo dentro do dir**; absolutos/`..`/vazio/não-texto/inexistente → 400/404 |
 
-Backend de benchmark (`interfaces/web/benchmark.py`): hardware, params limitados, jobs assíncronos, polling, medição monotônica dentro das tarefas, mediana/speedup/eficiência e CSV. A carga ajusta atividades quando total >2.000; partição de núcleos descoberta balanceada. A comparação `original vs otimizado` (`POST /api/otimizar`) é didática; o nível de TAC do editor, porém, vale para a execução e para o executável baixado (ver §7).
+Backend de benchmark (`interfaces/web/benchmark.py`): hardware, params limitados, jobs assíncronos, polling, medição monotônica dentro das tarefas, mediana/speedup/eficiência e CSV. A carga ajusta atividades quando total >2.000; partição de núcleos descoberta balanceada. A comparação `original vs otimizado` (`POST /api/otimizar`) é didática; o nível de TAC do editor, porém, vale para a regeneração do C++ na execução e no executável baixado, enquanto a flag do `g++` continua `-O2` (ver §7).
 
 **Setup:** `uv sync --extra dev`, `python main.py` (menu: `[1]` terminal, `[2]` web em `http://127.0.0.1:5000`), ou `minipar compilar programa.mp -O2 -o output/prog --executar`. Validação offline: desativar rede no navegador e rodar testes de integração.
 
@@ -533,7 +533,7 @@ Backend de benchmark (`interfaces/web/benchmark.py`): hardware, params limitados
 
 ## 10. Product Backlog e Sprint Backlogs
 
-Snapshot **08/11/2026** do GitHub de [`johnUFAL/minipar-improvement-2026.2`](https://github.com/johnUFAL/minipar-improvement-2026.2) — fonte completa: `docs/backlog.md`. Issues abertas = **Em andamento** (estado de execução não inferido); fechadas = **Feito**. Prioridades: labels `P0/P1/P2`. Todas as 50 issues associadas a exatamente um dos 9 milestones no snapshot.
+Snapshot **08/11/2026** do GitHub de [`johnUFAL/minipar-improvement-2026.2`](https://github.com/johnUFAL/minipar-improvement-2026.2) — fonte completa: `docs/outros/backlog.md`. Issues abertas = **Em andamento** (estado de execução não inferido); fechadas = **Feito**. Prioridades: labels `P0/P1/P2`. Todas as 50 issues associadas a exatamente um dos 9 milestones no snapshot.
 
 ### Product Backlog
 
@@ -618,21 +618,23 @@ A validação passa por **lexer → parser → semântico → TAC → C++ → `g
 
 **Revalidação de 10/11/2026 (checkout atual, Windows, Python 3.15.1, GCC 15.2.0 MinGW-w64):** `ruff check .` e `mypy` passaram. A suíte `pytest` completa, antes das últimas alterações (`do … while`, download do executável, página de Ajuda e correção de `range`), terminou com **339 passed, 3 skipped, 1 deselected, 141 subtests em 18 min 52 s**; o teste desselecionado é `test_session_endpoints_manage_multi_terminal_lifecycle`, que já falhava antes das mudanças do hub e não tem relação com elas. Depois das últimas alterações, passaram os 200 testes unitários e os testes novos (`test_do_while.py`, `test_lacos_execucao.py`, `test_download_exe.py`); a suíte completa **não foi reexecutada até o fim** após elas, e a cobertura (mínimo 80% no CI) não foi medida nesta execução (`pytest-cov` ausente no ambiente local).
 
-| Teste | Descrição | Modo | Tempo (JSON versionado) |
+| Teste | Descrição | Modo | Tempo (execução atual) |
 |---|---|---|---|
-| T1 | Calculadora cliente/servidor | 2 processos, canal lógico | 15,30 s |
-| T2 | Fatorial e Fibonacci em `par` | local | 7,61 s |
-| T3 | Neurônio com classes | local | 7,30 s |
-| T4 | Rede neural XOR | local | 7,31 s |
-| T5 | Sistema de recomendação | local, 16 entradas | 7,48 s |
-| T6 | Quicksort com classes | local, 1 entrada | 7,35 s |
-| T7 | Quicksort iterativo | local | 7,49 s |
-| T8 | Avaliação em 4 núcleos | `fork/core` | 8,18 s |
-| T9 | 5 núcleos + Mandelbrot | `fork/core` | 8,57 s |
-| T10 | 6 núcleos + 2 fractais | `fork/core` | 8,77 s |
-| T11 | Minicompilador ARMv7 | local | 9,12 s |
+| T1 | Calculadora cliente/servidor | 2 processos, canal lógico | 16,9 s |
+| T2 | Fatorial e Fibonacci em `par` | local | 6,2 s |
+| T3 | Neurônio com classes | local | 6,0 s |
+| T4 | Rede neural XOR | local | 5,8 s |
+| T5 | Sistema de recomendação | local, 16 entradas | 5,7 s |
+| T6 | Quicksort com classes | local, 1 entrada | 5,7 s |
+| T7 | Quicksort iterativo | local | 5,1 s |
+| T8 | Avaliação em 4 núcleos | `fork/core` | 6,6 s |
+| T9 | 5 núcleos + Mandelbrot | `fork/core` | 7,0 s |
+| T10 | 6 núcleos + 2 fractais | `fork/core` | 7,2 s |
+| T11 | Minicompilador ARMv7 | local | 7,0 s |
 
-Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `10 -3 -40 80 70 -100`; T2–T4, T7–T11 sem entrada. Saídas T2–T7 congeladas em `tests/integracao/expected_results/` com normalização CRLF→LF. JSON com checks por teste: `docs/relatorio/resultados/testes_2026_2/testes_2026_2.json`; logs por teste em `testes_2026_2/t*.log`.
+Tempos acima são da execução atual do runner em 14/11/2026 (Linux). O JSON versionado (`docs/relatorio/resultados/testes_2026_2/testes_2026_2.json`) preserva os tempos da execução original de 06/11/2026 no Windows, que são ligeiramente diferentes.
+
+Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `10 -3 -40 80 70 -100`; T2–T4, T7–T11 sem entrada. Saídas congeladas em `tests/integracao/expected_results/` para T2, T3, T5, T6 e T7 (com normalização CRLF→LF); T4 usa comparador de faixa, não golden file. JSON com checks por teste: `docs/relatorio/resultados/testes_2026_2/testes_2026_2.json`; logs por teste em `testes_2026_2/t*.log`.
 
 ### 11.1 Testes obrigatórios
 
@@ -641,7 +643,7 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
   python scripts/run_multiterminal.py --scenario all
   python scripts/run_multiterminal.py --requests "/,5,0;+,12,30;sair"
   ```
-  O `t01_calculadora.mp` original (com `c_channel("127.0.0.1",5101)`) foi removido do diretório de testes por não ser executável sozinho; o par cliente/servidor em `t01_multiterminal/` é a referência atual. Evidência:
+  O par cliente/servidor em `t01_multiterminal/` é a referência atual; o antigo arquivo único `t01_calculadora.mp` (com `c_channel("127.0.0.1",5101)`) só existe no histórico do git. Evidência:
   ```text
   Servidor recebeu: + 7.0 5.0 / Servidor respondeu: OK 12.0
   Cliente enviou: + 7.0 5.0 / Resultado: 12.0
@@ -650,7 +652,7 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
 - **T3 — neurônio com classes:** `class Neuronio` + `init` com padrão, `new`, `self.*`; linhas-chave das iterações 1, 50, 51 e conclusão (não byte a byte).
 - **T4 — rede XOR:** 3 neurônios ocultos, 20.000 épocas, pesos pseudossorteados; comparador exige exatamente 4 previsões finitas em `[0,1]` (não compara valores). Benchmark §5.2: C++ `-O2` mediana **0,0147 s** vs Python **0,2292 s** = **15,62×** (`t04_tempo.json`, 5 amostras).
 - **T5 — recomendação:** rede determinística; golden confere as **12 recomendações** na ordem e acentos UTF-8 (`Máquina de lavar`, `Não-ficção`, `Ficção científica`).
-- **T6 — quicksort com classes:** método recursivo `_quicksort`; entrada do PDF + stdin cobrindo `1 a 3` (reentrada `dividir`/`eh_inteiro`), entrada vazia e vetor unitário.
+- **T6 — quicksort com classes:** método recursivo `quicksort`; entrada do PDF + stdin cobrindo `1 a 3` (reentrada `dividir`/`eh_inteiro`), entrada vazia e vetor unitário.
 - **T7 — quicksort iterativo/TAC:** programa + saída `Array ordenado: [5, 12, 33, 61, 98]`; TAC por equivalência (§7).
 - **T8–T10 — fork/join em núcleos:** T8 160 atividades em 4 núcleos; T9 4 avaliadores + Mandelbrot (núcleo 5); T10 6 núcleos + Sierpinski ASCII (núcleo 6). Runner valida marcos (total, cabeçalho, nº de núcleos, fractais), não tempos exatos. `random_seed(t)` por atividade garante mesmo trabalho seq/par e checksums iguais. Medição (Windows, 14 CPUs, `-O2`, mediana 5 amostras, base Python 1 amostra):
 
@@ -660,7 +662,7 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
   | T9 | 0,40 | 0,13 | **3,08×** | 5 | 1,19× |
   | T10 | 0,40 | 0,13 | **3,08×** | 6 | 1,29× |
 
-  T8 cumpre **>2,5×**; Python fica 1,1–1,3× por *spawn* `multiprocessing` no Windows e trabalho curto. No baseline Python do T10 o Sierpinski usa Turtle/Tk e não roda headless — etapa desativada e registrada.
+  T8 cumpre **>2,5×**; Python fica 1,1–1,3× por *spawn* `multiprocessing` no Windows e trabalho curto. No baseline Python do T10 o Sierpinski usa Turtle/Tk e não roda headless — etapa desativada e registrada. O *speedup* da tabela é a **razão das medianas** (`mediana(seq) / mediana(par)`); o JSON também guarda `median_reported_speedup`, que é a mediana dos speedups por amostra (T9: 3,19×) e por isso difere levemente.
 - **T11 — minicompilador ARMv7:** gera tokens/AST/TAC/Assembly/tabela/resultados. Esperados: `((2+4)*7)-(5*4)=22.0`, `((10-8*7)+4)*2=-84.0`, `22.0`. Arquivos `programas_teste/teste11/expr1-3.arm` montam com `clang --target=armv7-none-eabi -x assembler -c …`; execução no CPUlator (`r8`) permanece manual.
 
 ### 11.2 Testes adicionais e inválidos
@@ -669,7 +671,7 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
 - `teste_adicional2_tapete_sierpinski.mp` — regra dos dígitos na base 3 sem `turtle`.
 - `teste_ascii_art_divertidapkrl.mp`, `teste_bnf_controles_input.mp`, `teste_builtins_string.mp` — autômato celular com listas ASCII, controles+Bnf com `input`, builtins de string/arquivo.
 - **Pares para dois computadores** (`programas_teste/dois_computadores/`, 6 pares): `tests/integracao/test_dois_computadores.py` compila e executa cada par de verdade (cliente e servidor em processos separados, com entradas de teste) e confere as saídas dos dois lados; `tests/integracao/test_conexao_hub.py` cobre salas, dono, inatividade, chat e convites.
-- **10 programas inválidos** em `tests/programas/invalidos/` cobrindo léxico, sintático, semântico e concorrência, cada com mensagem esperada em `test_invalid_programs.py`. Fronteiras: léxico→parser, parser→semântico, semântico→TAC, TAC→C++ (`ValueError` em opcode desconhecido), C++→GCC.
+- **13 programas inválidos** em `tests/programas/invalidos/` cobrindo léxico, sintático, semântico e concorrência, cada um com mensagem esperada em `test_invalid_programs.py`. Fronteiras: léxico→parser, parser→semântico, semântico→TAC, TAC→C++ (`ValueError` em opcode desconhecido), C++→GCC.
 
 ### 11.3 Tabela de estados dos testes
 
@@ -686,7 +688,7 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
 | T9 | + Mandelbrot | 5 núcleos, `FRACTAL DE MANDELBROT` |
 | T10 | + Sierpinski | 6 núcleos, `TAPETE DE SIERPINSKI` |
 | T11 | MiniCompiladorARM, strings/arquivo | `22.0`, `-84.0`, `clang` monta 3 arquivos |
-| Adicional 1 | 3 canais/host remoto | `fork em host` |
+| Adicional 1 | 3 tarefas locais em `core(1..3)` | `fork ... em core(N)`, sem canais |
 | Adicional 2 | Recursão/matriz fractal | Tapete ASCII |
 
 \* O snapshot antigo cita "convergiu em 51 iterações"; a revalidação usa linhas-chave 1/50/51.
@@ -714,13 +716,13 @@ Entradas fixas: T1 `+ 7 5`; T5 16 linhas `1 0 0 0 0 1 0 0 0 1 0 0 1 0 0 0`; T6 `
 | Flask 3.0 (`>=3.0`) | Servidor da IDE Web (API, templates, estáticos) |
 | CodeMirror 5.65.13 (local) | Editor MiniPar/C++/TAC no navegador, sem CDN, com `LICENSE` MIT |
 | C++17 (`-std=c++17`) | Linguagem alvo gerada (era C++20 em 2026.1) |
-| `g++` (`CXX`) com `-O2` padrão (`-O0`–`-O3`) | Compilação do C++ gerado; `-pthread` (Linux), `-lws2_32` + `.exe` (Windows) |
+| `g++` (`CXX`) com `-O2` padrão | Compilação do C++ gerado. No CLI, `-O0`–`-O3` escolhem a flag; na IDE o seletor controla o TAC e o `g++` permanece `-O2`. Flags de link: `-pthread` (Linux), `-lws2_32` + `.exe` (Windows) |
 | `std::thread`, `std::mutex`, `std::chrono` | `PAR`, `fork/core`, `minipar_parallel`, relógio monotônico, saída sincronizada |
 | Sockets TCP | `MiniParChannel` em `canal.cpp` (`ouvir`/`conectar`/`enviar`/`receber`, frame tipado big-endian) |
 | `pytest` + `pytest-cov`, `ruff`, `mypy` (extras `dev`) | Testes (cobertura mínima 80% no CI), lint (`E4/E7/E9/F`), tipos (`components,erros,interfaces`) |
 | `playwright` (dev) | Testes de frontend/browser |
 | `uv` (`uv sync/uv run`) | Gerenciamento de ambiente/dependências (`pyproject.toml`, `requirements.txt`) |
-| Arquitetura armada em testes | Fakes no `test_pipeline.py`, `falsos.py`, ASan/UBSan no CI Linux |
+| Arquitetura armada em testes | Fakes no `test_pipeline.py`, `falsos.py`; ASan/UBSan no CI Linux quando `MINIPAR_REQUIRE_SANITIZERS=1` (o teste falha se o compilador não suportar) |
 
 Scripts de validação: `scripts/run_testes_2026_2.py`, `scripts/run_multiterminal.py`, `scripts/benchmark_t08_t10.py`, `scripts/benchmark_t04.py`, `benchmarks/benchmark_fork_core.py` e baselines Python `t04_rede_xor.py`, `t08_avaliacao_4_nucleos.py`, etc.
 
@@ -729,7 +731,7 @@ Scripts de validação: `scripts/run_testes_2026_2.py`, `scripts/run_multitermin
 **Via CLI `minipar` (instalado por `uv sync` ou `pip install -e .`):**
 
 ```bash
-minipar compilar programas_teste/t07_quicksort_iterativo_tac.mp -O2 -o output/t07 --executar
+minipar compilar programas_teste/t07_quicksort_tac.mp -O2 -o output/t07 --executar
 
 # Inspeção de fases, sem gerar executável:
 minipar compilar programa.mp --tokens
@@ -774,7 +776,7 @@ Erros de fase usam códigos **2 (léxica), 3 (sintática), 4 (semântica), 5 (ge
 .\programa.exe --hosts .\minipar.hosts
 ```
 
-Ver `docs/rede.md`, `programas_teste/t01_multiterminal/README.md` e `minipar.hosts` na raiz.
+Ver `docs/outros/rede.md`, `programas_teste/t01_multiterminal/README.md` e `minipar.hosts` na raiz.
 
 ### 12.3 Observações técnicas e limitações
 
@@ -784,16 +786,22 @@ Ver `docs/rede.md`, `programas_teste/t01_multiterminal/README.md` e `minipar.hos
   - Canais só no topo; não é possível criar canal dentro de função/bloco (ver decisão 15).
   - Execução TAC simulada (intercalação + FIFO em memória) não representa paralelismo real nem rede.
   - `fork em host` exige `minipar_worker` na outra máquina; validação automatizada é localhost, 2 máquinas reais pendente (T41).
-  - Hub de Conexão: o teste com dois computadores usou o Radmin como rede virtual e levou às correções de descoberta e de IP anunciado (§9.1); o procedimento validado ainda não está registrado em `docs/rede.md`. A descoberta é por broadcast UDP e pode falhar em redes que o bloqueiam — nesse caso o hub é adicionado manualmente pelo IP e porta; o firewall precisa liberar a porta TCP do hub (padrão 5010), a UDP 5011 e a porta do canal do programa. Convites de execução só existem para exemplos que têm par `_cliente`/`_servidor`; quem inicia usa o código do editor e quem aceita recebe o arquivo original do par.
+  - Hub de Conexão: o teste com dois computadores usou o Radmin como rede virtual e levou às correções de descoberta e de IP anunciado (§9.1). O procedimento genérico de dois computadores já está em `docs/outros/rede.md`; falta registrar essa validação específica com Radmin. A descoberta é por broadcast UDP e pode falhar em redes que o bloqueiam — nesse caso o hub é adicionado manualmente pelo IP e porta; o firewall precisa liberar a porta TCP do hub (padrão 5010), a UDP 5011 e a porta do canal do programa. Convites de execução só existem para exemplos que têm par `_cliente`/`_servidor`; quem inicia usa o código do editor e quem aceita recebe o arquivo original do par.
   - O botão "Baixar .exe" entrega somente o executável do programa; o `minipar_worker` usado por `fork ... em host` não é incluído no download (use o CLI, que grava ambos em `output/`).
   - CPUlator no T11 manual (screenshot pendente); T8–T10 dependem de nº de CPUs — runner valida marcos, não tempos exatos.
+  - **Segurança da execução web:** `/api/executar` compila e executa código arbitrário sem sandbox, autenticação ou rate limit; há apenas timeout de 30 s e limite de 1 MiB de entrada/saída. O builtin `write_file` grava em caminho arbitrário (`runtime/minipar_rt.hpp:420`) e canais abrem sockets TCP. O servidor sobe em `127.0.0.1`; expô-lo sem essas proteções o torna um vetor de execução remota de código.
+  - **Empacotamento:** o wheel gerado não inclui `runtime/`, `templates/`, `static/` nem `programas_teste/`; `pyproject.toml:24-25` só empacota `components*`, `erros*` e `interfaces*`. `pip install` não produz instalação funcional.
+  - **Benchmark:** o workload não é MiniPar puro — `interfaces/web/benchmark.py` injeta helpers C++ (`benchmark_activities`, `benchmark_fractal`), compila com `-O2` fixo (`benchmark.py:342`) e calcula `speedup = mediana(seq) / mediana(par)`. Com 1 núcleo ou carga pequena o resultado fica perto de 1,0×.
+  - **Persistência:** histórico do compilador e do benchmark fica em `localStorage` (`compiler-result.js:2`, `benchmark.js:6-7`); `/resultados/<run_id>` depende do navegador e não é compartilhável entre máquinas.
+  - **Sessão multi-terminal:** `interfaces/test_orchestrator.py:22` usa `output/.test_session.json` sem lock; dois terminais podem sobrescrever a sessão.
+  - **CI:** roda só Ubuntu com Python 3.11–3.12; testes de navegador são pulados sem Playwright/Chrome; o workflow verifica `g++ -std=c++20`, mas o projeto compila com `-std=c++17`.
 - **Melhorias futuras sugeridas:** recuperação sintática mais rica e testes unitários por fase (já parcialmente implementados em 2026.2 — ver §5/§11), separar `int`/`float` estritamente, lowering pendente de builtins de lista/string, matcher de timeout configurable, e cobertura/total de testes verdes completos no CI.
 
 ---
 
 ## 13. Conclusão
 
-O **minipar-improvement 2026.2** atende ao núcleo do enunciado 2026.2: analisadores léxico (com `NEWLINE/INDENT/DEDENT`), sintático (LL(1) + AST/Visitor) e semântico (2 passagens + `DiagnosticBag`), tabela de símbolos com escopos aninhados e herança, TAC de três endereços com executor e otimizador didático, transpilação para **C++17** com driver `g++` e runtime completo (canais TCP tipados, afinidade por núcleo, workers remotos), OO com herança, `PAR`/`FORK`/`JOIN`, laços `while`, `do … while` e `for`, e interface CLI + IDE web offline com download do executável, página de Ajuda e **Hub de Conexão** para executar programas cliente/servidor em dois computadores diretamente pelo editor. Os **11 testes T1–T11** passam com evidências versionadas, correções de backend registradas (uma pendente: tipo de `parse_ints`), e benchmarks com speedups medidos (T4 15,62×; T8–T10 ~3,1× contra meta >2,5×). Restam pendências de entrega bem mapeadas (GitHub Project com `read:project`, matriz de 17 itens, CPUlator/2 máquinas, clone limpo, PDF final/tag/release) — nenhuma inventada neste relatório.
+O **minipar-improvement 2026.2** atende ao núcleo do enunciado 2026.2: analisadores léxico (com `NEWLINE/INDENT/DEDENT`), sintático (descendente recursivo com AST/Visitor e gramática LL(1) na maioria das decisões) e semântico (2 passagens + `DiagnosticBag`), tabela de símbolos com escopos aninhados e herança, TAC de três endereços com executor e otimizador didático, transpilação para **C++17** com driver `g++` e runtime completo (canais TCP tipados, afinidade por núcleo, workers remotos), OO com herança, `PAR`/`FORK`/`JOIN`, laços `while`, `do … while` e `for`, e interface CLI + IDE web offline com download do executável, página de Ajuda e **Hub de Conexão** para executar programas cliente/servidor em dois computadores diretamente pelo editor. Na execução de 06/11/2026 os 11 testes T1–T11 passaram com evidências versionadas; T11 continua com validação manual no CPUlator. Os benchmarks medidos seguem registrados (T4 15,62×; T8–T10 ~3,1× contra meta >2,5×). Pendências conhecidas: tipo de `parse_ints`, lowering de `list.append`/`split`/`strip`, empacotamento do wheel, sandbox da execução web e revisão da metodologia do benchmark.
 
 ---
 

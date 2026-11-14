@@ -110,7 +110,7 @@ Com o comando `minipar` instalado pelo projeto (`uv sync` ou `pip install -e .`)
 compile e execute em um único comando:
 
 ```bash
-minipar compilar programas_teste/t07_quicksort_iterativo_tac.mp -O2 -o output/t07 --executar
+minipar compilar programas_teste/t07_quicksort_tac.mp -O2 -o output/t07 --executar
 ```
 
 Também é possível usar `python main.py compilar` no ambiente de desenvolvimento.
