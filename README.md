@@ -14,7 +14,6 @@ Desenvolvido por:
 - 2026.2
     - João Victor Duarte do Nascimento - [johnUFAL](https://github.com/johnUFAL)
     - Rian Antonio da Silva Gaião - [ryanthecomic](https://github.com/ryanthecomic)
-    - José Guilherme de Almeida Novais - [GuilhermeANovais](github.com/GuilhermeANovais)
     - Daniel de Araujo Albuquerque - [Daniel-de-Araujo91](https://github.com/Daniel-de-Araujo91)
     - Guilherme Alessander da Silva Fernandes - [Alessander-Magno](https://github.com/Alessander-Magno)
 
