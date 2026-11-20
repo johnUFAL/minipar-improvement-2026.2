@@ -37,12 +37,12 @@ seq {
 
             if (jogada == minha) {
                 resultado = "empate";
-            } elif ((jogada == "pedra" && minha == "tesoura") || (jogada == "papel" && minha == "pedra") || (jogada == "tesoura" && minha == "papel")) {
-                resultado = "voce ganhou";
-                placar_cliente = placar_cliente + 1.0;
-            } else {
+            } elif ((jogada == "tesoura" && minha == "pedra") || (jogada == "papel" && minha == "tesoura") || (jogada == "pedra" && minha == "papel")) {
                 resultado = "servidor ganhou";
                 placar_servidor = placar_servidor + 1.0;
+            } else {
+                resultado = "cliente ganhou";
+                placar_cliente = placar_cliente + 1.0;
             }
 
             print("Cliente:", jogada, "| Servidor:", minha, "->", resultado);

@@ -14,7 +14,6 @@ Desenvolvido por:
 - 2026.2
     - João Victor Duarte do Nascimento - [johnUFAL](https://github.com/johnUFAL)
     - Rian Antonio da Silva Gaião - [ryanthecomic](https://github.com/ryanthecomic)
-    - José Guilherme de Almeida Novais - [GuilhermeANovais](github.com/GuilhermeANovais)
     - Daniel de Araujo Albuquerque - [Daniel-de-Araujo91](https://github.com/Daniel-de-Araujo91)
     - Guilherme Alessander da Silva Fernandes - [Alessander-Magno](https://github.com/Alessander-Magno)
 
@@ -110,7 +109,7 @@ Com o comando `minipar` instalado pelo projeto (`uv sync` ou `pip install -e .`)
 compile e execute em um único comando:
 
 ```bash
-minipar compilar programas_teste/t07_quicksort_iterativo_tac.mp -O2 -o output/t07 --executar
+minipar compilar programas_teste/t07_quicksort_tac.mp -O2 -o output/t07 --executar
 ```
 
 Também é possível usar `python main.py compilar` no ambiente de desenvolvimento.
